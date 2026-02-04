@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   Platform,
@@ -11,12 +10,15 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FeedSkeleton } from '../components/SkeletonLoader';
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import EventCard from '../components/EventCard';
+import NativeAdCard from '../components/NativeAdCard';
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
 import { registerForPushNotifications } from '../services/pushNotificationService';
+
 
 // --- Card de publicidad hardcodeada ---
 function AdCard({ onPress }) {
@@ -100,12 +102,14 @@ export default function HomeScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('parati');
   const [following, setFollowing] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const userId = auth.currentUser?.uid;
   const orderedEvents = useMemo(() => sortEventsByClosestToNow(events), [events]);
   const [displayedEvents, setDisplayedEvents] = useState([]);
 
   useEffect(() => {
     loadUserFollowing();
+
     const unsubscribe = subscribeToEvents((allEvents) => {
       setEvents(allEvents);
       setLoading(false);
@@ -148,6 +152,12 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadUserFollowing();
+    setRefreshing(false);
+  };
+
   const renderEmptyState = () => {
     let icon = 'sparkles';
     let title = 'No hay eventos';
@@ -188,9 +198,25 @@ export default function HomeScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6c5ce7" />
-      </View>
+      <SafeAreaView edges={['top']} style={styles.container}>
+        <View style={styles.header}>
+          <Image
+            source={require('../../assets/images/logo.png')}
+            style={styles.logoImage}
+          />
+          <Text style={styles.logo}>Enfiestados</Text>
+        </View>
+        <View style={styles.tabsContainer}>
+          <View style={[styles.tab, styles.tabActive]}>
+            <Text style={[styles.tabText, styles.tabTextActive]}>Para ti</Text>
+          </View>
+          <View style={styles.tab}>
+            <Ionicons name="people-outline" size={18} color="#888" />
+            <Text style={styles.tabText}>Siguiendo</Text>
+          </View>
+        </View>
+        <FeedSkeleton count={3} />
+      </SafeAreaView>
     );
   }
 
@@ -235,13 +261,21 @@ export default function HomeScreen({ navigation }) {
           data={displayedEvents}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => {
-            if (index === 1) {
-              return <AdCard onPress={() => {}} />;
+            // Mostrar anuncio cada 4 eventos (después del 4to, 8vo, 12vo, etc.)
+            if (index > 0 && (index + 1) % 5 === 0) {
+              return (
+                <>
+                  <EventCard event={item} onPress={() => handleEventPress(item)} />
+                  <NativeAdCard />
+                </>
+              );
             }
             return <EventCard event={item} onPress={() => handleEventPress(item)} />;
           }}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
         />
       )}
     </SafeAreaView>

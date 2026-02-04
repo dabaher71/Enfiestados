@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   Platform,
@@ -12,8 +13,7 @@ import {
   View
 } from 'react-native';
 import { auth, db } from '../config/firebase';
-import { addComment } from '../services/eventService';
-//import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
+import { addComment, deleteComment } from '../services/eventService';
 
 export default function CommentsSection({ eventId, comments: initialComments, organizerId }) {
   const [comments, setComments] = useState(initialComments || []);
@@ -21,27 +21,24 @@ export default function CommentsSection({ eventId, comments: initialComments, or
   const [loading, setLoading] = useState(false);
 
   const user = auth.currentUser;
+  const userId = user?.uid;
 
   const [currentUserData, setCurrentUserData] = useState(null);
 
-useEffect(() => {
-  const fetchUserData = async () => {
-    const userId = auth.currentUser?.uid;
-    if (userId) {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        setCurrentUserData(userDoc.data());
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (userId) {
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        if (userDoc.exists()) {
+          setCurrentUserData(userDoc.data());
+        }
       }
-    }
-  };
-  fetchUserData();
-}, []);
+    };
+    fetchUserData();
+  }, []);
 
-
-  // intenta varios campos posibles para identificar al autor del comentario
   const getCommentUserId = (c) => c.userId || c.uid || c.authorId || (c.user && (c.user.uid || c.user.id)) || c.ownerId;
 
-  // refresa avatars/nombres usando la colección 'users'
   const refreshCommentsProfiles = async (incomingComments) => {
     if (!incomingComments || incomingComments.length === 0) {
       setComments([]);
@@ -77,7 +74,6 @@ useEffect(() => {
           userName: userMap[cid].name || userMap[cid].displayName || nameFromComment || 'Usuario',
         };
       }
-      // normalizar claves por si vienen con otros nombres
       return {
         ...c,
         userAvatar: avatarFromComment || '',
@@ -88,52 +84,66 @@ useEffect(() => {
     setComments(updated);
   };
 
-  // cuando el prop cambia, refrescar perfiles
   useEffect(() => {
     refreshCommentsProfiles(initialComments || []);
   }, [initialComments]);
 
   const handleSubmit = async () => {
-  if (!newComment.trim()) return;
+    if (!newComment.trim()) return;
 
-  setLoading(true);
-  try {
-    const userId = auth.currentUser?.uid;
-    const userName = currentUserData?.name || auth.currentUser?.displayName || auth.currentUser?.email.split('@')[0];
-    const userAvatar = currentUserData?.avatar || auth.currentUser?.photoURL || '';
+    setLoading(true);
+    try {
+      const userName = currentUserData?.name || user?.displayName || user?.email.split('@')[0];
+      const userAvatar = currentUserData?.avatar || user?.photoURL || '';
 
-    const comment = await addComment(eventId, {
-      userId,
-      userName,
-      userAvatar,
-      text: newComment.trim(),
-    });
-
-    setComments(prev => [...prev, {
-      ...comment,
-      userAvatar,
-      userName,
-    }]);
-
-    if (organizerId && organizerId !== userId) {
-      await createNotification({
-        type: NOTIFICATION_TYPES.COMMENT,
-        fromUserId: userId,
-        fromUserName: userName,
-        fromUserAvatar: userAvatar,
-        toUserId: organizerId,
-        message: `comentó: "${newComment.trim().substring(0, 50)}${newComment.length > 50 ? '...' : ''}"`,
-        eventId: eventId,
+      const comment = await addComment(eventId, {
+        userId,
+        userName,
+        userAvatar,
+        text: newComment.trim(),
       });
+
+      setComments(prev => [...prev, {
+        ...comment,
+        userAvatar,
+        userName,
+      }]);
+
+      setNewComment('');
+    } catch (error) {
+      console.error('Error al comentar:', error);
     }
+    setLoading(false);
+  };
 
-    setNewComment('');
-  } catch (error) {
-    console.error('Error al comentar:', error);
-  }
-  setLoading(false);
-};
+  const handleDelete = (comment) => {
+    const commentOwnerId = getCommentUserId(comment);
+    const isMyComment = commentOwnerId === userId;
+    const isOrganizer = organizerId === userId;
 
+    if (!isMyComment && !isOrganizer) return;
+
+    Alert.alert(
+      'Eliminar comentario',
+      '¿Estás seguro de que quieres eliminar este comentario?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteComment(eventId, comment.id);
+              setComments(prev => prev.filter(c => c.id !== comment.id));
+            } catch (error) {
+              console.error('Error eliminando comentario:', error);
+              Alert.alert('Error', 'No se pudo eliminar el comentario');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -150,22 +160,44 @@ useEffect(() => {
     return `${days}d`;
   };
 
-  const renderComment = ({ item }) => (
-  <View style={styles.commentItem}>
-    <Image
-      source={{ uri: item.userAvatar || 'https://via.placeholder.com/40' }}
-      style={styles.commentAvatar}
-    />
-    <View style={styles.commentContent}>
-      <View style={styles.commentHeader}>
-        <Text style={styles.commentUser}>{item.userName || item.name || 'Usuario'}</Text>
-        <Text style={styles.commentTime}>{formatDate(item.createdAt)}</Text>
-      </View>
-      <Text style={styles.commentText}>{item.text}</Text>
-    </View>
-  </View>
-);
+  const renderComment = ({ item }) => {
+    const commentOwnerId = getCommentUserId(item);
+    const isMyComment = commentOwnerId === userId;
+    const isOrganizer = organizerId === userId;
+    const canDelete = isMyComment || isOrganizer;
 
+    return (
+      <TouchableOpacity
+        style={styles.commentItem}
+        onLongPress={() => canDelete && handleDelete(item)}
+        activeOpacity={canDelete ? 0.7 : 1}
+        delayLongPress={500}
+      >
+        <Image
+          source={{ uri: item.userAvatar || 'https://via.placeholder.com/40' }}
+          style={styles.commentAvatar}
+        />
+        <View style={styles.commentContent}>
+          <View style={styles.commentHeader}>
+            <Text style={styles.commentUser}>{item.userName || item.name || 'Usuario'}</Text>
+            <View style={styles.commentHeaderRight}>
+              <Text style={styles.commentTime}>{formatDate(item.createdAt)}</Text>
+              {canDelete && (
+                <TouchableOpacity
+                  onPress={() => handleDelete(item)}
+                  style={styles.deleteButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#e74c3c" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          <Text style={styles.commentText}>{item.text}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -186,28 +218,27 @@ useEffect(() => {
         />
       )}
 
-      {/* Input para nuevo comentario */}
       <View style={styles.inputContainer}>
-  <TextInput
-    style={styles.input}
-    placeholder="Escribe un comentario..."
-    placeholderTextColor="#888"
-    value={newComment}
-    onChangeText={setNewComment}
-    multiline
-  />
-  <TouchableOpacity
-    style={[styles.sendButton, (!newComment.trim() || loading) && styles.sendButtonDisabled]}
-    onPress={handleSubmit}
-    disabled={!newComment.trim() || loading}
-  >
-    <Ionicons 
-      name="send" 
-      size={20} 
-      color={newComment.trim() && !loading ? '#6c5ce7' : '#888'} 
-    />
-  </TouchableOpacity>
-</View>
+        <TextInput
+          style={styles.input}
+          placeholder="Escribe un comentario..."
+          placeholderTextColor="#888"
+          value={newComment}
+          onChangeText={setNewComment}
+          multiline
+        />
+        <TouchableOpacity
+          style={[styles.sendButton, (!newComment.trim() || loading) && styles.sendButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={!newComment.trim() || loading}
+        >
+          <Ionicons 
+            name="send" 
+            size={20} 
+            color={newComment.trim() && !loading ? '#6c5ce7' : '#888'} 
+          />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -215,7 +246,7 @@ useEffect(() => {
 const styles = StyleSheet.create({
   container: {
     marginTop: 10,
-    marginBottom: Platform.OS === 'android' ? 100 : 20,
+    marginBottom: Platform.OS === 'android' ? 65 : 20,
   },
   title: {
     color: '#fff',
@@ -257,7 +288,13 @@ const styles = StyleSheet.create({
   commentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 4,
+  },
+  commentHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   commentUser: {
     color: '#fff',
@@ -268,26 +305,22 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 12,
   },
+  deleteButton: {
+    padding: 4,
+  },
   commentText: {
     color: '#ddd',
     fontSize: 14,
     lineHeight: 20,
   },
   inputContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#2d2d44',
-  borderRadius: 25,
-  paddingHorizontal: 10,
-  paddingVertical: 5,
-  marginTop: 15,
-},
-  inputAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-    backgroundColor: '#3d3d5c',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2d2d44',
+    borderRadius: 25,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 15,
   },
   input: {
     flex: 1,

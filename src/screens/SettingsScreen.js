@@ -209,7 +209,7 @@ export default function SettingsScreen({ navigation }) {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Hecho con ❤️ en Costa Rica</Text>
+          <Text style={styles.footerText}>Hecho en Costa Rica</Text>
           <Text style={styles.footerText}>© 2025 Enfiestados</Text>
         </View>
       </ScrollView>

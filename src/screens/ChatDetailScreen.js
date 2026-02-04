@@ -16,9 +16,8 @@ export default function ChatDetailScreen({ route, navigation }) {
   useEffect(() => {
     loadOtherUser();
 
-    const unsubscribe = subscribeToMessages(chatId, (newMessages) => {22
+    const unsubscribe = subscribeToMessages(chatId, (newMessages) => {
       setMessages(newMessages);
-
       markMessagesAsRead(chatId, userId);
     });
     return () => unsubscribe();
@@ -91,6 +90,12 @@ export default function ChatDetailScreen({ route, navigation }) {
     return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const getDateString = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  };
+
   const formatDateSeparator = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -103,60 +108,89 @@ export default function ChatDetailScreen({ route, navigation }) {
     return date.toLocaleDateString('es', { day: 'numeric', month: 'long' });
   };
 
-  const shouldShowDateSeparator = (currentMsg, prevMsg) => {
-    if (!prevMsg) return true;
-    const currentDate = new Date(currentMsg.timestamp).toDateString();
-    const prevDate = new Date(prevMsg.timestamp).toDateString();
-    return currentDate !== prevDate;
+  // Preparar mensajes con separadores de fecha
+  const messagesWithSeparators = () => {
+    if (messages.length === 0) return [];
+
+    const result = [];
+    let lastDateString = '';
+
+    // Recorrer mensajes de más antiguo a más nuevo
+    const sortedMessages = [...messages].sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
+
+    for (const msg of sortedMessages) {
+      const currentDateString = getDateString(msg.timestamp);
+      
+      if (currentDateString !== lastDateString) {
+        result.push({
+          id: `separator-${msg.timestamp}`,
+          type: 'separator',
+          timestamp: msg.timestamp,
+        });
+        lastDateString = currentDateString;
+      }
+
+      result.push({
+        ...msg,
+        type: 'message',
+      });
+    }
+
+    return result;
   };
 
-  const renderMessage = ({ item, index }) => {
+  const renderItem = ({ item }) => {
+    if (item.type === 'separator') {
+      return (
+        <View style={styles.dateSeparator}>
+          <Text style={styles.dateSeparatorText}>{formatDateSeparator(item.timestamp)}</Text>
+        </View>
+      );
+    }
+
     const isMyMessage = item.senderId === userId;
-    const prevMessage = index < messages.length - 1 ? messages[index + 1] : null;
-    const showDateSeparator = shouldShowDateSeparator(item, prevMessage);
     const isEvent = isEventMessage(item.text);
 
     return (
-      <View>
-        {showDateSeparator && (
-          <View style={styles.dateSeparator}>
-            <Text style={styles.dateSeparatorText}>{formatDateSeparator(item.timestamp)}</Text>
+      <View style={[styles.messageRow, isMyMessage && styles.myMessageRow]}>
+        {!isMyMessage && (
+          <Image source={{ uri: otherUser.avatar || 'https://via.placeholder.com/30' }} style={styles.messageAvatar} />
+        )}
+        {isEvent ? (
+          <TouchableOpacity 
+            style={[styles.eventCard, isMyMessage && styles.myEventCard]}
+            onPress={() => handleEventPress(parseEventMessage(item.text).eventId)}
+          >
+            <View style={styles.eventCardHeader}>
+              <Ionicons name="calendar" size={16} color="#6c5ce7" />
+              <Text style={styles.eventCardLabel}>Evento compartido</Text>
+            </View>
+            <Text style={styles.eventCardTitle}>{parseEventMessage(item.text).title}</Text>
+            <View style={styles.eventCardFooter}>
+              <Ionicons name="time-outline" size={14} color="#888" />
+              <Text style={styles.eventCardDate}>{parseEventMessage(item.text).dateTime}</Text>
+            </View>
+            <View style={styles.eventCardButton}>
+              <Text style={styles.eventCardButtonText}>Ver evento</Text>
+              <Ionicons name="chevron-forward" size={16} color="#6c5ce7" />
+            </View>
+            <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.messageBubble, isMyMessage ? styles.myMessage : styles.otherMessage]}>
+            <Text style={styles.messageText}>{item.text}</Text>
+            <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
           </View>
         )}
-        <View style={[styles.messageRow, isMyMessage && styles.myMessageRow]}>
-          {!isMyMessage && (
-            <Image source={{ uri: otherUser.avatar || 'https://via.placeholder.com/30' }} style={styles.messageAvatar} />
-          )}
-          {isEvent ? (
-            <TouchableOpacity 
-              style={[styles.eventCard, isMyMessage && styles.myEventCard]}
-              onPress={() => handleEventPress(parseEventMessage(item.text).eventId)}
-            >
-              <View style={styles.eventCardHeader}>
-                <Ionicons name="calendar" size={16} color="#6c5ce7" />
-                <Text style={styles.eventCardLabel}>Evento compartido</Text>
-              </View>
-              <Text style={styles.eventCardTitle}>{parseEventMessage(item.text).title}</Text>
-              <View style={styles.eventCardFooter}>
-                <Ionicons name="time-outline" size={14} color="#888" />
-                <Text style={styles.eventCardDate}>{parseEventMessage(item.text).dateTime}</Text>
-              </View>
-              <View style={styles.eventCardButton}>
-                <Text style={styles.eventCardButtonText}>Ver evento</Text>
-                <Ionicons name="chevron-forward" size={16} color="#6c5ce7" />
-              </View>
-              <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[styles.messageBubble, isMyMessage ? styles.myMessage : styles.otherMessage]}>
-              <Text style={styles.messageText}>{item.text}</Text>
-              <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-            </View>
-          )}
-        </View>
       </View>
     );
   };
+
+  const data = messagesWithSeparators();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -181,9 +215,9 @@ export default function ChatDetailScreen({ route, navigation }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.chatContainer} keyboardVerticalOffset={0}>
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={data}
           keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
+          renderItem={renderItem}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -208,36 +242,36 @@ export default function ChatDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#1a1a2e'},
-  header: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2d2d44'},
-  backButton: {padding: 5},
-  headerUser: {flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10},
-  headerAvatar: {width: 40, height: 40, borderRadius: 20, marginRight: 10},
-  avatarPlaceholder: {backgroundColor: '#3d3d5c', justifyContent: 'center', alignItems: 'center'},
-  headerName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  menuButton: {padding: 5},
-  chatContainer: {flex: 1},
-  messagesList: {paddingHorizontal: 15, paddingVertical: 10},
-  dateSeparator: {alignItems: 'center', marginVertical: 15},
-  dateSeparatorText: {color: '#888', fontSize: 13, backgroundColor: '#2d2d44', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 15},
-  messageRow: {flexDirection: 'row', marginBottom: 10, alignItems: 'flex-end'},
-  myMessageRow: {justifyContent: 'flex-end'},
-  messageAvatar: {width: 30, height: 30, borderRadius: 15, marginRight: 8},
-  messageBubble: {maxWidth: '75%', padding: 12, borderRadius: 18},
-  myMessage: {backgroundColor: '#6c5ce7', borderBottomRightRadius: 4},
-  otherMessage: {backgroundColor: '#2d2d44', borderBottomLeftRadius: 4},
-  messageText: {color: '#fff', fontSize: 15, lineHeight: 20},
-  messageTime: {color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 5, alignSelf: 'flex-end'},
-  eventCard: {backgroundColor: '#2d2d44', borderRadius: 16, padding: 15, maxWidth: '80%', borderLeftWidth: 4, borderLeftColor: '#6c5ce7'},
-  myEventCard: {borderLeftWidth: 0, borderRightWidth: 4, borderRightColor: '#6c5ce7'},
-  eventCardHeader: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
-  eventCardLabel: {color: '#6c5ce7', fontSize: 12, fontWeight: '600', marginLeft: 6},
-  eventCardTitle: {color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 8},
-  eventCardFooter: {flexDirection: 'row', alignItems: 'center', marginBottom: 10},
-  eventCardDate: {color: '#888', fontSize: 13, marginLeft: 5},
-  eventCardButton: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(108, 92, 231, 0.2)', paddingVertical: 8, borderRadius: 8},
-  eventCardButtonText: {color: '#6c5ce7', fontSize: 14, fontWeight: '600'},
-  inputContainer: {flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 15, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2d2d44'},
-  input: {flex: 1, backgroundColor: '#2d2d44', borderRadius: 25, paddingHorizontal: 20, paddingVertical: 12, color: '#fff', fontSize: 16, maxHeight: 100},
-  sendButton: {backgroundColor: '#6c5ce7', width: 45, height: 45, borderRadius: 23, justifyContent: 'center', alignItems: 'center', marginLeft: 10},
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
+  backButton: { padding: 5 },
+  headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
+  avatarPlaceholder: { backgroundColor: '#3d3d5c', justifyContent: 'center', alignItems: 'center' },
+  headerName: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  menuButton: { padding: 5 },
+  chatContainer: { flex: 1 },
+  messagesList: { paddingHorizontal: 15, paddingVertical: 10 },
+  dateSeparator: { alignItems: 'center', marginVertical: 15 },
+  dateSeparatorText: { color: '#888', fontSize: 13, backgroundColor: '#2d2d44', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 15 },
+  messageRow: { flexDirection: 'row', marginBottom: 10, alignItems: 'flex-end' },
+  myMessageRow: { justifyContent: 'flex-end' },
+  messageAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },
+  messageBubble: { maxWidth: '75%', padding: 12, borderRadius: 18 },
+  myMessage: { backgroundColor: '#6c5ce7', borderBottomRightRadius: 4 },
+  otherMessage: { backgroundColor: '#2d2d44', borderBottomLeftRadius: 4 },
+  messageText: { color: '#fff', fontSize: 15, lineHeight: 20 },
+  messageTime: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 5, alignSelf: 'flex-end' },
+  eventCard: { backgroundColor: '#2d2d44', borderRadius: 16, padding: 15, maxWidth: '80%', borderLeftWidth: 4, borderLeftColor: '#6c5ce7' },
+  myEventCard: { borderLeftWidth: 0, borderRightWidth: 4, borderRightColor: '#6c5ce7' },
+  eventCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  eventCardLabel: { color: '#6c5ce7', fontSize: 12, fontWeight: '600', marginLeft: 6 },
+  eventCardTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
+  eventCardFooter: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  eventCardDate: { color: '#888', fontSize: 13, marginLeft: 5 },
+  eventCardButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(108, 92, 231, 0.2)', paddingVertical: 8, borderRadius: 8 },
+  eventCardButtonText: { color: '#6c5ce7', fontSize: 14, fontWeight: '600' },
+  inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 15, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2d2d44' },
+  input: { flex: 1, backgroundColor: '#2d2d44', borderRadius: 25, paddingHorizontal: 20, paddingVertical: 12, color: '#fff', fontSize: 16, maxHeight: 100 },
+  sendButton: { backgroundColor: '#6c5ce7', width: 45, height: 45, borderRadius: 23, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
 });
