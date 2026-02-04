@@ -52,6 +52,12 @@
       "policy": "appVersion"
     },
     "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-5363568499936245~8795174061"
+        }
+      ],
       "expo-notifications",
       [
         "expo-image-picker",
@@ -68,7 +74,8 @@
       ],
       "expo-updates",
       "expo-font",
-      "expo-router"
+      "expo-router",
+      "react-native-google-mobile-ads"
     ],
     "notification": {
       "icon": "./assets/images/logo.png",

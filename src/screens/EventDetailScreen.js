@@ -247,6 +247,7 @@ export default function EventDetailScreen({ route, navigation }) {
       <ScrollView 
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 50 }}
       >
         
         <View style={styles.imageContainer}>
@@ -431,9 +432,9 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#1a1a2e'},
   imageContainer: {position: 'relative'},
   image: {width: '100%', height: 250, backgroundColor: '#2d2d44'},
-  backButton: {position: 'absolute', top: 10, left: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8},
-  optionsButton: {position: 'absolute', top: 10, right: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8, zIndex: 10},
-  optionsMenu: {position: 'absolute', top: 50, right: 15, backgroundColor: '#2d2d44', borderRadius: 12, padding: 5, zIndex: 100},
+  backButton: {position: 'absolute', top: Platform.OS === 'android' ? 40 : 10, left: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8},
+  optionsButton: {position: 'absolute', top: Platform.OS === 'android' ? 40 : 10, right: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8, zIndex: 10},
+  optionsMenu: {position: 'absolute', top: Platform.OS === 'android' ? 80 : 50, right: 15, backgroundColor: '#2d2d44', borderRadius: 12, padding: 5, zIndex: 100},
   optionItem: {flexDirection: 'row', alignItems: 'center', padding: 12},
   optionText: {color: '#fff', fontSize: 15, marginLeft: 10},
   typeBadge: {position: 'absolute', bottom: 10, right: 15, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20},
