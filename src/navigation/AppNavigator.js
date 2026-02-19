@@ -15,6 +15,7 @@ import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import TabNavigator from './TabNavigator';
+import CreatePostScreen from '../screens/CreatePostScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -56,6 +57,7 @@ export default function AppNavigator() {
             <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
             <Stack.Screen name="EditEvent" component={EditEventScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="CreatePost" component={CreatePostScreen} />
           </>
         ) : (
           <>
