@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Image, KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, KeyboardAvoidingView, Platform, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../config/firebase';
 import { markMessagesAsRead, sendMessage, subscribeToMessages } from '../services/chatService';
 
@@ -243,7 +243,7 @@ export default function ChatDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
+  header: { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
   backButton: { padding: 5 },
   headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
   headerAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
