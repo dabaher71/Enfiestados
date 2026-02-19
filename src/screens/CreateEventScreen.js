@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  StatusBar,
   Alert,
   Image,
   ActivityIndicator,
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 10,
     paddingBottom: 20,
   },
   headerTitle: {

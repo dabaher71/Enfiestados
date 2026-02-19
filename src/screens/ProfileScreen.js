@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from 'react-native';
 import EventCard from '../components/EventCard';
 import PostCard from '../components/PostCard';
@@ -125,13 +125,6 @@ export default function ProfileScreen({ navigation }) {
     } catch (e) { console.error('Delete error:', e); }
   };
 
-  const handleLogout = () => {
-    Alert.alert('Cerrar Sesion', 'Estas seguro?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Cerrar Sesion', style: 'destructive', onPress: () => signOut(auth) },
-    ]);
-  };
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -177,10 +170,6 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{user?.followers?.length || 0}</Text>
               <Text style={styles.statLabel}>Seguidores</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{user?.following?.length || 0}</Text>
-              <Text style={styles.statLabel}>Siguiendo</Text>
             </View>
           </View>
         </View>
@@ -239,10 +228,7 @@ export default function ProfileScreen({ navigation }) {
           )}
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color="#ff4444" />
-          <Text style={styles.logoutText}>Cerrar Sesion</Text>
-        </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -251,7 +237,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
   loadingContainer: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 35 : 10, paddingBottom: 15 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 10, paddingBottom: 15 },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
   headerButton: { marginLeft: 15 },
   coverContainer: { height: 150, backgroundColor: '#2d2d44' },
@@ -277,6 +263,4 @@ const styles = StyleSheet.create({
   emptyText: { color: '#888', fontSize: 16, marginTop: 15 },
   createButton: { backgroundColor: '#6c5ce7', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, marginTop: 20 },
   createButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 30, paddingVertical: 15, marginHorizontal: 20, backgroundColor: '#2d2d44', borderRadius: 12 },
-  logoutText: { color: '#ff4444', fontSize: 16, fontWeight: '600', marginLeft: 10 },
 });
