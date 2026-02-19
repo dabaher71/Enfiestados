@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { collection, doc, getDoc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import {
@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import EventCard from '../components/EventCard';
+import PostCard from '../components/PostCard';
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
 
@@ -31,7 +32,6 @@ export default function ProfileScreen({ navigation }) {
     loadUser();
     const unsubscribeEvents = loadUserEvents();
 
-    // Posts listener inline
     let unsubscribePosts = () => {};
     try {
       const q = query(
@@ -84,6 +84,45 @@ export default function ProfileScreen({ navigation }) {
 
   const handleEventPress = (event) => {
     navigation.navigate('EventDetail', { event });
+  };
+
+  const handleUserPress = (userId) => {
+    if (userId !== currentUser.uid) {
+      navigation.navigate('UserProfile', { userId });
+    }
+  };
+
+  const handleLike = async (postId) => {
+    try {
+      const postRef = doc(db, 'posts', postId);
+      const postSnap = await getDoc(postRef);
+      if (!postSnap.exists()) return;
+      const likes = postSnap.data().likes || [];
+      await updateDoc(postRef, {
+        likes: likes.includes(currentUser.uid) ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid),
+      });
+    } catch (e) { console.error('Like error:', e); }
+  };
+
+  const handleComment = async (postId, text) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      const userData = userDoc.exists() ? userDoc.data() : {};
+      await updateDoc(doc(db, 'posts', postId), {
+        comments: arrayUnion({
+          userId: currentUser.uid,
+          userName: userData.name || 'Usuario',
+          text,
+          createdAt: new Date().toISOString(),
+        }),
+      });
+    } catch (e) { console.error('Comment error:', e); }
+  };
+
+  const handleDeletePost = async (postId) => {
+    try {
+      await deleteDoc(doc(db, 'posts', postId));
+    } catch (e) { console.error('Delete error:', e); }
   };
 
   const handleLogout = () => {
@@ -185,9 +224,15 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               ) : (
                 posts.map(post => (
-                  <View key={post.id} style={styles.postCard}>
-                    <Text style={styles.postText}>{post.text}</Text>
-                  </View>
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    currentUserId={currentUser.uid}
+                    onLike={handleLike}
+                    onComment={handleComment}
+                    onDelete={handleDeletePost}
+                    onUserPress={handleUserPress}
+                  />
                 ))
               )}
             </>
@@ -232,8 +277,6 @@ const styles = StyleSheet.create({
   emptyText: { color: '#888', fontSize: 16, marginTop: 15 },
   createButton: { backgroundColor: '#6c5ce7', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, marginTop: 20 },
   createButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  postCard: { backgroundColor: '#2d2d44', marginHorizontal: 15, marginBottom: 10, padding: 15, borderRadius: 12 },
-  postText: { color: '#ddd', fontSize: 15 },
   logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 30, paddingVertical: 15, marginHorizontal: 20, backgroundColor: '#2d2d44', borderRadius: 12 },
   logoutText: { color: '#ff4444', fontSize: 16, fontWeight: '600', marginLeft: 10 },
 });
