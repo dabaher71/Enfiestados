@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "211216248478",
+    "project_id": "enfiestados-alpha",
+    "storage_bucket": "enfiestados-alpha.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211216248478:android:d15a541a57533eeb81558f",
+        "android_client_info": {
+          "package_name": "com.enfiestados.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "211216248478-vnd4avn6mf7pn9tqhhbm6ercfmkqb4b0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1vkjrumPeQVp9fGTEo-ikmdHwRgVEMiA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "211216248478-vnd4avn6mf7pn9tqhhbm6ercfmkqb4b0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
