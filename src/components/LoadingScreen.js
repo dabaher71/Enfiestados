@@ -1,10 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+
+const AD_UNIT_ID = Platform.select({
+  android: TestIds.BANNER,
+  ios: TestIds.BANNER,
+});
 
 export default function LoadingScreen() {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -20,51 +25,38 @@ export default function LoadingScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    Animated.loop(
-      Animated.timing(spinAnim, {
-        toValue: 1,
-        duration: 1500,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, []);
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  }, [fadeAnim, scaleAnim]);
 
   return (
     <View style={styles.container}>
+      {/* Logo + título */}
       <Animated.View
         style={[
           styles.logoContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
+          { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
         ]}
       >
-        {/* Logo + texto Enfiestados */}
         <View style={styles.titleRow}>
           <Image
-            source={require('../../assets/images/logo.png')} // tu logo con sombrero
+            source={require('../../assets/images/logo.png')}
             style={styles.logo}
           />
           <Text style={styles.title}>Enfiestados</Text>
         </View>
-
         <Text style={styles.subtitle}>Descubre eventos cerca de ti</Text>
       </Animated.View>
 
-      {/* Rueda girando como ícono de carga */}
-      <Animated.Image
-        source={require('../../assets/images/rueda.png')}
-        style={[styles.wheel, { transform: [{ rotate: spin }] }]}
-      />
+      {/* Anuncio AdMob durante la carga */}
+      <Animated.View style={[styles.adContainer, { opacity: fadeAnim }]}>
+        <Text style={styles.adLabel}>Publicidad</Text>
+        <BannerAd
+          unitId={AD_UNIT_ID}
+          size={BannerAdSize.MEDIUM_RECTANGLE}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        />
+      </Animated.View>
 
-      {/* Loader con puntitos */}
+      {/* Indicador de carga */}
       <Animated.View style={[styles.loader, { opacity: fadeAnim }]}>
         <View style={styles.dot} />
         <View style={[styles.dot, styles.dotMiddle]} />
@@ -83,6 +75,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
+    marginBottom: 40,
   },
   titleRow: {
     flexDirection: 'row',
@@ -103,16 +96,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#888',
   },
-  wheel: {
-  width: 140,
-  height: 140,
-  marginTop: 40,
-  elevation: 10,
-},
+  adContainer: {
+    alignItems: 'center',
+    backgroundColor: '#2d2d44',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 20,
+  },
+  adLabel: {
+    color: '#6c5ce7',
+    fontSize: 11,
+    fontWeight: '600',
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
   loader: {
     flexDirection: 'row',
     position: 'absolute',
-    bottom: 100,
+    bottom: 80,
   },
   dot: {
     width: 10,

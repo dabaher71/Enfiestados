@@ -6,14 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
-  StatusBar,
   Alert,
-  Image,
   ActivityIndicator,
   Modal,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -127,12 +126,21 @@ export default function CreateEventScreen({ navigation }) {
 
   const uploadImage = async (uri) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // XMLHttpRequest es más confiable que fetch() para file:// URIs en Android
+      const blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new Error('Error al leer imagen'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
       const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
       const storageRef = ref(storage, filename);
       await uploadBytes(storageRef, blob);
-      return await getDownloadURL(storageRef);
+      const url = await getDownloadURL(storageRef);
+      blob.close();
+      return url;
     } catch (error) {
       console.error('Error al subir imagen:', error);
       throw error;
@@ -572,7 +580,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 10,
+    paddingTop: 10,
     paddingBottom: 20,
   },
   headerTitle: {

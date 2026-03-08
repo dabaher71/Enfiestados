@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -125,8 +125,18 @@ export default function HomeScreen({ navigation }) {
     return () => unsubscribe();
   }, []);
 
+
+  const isEventExpired = (event) => {
+    try {
+      const [day, month, year] = event.date.split('/');
+      const [hours, minutes] = (event.time || '23:59').split(':');
+      const eventDate = new Date(year, month - 1, day, hours, minutes);
+      return eventDate < new Date();
+    } catch (e) { return false; }
+  };
+
   const filterEventsByTab = () => {
-    let source = orderedEvents || [];
+    let source = (orderedEvents || []).filter(ev => !isEventExpired(ev));
     if (activeTab === 'following') {
       source = source.filter(ev => following?.includes(ev.organizerId) || false);
     } else if (activeTab === 'recent') {
@@ -192,9 +202,21 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
-  const handleEventPress = (event) => {
+  const handleEventPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
-  };
+  }, [navigation]);
+
+  const renderItem = useCallback(({ item, index }) => {
+    if (index > 0 && (index + 1) % 5 === 0) {
+      return (
+        <>
+          <EventCard event={item} onPress={() => handleEventPress(item)} />
+          <NativeAdCard />
+        </>
+      );
+    }
+    return <EventCard event={item} onPress={() => handleEventPress(item)} />;
+  }, [handleEventPress]);
 
   if (loading) {
     return (
@@ -260,22 +282,15 @@ export default function HomeScreen({ navigation }) {
         <FlatList
           data={displayedEvents}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => {
-            // Mostrar anuncio cada 4 eventos (después del 4to, 8vo, 12vo, etc.)
-            if (index > 0 && (index + 1) % 5 === 0) {
-              return (
-                <>
-                  <EventCard event={item} onPress={() => handleEventPress(item)} />
-                  <NativeAdCard />
-                </>
-              );
-            }
-            return <EventCard event={item} onPress={() => handleEventPress(item)} />;
-          }}
+          renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+          removeClippedSubviews={true}
         />
       )}
     </SafeAreaView>

@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { deleteUser, signOut } from 'firebase/auth';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { useState } from 'react';
-import { Alert, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
 
 export default function SettingsScreen({ navigation }) {
@@ -218,7 +219,7 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 0 },
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15 },
   backButton: { padding: 5 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },

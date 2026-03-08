@@ -1,10 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { memo, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../config/firebase';
 
-export default function EventCard({ event, onPress }) {
+// Fuera del componente: no se recrea en cada render
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function formatDate(dateString) {
+  if (!dateString) return { day: '--', month: '---' };
+  const parts = dateString.split('/');
+  if (parts.length === 3) {
+    return { day: parts[0], month: MONTHS[parseInt(parts[1]) - 1] || parts[1] };
+  }
+  return { day: '--', month: '---' };
+}
+
+function EventCard({ event, onPress }) {
   const [organizerAvatar, setOrganizerAvatar] = useState(event.organizerAvatar || '');
   const [organizerName, setOrganizerName] = useState(event.organizerName || '');
 
@@ -49,18 +62,6 @@ export default function EventCard({ event, onPress }) {
     };
   }, [event.organizerId, event.organizerAvatar, event.organizerName]);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return { day: '--', month: '---' };
-    const parts = dateString.split('/');
-    if (parts.length === 3) {
-      const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-      const day = parts[0];
-      const month = months[parseInt(parts[1]) - 1] || parts[1];
-      return { day, month };
-    }
-    return { day: '--', month: '---' };
-  };
-
   const { day, month } = formatDate(event.date);
 
   return (
@@ -70,6 +71,8 @@ export default function EventCard({ event, onPress }) {
         <Image
           source={{ uri: event.image || 'https://via.placeholder.com/400x200' }}
           style={styles.image}
+          contentFit="cover"
+          transition={200}
         />
         
         {/* Fecha badge */}
@@ -120,6 +123,8 @@ export default function EventCard({ event, onPress }) {
               <Image
                 source={{ uri: organizerAvatar }}
                 style={styles.organizerAvatar}
+                contentFit="cover"
+                transition={150}
               />
             ) : (
               <View style={[styles.organizerAvatar, styles.avatarPlaceholder]}>
@@ -147,6 +152,8 @@ export default function EventCard({ event, onPress }) {
     </TouchableOpacity>
   );
 }
+
+export default memo(EventCard);
 
 const styles = StyleSheet.create({
   card: {

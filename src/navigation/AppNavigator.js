@@ -14,7 +14,7 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
-import TabNavigator from './TabNavigator';
+import MainTabNavigator from './MainTabNavigator';
 import CreatePostScreen from '../screens/CreatePostScreen';
 
 const Stack = createNativeStackNavigator();
@@ -34,7 +34,7 @@ export default function AppNavigator() {
       setUser(currentUser);
       setTimeout(() => {
         setLoading(false);
-      }, 1500);
+      }, 5000);
     });
 
     return () => unsubscribe();
@@ -49,7 +49,7 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <>
-            <Stack.Screen name="MainApp" component={TabNavigator} />
+            <Stack.Screen name="MainApp" component={MainTabNavigator} />
             <Stack.Screen name="EventDetail" component={EventDetailScreen} />
             <Stack.Screen name="UserProfile" component={UserProfileScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />

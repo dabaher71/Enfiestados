@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
@@ -114,9 +116,9 @@ export default function UserProfileScreen({ route, navigation }) {
     }
   };
 
-  const handleEventPress = (event) => {
+  const handleEventPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
-  };
+  }, [navigation]);
 
   const getFollowButtonText = () => {
     if (isFollowing) return 'Siguiendo';

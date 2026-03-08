@@ -11,8 +11,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 export default function RegisterScreen({ navigation }) {
@@ -25,30 +25,44 @@ export default function RegisterScreen({ navigation }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+
+    // Validaciones locales
+    if (!trimmedName || !trimmedEmail || !password || !confirmPassword) {
+      Alert.alert('Campos incompletos', 'Por favor completa todos los campos');
+      return;
+    }
+
+    if (trimmedName.length < 2 || trimmedName.length > 50) {
+      Alert.alert('Nombre inválido', 'El nombre debe tener entre 2 y 50 caracteres');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden');
+      Alert.alert('Contraseñas distintas', 'Las contraseñas no coinciden');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
+      Alert.alert('Contraseña débil', 'La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // 1. Crear usuario en Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
       const user = userCredential.user;
 
+      // 2. Sincronizar displayName en el registro de Auth
+      await updateProfile(user, { displayName: trimmedName });
+
+      // 3. Crear perfil en Firestore con serverTimestamp (no manipulable por el cliente)
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
-        name: name,
-        email: email,
+        name: trimmedName,
+        email: trimmedEmail,
         avatar: '',
         coverImage: '',
         bio: '',
@@ -62,23 +76,35 @@ export default function RegisterScreen({ navigation }) {
         perfilPublico: true,
         verificado: false,
         usuariosBloqueados: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
 
-      Alert.alert('¡Éxito!', 'Cuenta creada correctamente');
+      Alert.alert('¡Bienvenido!', `Cuenta creada correctamente. ¡Hola, ${trimmedName}!`);
     } catch (error) {
-      let message = 'Error al crear la cuenta';
-      if (error.code === 'auth/email-already-in-use') {
-        message = 'Este correo ya está registrado';
-      } else if (error.code === 'auth/invalid-email') {
-        message = 'Email inválido';
-      } else if (error.code === 'auth/weak-password') {
-        message = 'La contraseña es muy débil';
-      }
-      Alert.alert('Error', message);
+      Alert.alert('Error al registrarse', _getFriendlyAuthError(error.code));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const _getFriendlyAuthError = (code) => {
+    switch (code) {
+      case 'auth/email-already-in-use':
+        return 'Este correo ya está registrado. ¿Olvidaste tu contraseña?';
+      case 'auth/invalid-email':
+        return 'El correo electrónico no tiene un formato válido';
+      case 'auth/weak-password':
+        return 'La contraseña es demasiado débil. Usa al menos 6 caracteres';
+      case 'auth/operation-not-allowed':
+        return 'El registro con correo está desactivado. Contacta al soporte';
+      case 'auth/network-request-failed':
+        return 'Sin conexión a internet. Verifica tu red e inténtalo de nuevo';
+      case 'auth/too-many-requests':
+        return 'Demasiados intentos. Espera unos minutos antes de volver a intentarlo';
+      default:
+        return 'Ocurrió un error inesperado. Inténtalo de nuevo';
+    }
   };
 
   return (

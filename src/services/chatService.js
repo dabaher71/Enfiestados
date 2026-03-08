@@ -1,16 +1,14 @@
-import { 
-  collection, 
-  addDoc, 
-  getDocs,
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot,
-  updateDoc,
+import {
+  addDoc,
+  collection,
   doc,
-  serverTimestamp,
-  or,
-  and
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -63,7 +61,8 @@ export const subscribeToChats = (userId, callback) => {
   const q = query(
     chatsCollection,
     where('participants', 'array-contains', userId),
-    orderBy('lastMessageTime', 'desc')
+    orderBy('lastMessageTime', 'desc'),
+    limit(50)
   );
 
   return onSnapshot(q, (snapshot) => {

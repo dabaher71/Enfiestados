@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Image,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -24,26 +24,30 @@ export default function ChatsScreen({ navigation }) {
   useEffect(() => {
     const unsubscribe = subscribeToChats(currentUserId, async (newChats) => {
       setChats(newChats);
-      
-      // Cargar datos de los otros usuarios
-      for (const chat of newChats) {
-        const otherUserId = chat.participants.find(id => id !== currentUserId);
-        if (otherUserId && !usersData[otherUserId]) {
-          const userDoc = await getDoc(doc(db, 'users', otherUserId));
-          if (userDoc.exists()) {
-            setUsersData(prev => ({
-              ...prev,
-              [otherUserId]: userDoc.data()
-            }));
-          }
-        }
+
+      // Promise.all: carga todos los participantes en paralelo
+      const otherUserIds = [...new Set(
+        newChats
+          .map(chat => chat.participants.find(id => id !== currentUserId))
+          .filter(Boolean)
+      )];
+
+      const userDocs = await Promise.all(
+        otherUserIds.map(uid => getDoc(doc(db, 'users', uid)).catch(() => null))
+      );
+      const newUsersData = {};
+      otherUserIds.forEach((uid, i) => {
+        if (userDocs[i]?.exists()) newUsersData[uid] = userDocs[i].data();
+      });
+      if (Object.keys(newUsersData).length > 0) {
+        setUsersData(prev => ({ ...prev, ...newUsersData }));
       }
-      
+
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUserId]);
 
   const formatTime = (dateString) => {
     if (!dateString) return '';
@@ -63,19 +67,19 @@ export default function ChatsScreen({ navigation }) {
     return date.toLocaleDateString();
   };
 
-  const handleChatPress = (chat) => {
+  const handleChatPress = useCallback((chat) => {
     const otherUserId = chat.participants.find(id => id !== currentUserId);
     const otherUser = usersData[otherUserId];
     
-    navigation.navigate('ChatDetail', { 
+    navigation.navigate('ChatDetail', {
       chatId: chat.id,
       otherUserId,
       otherUserName: otherUser?.name || 'Usuario',
       otherUserAvatar: otherUser?.avatar || '',
     });
-  };
+  }, [currentUserId, usersData, navigation]);
 
-  const renderChat = ({ item }) => {
+  const renderChat = useCallback(({ item }) => {
     const otherUserId = item.participants.find(id => id !== currentUserId);
     const otherUser = usersData[otherUserId];
 
@@ -99,7 +103,7 @@ export default function ChatsScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [currentUserId, usersData, handleChatPress]);
 
   if (loading) {
     return (
@@ -135,6 +139,9 @@ export default function ChatsScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           renderItem={renderChat}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={10}
         />
       )}
     </SafeAreaView>

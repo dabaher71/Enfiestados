@@ -3,11 +3,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator,
   Alert,
-  Image,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -16,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db, storage } from '../config/firebase';
 
 export default function EditProfileScreen({ route, navigation }) {
@@ -83,15 +83,19 @@ export default function EditProfileScreen({ route, navigation }) {
 
   const uploadImage = async (uri, path) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
+      const blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new Error('Error al leer imagen'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
       const filename = `${path}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
       const storageRef = ref(storage, filename);
-      
       await uploadBytes(storageRef, blob);
       const downloadURL = await getDownloadURL(storageRef);
-      
+      blob.close();
       return downloadURL;
     } catch (error) {
       console.error('Error al subir imagen:', error);

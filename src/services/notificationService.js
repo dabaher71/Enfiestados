@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export const NOTIFICATION_TYPES = {
@@ -19,7 +19,8 @@ export const subscribeToNotifications = (userId, callback) => {
   const q = query(
     collection(db, 'notifications'),
     where('toUserId', '==', userId),
-    orderBy('createdAt', 'desc')
+    orderBy('createdAt', 'desc'),
+    limit(100)
   );
 
   return onSnapshot(q, (snapshot) => {
