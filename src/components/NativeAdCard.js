@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 
@@ -8,8 +8,13 @@ const AD_UNIT_ID = Platform.select({
   ios: TestIds.BANNER,
 });
 
-export default function NativeAdCard() {
+function NativeAdCard() {
   const [adError, setAdError] = useState(false);
+
+  const handleAdError = useCallback((error) => {
+    console.log('Ad failed to load:', error);
+    setAdError(true);
+  }, []);
 
   if (adError) {
     return (
@@ -38,14 +43,13 @@ export default function NativeAdCard() {
         requestOptions={{
           requestNonPersonalizedAdsOnly: true,
         }}
-        onAdFailedToLoad={(error) => {
-          console.log('Ad failed to load:', error);
-          setAdError(true);
-        }}
+        onAdFailedToLoad={handleAdError}
       />
     </View>
   );
 }
+
+export default memo(NativeAdCard);
 
 const styles = StyleSheet.create({
   card: {

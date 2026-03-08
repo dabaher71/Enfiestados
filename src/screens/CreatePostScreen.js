@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { createPost } from '../services/postService';
 
 export default function CreatePostScreen({ navigation }) {
@@ -101,7 +103,7 @@ export default function CreatePostScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingTop: Platform.OS === 'android' ? 35 : 10, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingTop: 10, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   postBtn: { backgroundColor: '#6c5ce7', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
   postBtnDisabled: { opacity: 0.5 },

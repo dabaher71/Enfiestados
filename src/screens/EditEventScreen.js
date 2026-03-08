@@ -6,13 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Alert,
-  Image,
   ActivityIndicator,
   Modal,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -99,12 +99,20 @@ export default function EditEventScreen({ route, navigation }) {
 
   const uploadImage = async (uri) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      const blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new Error('Error al leer imagen'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
       const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
       const storageRef = ref(storage, filename);
       await uploadBytes(storageRef, blob);
-      return await getDownloadURL(storageRef);
+      const url = await getDownloadURL(storageRef);
+      blob.close();
+      return url;
     } catch (error) {
       console.error('Error al subir imagen:', error);
       throw error;

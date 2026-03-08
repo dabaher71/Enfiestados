@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   Alert,
   FlatList,
-  Image,
   Platform,
   StyleSheet,
   Text,
@@ -35,11 +35,11 @@ export default function CommentsSection({ eventId, comments: initialComments, or
       }
     };
     fetchUserData();
-  }, []);
+  }, [userId]);
 
   const getCommentUserId = (c) => c.userId || c.uid || c.authorId || (c.user && (c.user.uid || c.user.id)) || c.ownerId;
 
-  const refreshCommentsProfiles = async (incomingComments) => {
+  const refreshCommentsProfiles = useCallback(async (incomingComments) => {
     if (!incomingComments || incomingComments.length === 0) {
       setComments([]);
       return;
@@ -51,17 +51,14 @@ export default function CommentsSection({ eventId, comments: initialComments, or
       return;
     }
 
+    // Promise.all: carga todos los perfiles en paralelo en vez de secuencialmente
+    const userDocs = await Promise.all(
+      uniqueIds.map(uid => getDoc(doc(db, 'users', uid)).catch(() => null))
+    );
     const userMap = {};
-    for (const uid of uniqueIds) {
-      try {
-        const uDoc = await getDoc(doc(db, 'users', uid));
-        if (uDoc.exists()) {
-          userMap[uid] = uDoc.data();
-        }
-      } catch (err) {
-        console.error('Error cargando usuario de comentario', uid, err);
-      }
-    }
+    uniqueIds.forEach((uid, i) => {
+      if (userDocs[i]?.exists()) userMap[uid] = userDocs[i].data();
+    });
 
     const updated = incomingComments.map(c => {
       const cid = getCommentUserId(c);
@@ -82,11 +79,11 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     });
 
     setComments(updated);
-  };
+  }, []);
 
   useEffect(() => {
     refreshCommentsProfiles(initialComments || []);
-  }, [initialComments]);
+  }, [initialComments, refreshCommentsProfiles]);
 
   const handleSubmit = async () => {
     if (!newComment.trim()) return;
@@ -116,7 +113,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     setLoading(false);
   };
 
-  const handleDelete = (comment) => {
+  const handleDelete = useCallback((comment) => {
     const commentOwnerId = getCommentUserId(comment);
     const isMyComment = commentOwnerId === userId;
     const isOrganizer = organizerId === userId;
@@ -143,7 +140,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         },
       ]
     );
-  };
+  }, [userId, organizerId, eventId]);
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -160,7 +157,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     return `${days}d`;
   };
 
-  const renderComment = ({ item }) => {
+  const renderComment = useCallback(({ item }) => {
     const commentOwnerId = getCommentUserId(item);
     const isMyComment = commentOwnerId === userId;
     const isOrganizer = organizerId === userId;
@@ -176,6 +173,8 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         <Image
           source={{ uri: item.userAvatar || 'https://via.placeholder.com/40' }}
           style={styles.commentAvatar}
+          contentFit="cover"
+          transition={150}
         />
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
@@ -197,7 +196,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [userId, organizerId, handleDelete]);
 
   return (
     <View style={styles.container}>

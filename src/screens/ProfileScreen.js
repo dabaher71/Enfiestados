@@ -1,23 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { useCallback, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  StatusBar,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import EventCard from '../components/EventCard';
 import PostCard from '../components/PostCard';
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
+import { subscribeToUserPosts } from '../services/postService';
 
 export default function ProfileScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -31,23 +29,13 @@ export default function ProfileScreen({ navigation }) {
   useEffect(() => {
     loadUser();
     const unsubscribeEvents = loadUserEvents();
-
-    let unsubscribePosts = () => {};
+    let unsubscribePosts;
     try {
-      const q = query(
-        collection(db, 'posts'),
-        where('userId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc')
-      );
-      unsubscribePosts = onSnapshot(q, (snapshot) => {
-        const p = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        setPosts(p);
-      }, (err) => {
-        console.error('Posts error:', err);
-        setPosts([]);
+      unsubscribePosts = subscribeToUserPosts(currentUser.uid, (userPosts) => {
+        setPosts(userPosts);
       });
-    } catch (e) {
-      console.error('Posts setup error:', e);
+    } catch (error) {
+      console.error('Error posts:', error);
     }
 
     const focusUnsub = navigation.addListener('focus', () => {
@@ -57,7 +45,7 @@ export default function ProfileScreen({ navigation }) {
 
     return () => {
       unsubscribeEvents && unsubscribeEvents();
-      unsubscribePosts();
+      unsubscribePosts && unsubscribePosts();
       focusUnsub && focusUnsub();
     };
   }, []);
@@ -82,48 +70,15 @@ export default function ProfileScreen({ navigation }) {
     });
   };
 
-  const handleEventPress = (event) => {
+  const handleEventPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
-  };
+  }, [navigation]);
 
-  const handleUserPress = (userId) => {
+  const handleUserPress = useCallback((userId) => {
     if (userId !== currentUser.uid) {
       navigation.navigate('UserProfile', { userId });
     }
-  };
-
-  const handleLike = async (postId) => {
-    try {
-      const postRef = doc(db, 'posts', postId);
-      const postSnap = await getDoc(postRef);
-      if (!postSnap.exists()) return;
-      const likes = postSnap.data().likes || [];
-      await updateDoc(postRef, {
-        likes: likes.includes(currentUser.uid) ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid),
-      });
-    } catch (e) { console.error('Like error:', e); }
-  };
-
-  const handleComment = async (postId, text) => {
-    try {
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      const userData = userDoc.exists() ? userDoc.data() : {};
-      await updateDoc(doc(db, 'posts', postId), {
-        comments: arrayUnion({
-          userId: currentUser.uid,
-          userName: userData.name || 'Usuario',
-          text,
-          createdAt: new Date().toISOString(),
-        }),
-      });
-    } catch (e) { console.error('Comment error:', e); }
-  };
-
-  const handleDeletePost = async (postId) => {
-    try {
-      await deleteDoc(doc(db, 'posts', postId));
-    } catch (e) { console.error('Delete error:', e); }
-  };
+  }, [navigation, currentUser.uid]);
 
   if (loading) {
     return (
@@ -138,14 +93,9 @@ export default function ProfileScreen({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Mi Perfil</Text>
-          <View style={{ flexDirection: 'row' }}>
-            <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('EditProfile')}>
-              <Ionicons name="create-outline" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('Settings')}>
-              <Ionicons name="settings-outline" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('Settings')}>
+            <Ionicons name="settings-outline" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.coverContainer}>
@@ -171,6 +121,10 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.statNumber}>{user?.followers?.length || 0}</Text>
               <Text style={styles.statLabel}>Seguidores</Text>
             </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{user?.following?.length || 0}</Text>
+              <Text style={styles.statLabel}>Siguiendo</Text>
+            </View>
           </View>
         </View>
 
@@ -190,7 +144,7 @@ export default function ProfileScreen({ navigation }) {
             events.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="calendar-outline" size={50} color="#888" />
-                <Text style={styles.emptyText}>No has creado eventos aun</Text>
+                <Text style={styles.emptyText}>No has creado eventos aún</Text>
                 <TouchableOpacity style={styles.createButton} onPress={() => navigation.navigate('Create')}>
                   <Text style={styles.createButtonText}>Crear mi primer evento</Text>
                 </TouchableOpacity>
@@ -204,31 +158,22 @@ export default function ProfileScreen({ navigation }) {
             <>
               <TouchableOpacity style={styles.createPostButton} onPress={() => navigation.navigate('CreatePost')}>
                 <Ionicons name="add-circle" size={24} color="#6c5ce7" />
-                <Text style={styles.createPostText}>Crear publicacion</Text>
+                <Text style={styles.createPostText}>Crear publicación</Text>
               </TouchableOpacity>
               {posts.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="chatbubbles-outline" size={50} color="#888" />
-                  <Text style={styles.emptyText}>No tienes publicaciones aun</Text>
+                  <Text style={styles.emptyText}>No tienes publicaciones aún</Text>
+                  <Text style={styles.emptySubtext}>Comparte algo con tus seguidores</Text>
                 </View>
               ) : (
                 posts.map(post => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    currentUserId={currentUser.uid}
-                    onLike={handleLike}
-                    onComment={handleComment}
-                    onDelete={handleDeletePost}
-                    onUserPress={handleUserPress}
-                  />
+                  <PostCard key={post.id} post={post} onUserPress={handleUserPress} />
                 ))
               )}
             </>
           )}
         </View>
-
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -237,7 +182,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
   loadingContainer: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 10, paddingBottom: 15 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
   headerButton: { marginLeft: 15 },
   coverContainer: { height: 150, backgroundColor: '#2d2d44' },
@@ -256,11 +201,12 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomWidth: 2, borderBottomColor: '#6c5ce7' },
   tabText: { color: '#888', fontSize: 14, fontWeight: '600', marginLeft: 8 },
   tabTextActive: { color: '#fff' },
-  contentSection: { paddingVertical: 15, paddingBottom: 30 },
+  contentSection: { paddingVertical: 15, paddingBottom: 100 },
   createPostButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d2d44', marginHorizontal: 15, marginBottom: 15, paddingVertical: 15, borderRadius: 12, borderWidth: 1, borderColor: '#6c5ce7', borderStyle: 'dashed' },
   createPostText: { color: '#6c5ce7', fontSize: 15, fontWeight: '600', marginLeft: 8 },
   emptyState: { alignItems: 'center', paddingVertical: 50 },
   emptyText: { color: '#888', fontSize: 16, marginTop: 15 },
+  emptySubtext: { color: '#666', fontSize: 14, marginTop: 5 },
   createButton: { backgroundColor: '#6c5ce7', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, marginTop: 20 },
   createButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

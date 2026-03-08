@@ -1,50 +1,57 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { memo, useCallback, useState } from 'react';
+import { Image } from 'expo-image';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPress }) {
+// Fuera del componente: no se recrea en cada render
+function timeAgo(date) {
+  if (!date) return '';
+  const now = new Date();
+  const postDate = date.toDate ? date.toDate() : new Date(date);
+  const diff = Math.floor((now - postDate) / 1000);
+  if (diff < 60) return 'Ahora';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
+}
+
+function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPress }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const isLiked = post.likes?.includes(currentUserId);
   const isOwner = post.userId === currentUserId;
 
-  const timeAgo = (date) => {
-    if (!date) return '';
-    const now = new Date();
-    const postDate = date.toDate ? date.toDate() : new Date(date);
-    const diff = Math.floor((now - postDate) / 1000);
-    if (diff < 60) return 'Ahora';
-    if (diff < 3600) return Math.floor(diff / 60) + 'm';
-    if (diff < 86400) return Math.floor(diff / 3600) + 'h';
-    return Math.floor(diff / 86400) + 'd';
-  };
-
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     Alert.alert('Eliminar', 'Eliminar esta publicacion?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: () => onDelete?.(post.id) },
     ]);
-  };
+  }, [post.id, onDelete]);
 
-  const handleComment = () => {
+  const handleComment = useCallback(() => {
     if (!commentText.trim()) return;
     onComment?.(post.id, commentText.trim());
     setCommentText('');
-  };
+  }, [commentText, post.id, onComment]);
+
+  const handleLike = useCallback(() => onLike?.(post.id), [post.id, onLike]);
+  const handleUserPress = useCallback(() => onUserPress?.(post.userId), [post.userId, onUserPress]);
+  const toggleComments = useCallback(() => setShowComments(v => !v), []);
 
   return (
     <View style={styles.card}>
       {post.image ? (
-        <Image source={{ uri: post.image }} style={styles.postImage} resizeMode="cover" />
+        <Image source={{ uri: post.image }} style={styles.postImage} contentFit="cover" transition={200} />
       ) : null}
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.userInfo} onPress={() => onUserPress?.(post.userId)}>
-            <Image source={{ uri: post.userAvatar || 'https://via.placeholder.com/36' }} style={styles.avatar} />
+          <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
+            <Image source={{ uri: post.userAvatar || 'https://via.placeholder.com/36' }} style={styles.avatar} contentFit="cover" transition={150} />
             <View>
               <Text style={styles.userName}>{post.userName}</Text>
               <Text style={styles.time}>{timeAgo(post.createdAt)}</Text>
+
             </View>
           </TouchableOpacity>
           {isOwner && (
@@ -57,11 +64,11 @@ export default function PostCard({ post, currentUserId, onLike, onComment, onDel
         {post.text ? <Text style={styles.text}>{post.text}</Text> : null}
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => onLike?.(post.id)}>
+          <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
             <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={20} color={isLiked ? '#ff4444' : '#aaa'} />
-            <Text style={[styles.actionText, isLiked && { color: '#ff4444' }]}>{post.likes?.length || 0}</Text>
+            <Text style={[styles.actionText, isLiked && styles.likedText]}>{post.likes?.length || 0}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(!showComments)}>
+          <TouchableOpacity style={styles.actionBtn} onPress={toggleComments}>
             <Ionicons name="chatbubble-outline" size={18} color="#aaa" />
             <Text style={styles.actionText}>{post.comments?.length || 0}</Text>
           </TouchableOpacity>
@@ -70,7 +77,7 @@ export default function PostCard({ post, currentUserId, onLike, onComment, onDel
         {showComments && (
           <View style={styles.commentsSection}>
             {post.comments?.map((c, i) => (
-              <View key={i} style={styles.comment}>
+              <View key={c.createdAt ?? i} style={styles.comment}>
                 <Text style={styles.commentUser}>{c.userName}</Text>
                 <Text style={styles.commentText}>{c.text}</Text>
               </View>
@@ -94,7 +101,10 @@ export default function PostCard({ post, currentUserId, onLike, onComment, onDel
   );
 }
 
+export default memo(PostCard);
+
 const styles = StyleSheet.create({
+  likedText: { color: '#ff4444' },
   card: { backgroundColor: '#2d2d44', marginHorizontal: 15, marginBottom: 15, borderRadius: 20, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
   postImage: { width: '100%', height: 220 },
   content: { padding: 15 },

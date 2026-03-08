@@ -1,10 +1,10 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export const eventsCollection = collection(db, 'events');
 
 export const subscribeToEvents = (onUpdate) => {
-  const q = query(eventsCollection, orderBy('createdAt', 'desc'));
+  const q = query(eventsCollection, orderBy('createdAt', 'desc'), limit(100));
   
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const events = snapshot.docs.map(doc => ({

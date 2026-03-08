@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, FlatList, Image, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image } from 'expo-image';
+import { Animated, Dimensions, FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { SearchListSkeleton } from '../components/SkeletonLoader';
 import { subscribeToEvents } from '../services/eventService';
@@ -55,9 +56,95 @@ const COSTA_RICA_REGION = {
   longitudeDelta: 0.5,
 };
 
+const CATEGORY_COLORS = {
+  'Música': '#e74c3c', 'Deportes': '#00b894', 'Arte': '#fdcb6e',
+  'Tecnología': '#0984e3', 'Comida': '#e17055', 'Fiesta': '#6c5ce7',
+  'Networking': '#00cec9', 'Educación': '#a29bfe', 'Cine': '#fd79a8',
+  'Teatro': '#e84393', 'Salud': '#55efc4', 'Naturaleza': '#00b894',
+};
+
+// Fuera del componente: no se recrea en cada render
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const parts = dateString.split('/');
+  if (parts.length === 3) {
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return `${parts[0]} ${months[parseInt(parts[1]) - 1]}`;
+  }
+  return dateString;
+}
+
+// Funciones puras de filtrado (sin acceso a estado/props del componente)
+function parseDate(dateString) {
+  if (!dateString) return null;
+  const parts = dateString.split('/');
+  if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
+  return null;
+}
+
+function isInTimeRange(eventDate, filter) {
+  const date = parseDate(eventDate);
+  if (!date) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const endOfWeek = new Date(today);
+  endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  switch (filter) {
+    case 'today':    return date.toDateString() === today.toDateString();
+    case 'tomorrow': return date.toDateString() === tomorrow.toDateString();
+    case 'week':     return date >= today && date <= endOfWeek;
+    case 'month':    return date >= today && date <= endOfMonth;
+    default:         return true;
+  }
+}
+
+// Componente extraído: antes se redefinía en cada render del padre
+function CustomMarker({ event, isSelected }) {
+  const priceText = event.isFree ? 'Gratis' : `₡${event.price}`;
+  return (
+    <View style={[markerStyles.bubble, isSelected && markerStyles.bubbleSelected]}>
+      <Text style={[markerStyles.text, isSelected && markerStyles.textSelected]}>
+        {priceText}
+      </Text>
+    </View>
+  );
+}
+
+const markerStyles = StyleSheet.create({
+  bubble: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Platform.OS === 'ios' ? 16 : 4,
+    borderWidth: Platform.OS === 'ios' ? 2 : 1,
+    borderColor: '#333',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  bubbleSelected: {
+    backgroundColor: '#6c5ce7',
+    borderColor: '#6c5ce7',
+  },
+  text: {
+    color: '#1a1a2e',
+    fontWeight: 'bold',
+    fontSize: Platform.OS === 'ios' ? 12 : 10,
+    includeFontPadding: false,
+    textAlign: 'center',
+  },
+  textSelected: {
+    color: '#fff',
+  },
+});
+
 export default function SearchScreen({ navigation }) {
   const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
   const [visibleEvents, setVisibleEvents] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -68,105 +155,58 @@ export default function SearchScreen({ navigation }) {
   const [mapRegion, setMapRegion] = useState(COSTA_RICA_REGION);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   const mapRef = useRef(null);
   const flatListRef = useRef(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const unsubscribe = subscribeToEvents((newEvents) => {
-      const eventsWithLocation = newEvents.filter(e => 
-        e.location?.lat && e.location?.lng && 
+      const eventsWithLocation = newEvents.filter(e =>
+        e.location?.lat && e.location?.lng &&
         e.location.lat !== 0 && e.location.lng !== 0 &&
         !e.isVirtual
       );
       setEvents(eventsWithLocation);
-      setFilteredEvents(eventsWithLocation);
-      setVisibleEvents(eventsWithLocation);
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    filterEvents();
-  }, [searchQuery, selectedCategory, selectedTime, selectedProvince, events]);
-
-  const parseDate = (dateString) => {
-    if (!dateString) return null;
-    const parts = dateString.split('/');
-    if (parts.length === 3) {
-      return new Date(parts[2], parts[1] - 1, parts[0]);
-    }
-    return null;
-  };
-
-  const isInTimeRange = (eventDate, filter) => {
-    const date = parseDate(eventDate);
-    if (!date) return true;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const endOfWeek = new Date(today);
-    endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
-    
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
-    switch (filter) {
-      case 'today':
-        return date.toDateString() === today.toDateString();
-      case 'tomorrow':
-        return date.toDateString() === tomorrow.toDateString();
-      case 'week':
-        return date >= today && date <= endOfWeek;
-      case 'month':
-        return date >= today && date <= endOfMonth;
-      default:
-        return true;
-    }
-  };
-
-  const filterEvents = () => {
+  // useMemo: sustituye filterEvents() + useEffect — recalcula solo cuando cambian sus deps
+  const filteredEvents = useMemo(() => {
     let filtered = [...events];
-
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(e => 
+      filtered = filtered.filter(e =>
         e.title?.toLowerCase().includes(q) ||
         e.description?.toLowerCase().includes(q) ||
         e.location?.name?.toLowerCase().includes(q) ||
         e.organizerName?.toLowerCase().includes(q)
       );
     }
-
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(e => e.category === selectedCategory);
     }
-
     if (selectedTime !== 'all') {
       filtered = filtered.filter(e => isInTimeRange(e.date, selectedTime));
     }
-
     if (selectedProvince !== 'all') {
       const province = PROVINCES.find(p => p.id === selectedProvince);
       if (province) {
         filtered = filtered.filter(e => {
-          const distance = Math.sqrt(
-            Math.pow(e.location.lat - province.lat, 2) + 
-            Math.pow(e.location.lng - province.lng, 2)
-          );
-          return distance < 0.5;
+          const dLat = e.location.lat - province.lat;
+          const dLng = e.location.lng - province.lng;
+          return (dLat * dLat + dLng * dLng) < 0.25; // equivale a distance < 0.5 sin Math.sqrt
         });
       }
     }
+    return filtered;
+  }, [events, searchQuery, selectedCategory, selectedTime, selectedProvince]);
 
-    setFilteredEvents(filtered);
-    setVisibleEvents(filtered);
-  };
+  // Sync visibleEvents cuando cambian los filtros
+  useEffect(() => {
+    setVisibleEvents(filteredEvents);
+  }, [filteredEvents]);
 
   const onRegionChangeComplete = (region) => {
     setMapRegion(region);
@@ -198,9 +238,9 @@ export default function SearchScreen({ navigation }) {
     }
   };
 
-  const handleCardPress = (event) => {
+  const handleCardPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
-  };
+  }, [navigation]);
 
   const onScrollEnd = (e) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / (CARD_WIDTH + 10));
@@ -229,16 +269,6 @@ export default function SearchScreen({ navigation }) {
     setShowFilters(false);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const parts = dateString.split('/');
-    if (parts.length === 3) {
-      const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-      return `${parts[0]} ${months[parseInt(parts[1]) - 1]}`;
-    }
-    return dateString;
-  };
-
   const getActiveFiltersCount = () => {
     let count = 0;
     if (selectedCategory !== 'all') count++;
@@ -247,7 +277,7 @@ export default function SearchScreen({ navigation }) {
     return count;
   };
 
-  const renderCategoryItem = ({ item }) => (
+  const renderCategoryItem = useCallback(({ item }) => (
     <TouchableOpacity
       style={[styles.categoryItem, selectedCategory === item.id && styles.categoryItemActive]}
       onPress={() => setSelectedCategory(item.id)}
@@ -261,9 +291,9 @@ export default function SearchScreen({ navigation }) {
         {item.label}
       </Text>
     </TouchableOpacity>
-  );
+  ), [selectedCategory]);
 
-  const renderEventCard = ({ item }) => (
+  const renderEventCard = useCallback(({ item }) => (
     <TouchableOpacity 
       style={[styles.eventCard, selectedEvent?.id === item.id && styles.eventCardSelected]}
       onPress={() => handleCardPress(item)}
@@ -294,9 +324,9 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
     </TouchableOpacity>
-  );
+  ), [selectedEvent, handleCardPress]);
 
-  const renderListEventCard = ({ item }) => (
+  const renderListEventCard = useCallback(({ item }) => (
     <TouchableOpacity style={styles.listCard} onPress={() => handleCardPress(item)}>
       <Image source={{ uri: item.image || 'https://via.placeholder.com/300x150' }} style={styles.listCardImage} />
       <View style={styles.listCardInfo}>
@@ -331,34 +361,7 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
     </TouchableOpacity>
-  );
-
-  const CustomMarker = ({ event, isSelected }) => {
-    const priceText = event.isFree ? 'Gratis' : `₡${event.price}`;
-    return (
-      <View style={{
-        backgroundColor: isSelected ? '#6c5ce7' : '#fff',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: Platform.OS === 'ios' ? 16 : 4,
-        borderWidth: Platform.OS === 'ios' ? 2 : 1,
-        borderColor: isSelected ? '#6c5ce7' : '#333',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-      }}>
-        <Text style={{
-          color: isSelected ? '#fff' : '#1a1a2e',
-          fontWeight: 'bold',
-          fontSize: Platform.OS === 'ios' ? 12 : 10,
-          includeFontPadding: false,
-          textAlign: 'center',
-        }}>{priceText}</Text>
-      </View>
-    );
-  };
+  ), [handleCardPress]);
 
   return (
     <View style={styles.container}>
@@ -461,21 +464,7 @@ export default function SearchScreen({ navigation }) {
           >
             {filteredEvents.map((event, index) => {
               const isSelected = selectedEvent?.id === event.id;
-              const categoryColors = {
-                'Música': '#e74c3c',
-                'Deportes': '#00b894',
-                'Arte': '#fdcb6e',
-                'Tecnología': '#0984e3',
-                'Comida': '#e17055',
-                'Fiesta': '#6c5ce7',
-                'Networking': '#00cec9',
-                'Educación': '#a29bfe',
-                'Cine': '#fd79a8',
-                'Teatro': '#e84393',
-                'Salud': '#55efc4',
-                'Naturaleza': '#00b894',
-              };
-              const pinColor = isSelected ? '#6c5ce7' : (categoryColors[event.category] || '#e74c3c');
+              const pinColor = isSelected ? '#6c5ce7' : (CATEGORY_COLORS[event.category] || '#e74c3c');
               
               if (Platform.OS === 'android') {
                 return (
@@ -543,6 +532,10 @@ export default function SearchScreen({ navigation }) {
           renderItem={renderListEventCard}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={10}
+          removeClippedSubviews={true}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="search-outline" size={60} color="#888" />

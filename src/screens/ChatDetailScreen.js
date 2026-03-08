@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useEffect, useRef, useState } from 'react';
-import { FlatList, Image, KeyboardAvoidingView, Platform, SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image } from 'expo-image';
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
 import { markMessagesAsRead, sendMessage, subscribeToMessages } from '../services/chatService';
 
@@ -73,7 +75,7 @@ export default function ChatDetailScreen({ route, navigation }) {
     return { title, dateTime, eventId };
   };
 
-  const handleEventPress = async (eventId) => {
+  const handleEventPress = useCallback(async (eventId) => {
     try {
       const eventDoc = await getDoc(doc(db, 'events', eventId));
       if (eventDoc.exists()) {
@@ -82,7 +84,7 @@ export default function ChatDetailScreen({ route, navigation }) {
     } catch (error) {
       console.error('Error cargando evento:', error);
     }
-  };
+  }, [navigation]);
 
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
@@ -108,42 +110,30 @@ export default function ChatDetailScreen({ route, navigation }) {
     return date.toLocaleDateString('es', { day: 'numeric', month: 'long' });
   };
 
-  // Preparar mensajes con separadores de fecha
-  const messagesWithSeparators = () => {
+  // useMemo: solo recalcula cuando cambia messages (O(n log n) → ejecutado una sola vez por batch)
+  const data = useMemo(() => {
     if (messages.length === 0) return [];
 
     const result = [];
     let lastDateString = '';
 
-    // Recorrer mensajes de más antiguo a más nuevo
-    const sortedMessages = [...messages].sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime();
-      const timeB = new Date(b.timestamp).getTime();
-      return timeA - timeB;
-    });
+    const sortedMessages = [...messages].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
 
     for (const msg of sortedMessages) {
       const currentDateString = getDateString(msg.timestamp);
-      
       if (currentDateString !== lastDateString) {
-        result.push({
-          id: `separator-${msg.timestamp}`,
-          type: 'separator',
-          timestamp: msg.timestamp,
-        });
+        result.push({ id: `separator-${msg.timestamp}`, type: 'separator', timestamp: msg.timestamp });
         lastDateString = currentDateString;
       }
-
-      result.push({
-        ...msg,
-        type: 'message',
-      });
+      result.push({ ...msg, type: 'message' });
     }
 
     return result;
-  };
+  }, [messages]);
 
-  const renderItem = ({ item }) => {
+  const renderItem = useCallback(({ item }) => {
     if (item.type === 'separator') {
       return (
         <View style={styles.dateSeparator}>
@@ -161,25 +151,31 @@ export default function ChatDetailScreen({ route, navigation }) {
           <Image source={{ uri: otherUser.avatar || 'https://via.placeholder.com/30' }} style={styles.messageAvatar} />
         )}
         {isEvent ? (
-          <TouchableOpacity 
-            style={[styles.eventCard, isMyMessage && styles.myEventCard]}
-            onPress={() => handleEventPress(parseEventMessage(item.text).eventId)}
-          >
-            <View style={styles.eventCardHeader}>
-              <Ionicons name="calendar" size={16} color="#6c5ce7" />
-              <Text style={styles.eventCardLabel}>Evento compartido</Text>
-            </View>
-            <Text style={styles.eventCardTitle}>{parseEventMessage(item.text).title}</Text>
-            <View style={styles.eventCardFooter}>
-              <Ionicons name="time-outline" size={14} color="#888" />
-              <Text style={styles.eventCardDate}>{parseEventMessage(item.text).dateTime}</Text>
-            </View>
-            <View style={styles.eventCardButton}>
-              <Text style={styles.eventCardButtonText}>Ver evento</Text>
-              <Ionicons name="chevron-forward" size={16} color="#6c5ce7" />
-            </View>
-            <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-          </TouchableOpacity>
+          (() => {
+            // parseEventMessage una sola vez por item
+            const parsed = parseEventMessage(item.text);
+            return (
+              <TouchableOpacity
+                style={[styles.eventCard, isMyMessage && styles.myEventCard]}
+                onPress={() => handleEventPress(parsed.eventId)}
+              >
+                <View style={styles.eventCardHeader}>
+                  <Ionicons name="calendar" size={16} color="#6c5ce7" />
+                  <Text style={styles.eventCardLabel}>Evento compartido</Text>
+                </View>
+                <Text style={styles.eventCardTitle}>{parsed.title}</Text>
+                <View style={styles.eventCardFooter}>
+                  <Ionicons name="time-outline" size={14} color="#888" />
+                  <Text style={styles.eventCardDate}>{parsed.dateTime}</Text>
+                </View>
+                <View style={styles.eventCardButton}>
+                  <Text style={styles.eventCardButtonText}>Ver evento</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#6c5ce7" />
+                </View>
+                <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
+              </TouchableOpacity>
+            );
+          })()
         ) : (
           <View style={[styles.messageBubble, isMyMessage ? styles.myMessage : styles.otherMessage]}>
             <Text style={styles.messageText}>{item.text}</Text>
@@ -188,9 +184,7 @@ export default function ChatDetailScreen({ route, navigation }) {
         )}
       </View>
     );
-  };
-
-  const data = messagesWithSeparators();
+  }, [userId, otherUser.avatar, handleEventPress]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -243,7 +237,7 @@ export default function ChatDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 35) + 10 : 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
+  header: { paddingTop: 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
   backButton: { padding: 5 },
   headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
   headerAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
