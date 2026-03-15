@@ -99,11 +99,11 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.coverContainer}>
-          <Image source={{ uri: user?.coverImage || 'https://via.placeholder.com/400x150' }} style={styles.coverImage} />
+          <Image source={user?.coverImage ? { uri: user.coverImage } : require('../../assets/images/icon.png')} style={styles.coverImage} />
         </View>
 
         <View style={styles.profileSection}>
-          <Image source={{ uri: user?.avatar || 'https://via.placeholder.com/100' }} style={styles.avatar} />
+          <Image source={user?.avatar ? { uri: user.avatar } : require('../../assets/images/icon.png')} style={styles.avatar} />
           <Text style={styles.name}>{user?.name || 'Usuario'}</Text>
           <Text style={styles.email}>{currentUser.email}</Text>
           {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}

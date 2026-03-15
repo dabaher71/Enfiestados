@@ -17,7 +17,9 @@ function formatDate(dateString) {
   return { day: '--', month: '---' };
 }
 
-function EventCard({ event, onPress }) {
+// Acepta `dispatch` (patrón dispatcher) o `onPress` (compatibilidad)
+function EventCard({ event, dispatch, onPress }) {
+  const handlePress = dispatch ? () => dispatch({ type: 'PRESS', payload: event }) : onPress;
   const [organizerAvatar, setOrganizerAvatar] = useState(event.organizerAvatar || '');
   const [organizerName, setOrganizerName] = useState(event.organizerName || '');
 
@@ -65,11 +67,11 @@ function EventCard({ event, onPress }) {
   const { day, month } = formatDate(event.date);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.9}>
       {/* Imagen */}
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: event.image || 'https://via.placeholder.com/400x200' }}
+          source={event.image ? { uri: event.image } : require('../../assets/images/icon.png')}
           style={styles.image}
           contentFit="cover"
           transition={200}

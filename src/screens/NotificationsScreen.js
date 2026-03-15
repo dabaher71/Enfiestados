@@ -3,7 +3,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
 import { subscribeToChats } from '../services/chatService';
@@ -337,11 +338,9 @@ export default function NotificationsScreen({ navigation }) {
     );
   }
 
-  const FLATLIST_PROPS = {
+  const FLASHLIST_PROPS = {
     showsVerticalScrollIndicator: false,
-    initialNumToRender: 10,
-    maxToRenderPerBatch: 10,
-    windowSize: 10,
+    estimatedItemSize: 70,
   };
 
   return (
@@ -392,11 +391,11 @@ export default function NotificationsScreen({ navigation }) {
             <Text style={styles.emptyText}>Cuando alguien interactue contigo aparecera aqui</Text>
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={regularNotifications}
             keyExtractor={(item) => item.id}
             renderItem={renderNotification}
-            {...FLATLIST_PROPS}
+            {...FLASHLIST_PROPS}
           />
         )
       )}
@@ -409,11 +408,11 @@ export default function NotificationsScreen({ navigation }) {
             <Text style={styles.emptyText}>Las solicitudes de seguimiento apareceran aqui</Text>
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={followRequests}
             keyExtractor={(item) => item.id}
             renderItem={renderFollowRequest}
-            {...FLATLIST_PROPS}
+            {...FLASHLIST_PROPS}
           />
         )
       )}
@@ -426,11 +425,11 @@ export default function NotificationsScreen({ navigation }) {
             <Text style={styles.emptyText}>Tus conversaciones apareceran aqui</Text>
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={chats}
             keyExtractor={(item) => item.id}
             renderItem={renderChat}
-            {...FLATLIST_PROPS}
+            {...FLASHLIST_PROPS}
           />
         )
       )}

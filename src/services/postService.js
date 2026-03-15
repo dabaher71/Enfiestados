@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../config/firebase';
 
@@ -57,6 +57,11 @@ export const subscribeToUserPosts = (userId, callback) => {
   });
 };
 
-export const deletePost = async (postId) => {
-  await deleteDoc(doc(db, 'posts', postId));
+export const deletePost = async (postId, userId) => {
+  const postRef = doc(db, 'posts', postId);
+  const postSnap = await getDoc(postRef);
+  if (!postSnap.exists() || postSnap.data().userId !== userId) {
+    throw new Error('No tienes permiso para eliminar esta publicación');
+  }
+  await deleteDoc(postRef);
 };

@@ -32,6 +32,26 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+
+# Secretos — NUNCA commitear
+serviceAccountKey.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+google-services-secret.json
+
+# Builds / binaries
+*.apk
+*.aab
+
+# Claude Code
+.claude/
+.agents/
+skills-lock.json
+
+# Editor swap files
+*.swp
+*.swo
 
 # typescript
 *.tsbuildinfo

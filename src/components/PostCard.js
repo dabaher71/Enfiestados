@@ -47,7 +47,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
       <View style={styles.content}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
-            <Image source={{ uri: post.userAvatar || 'https://via.placeholder.com/36' }} style={styles.avatar} contentFit="cover" transition={150} />
+            <Image source={post.userAvatar ? { uri: post.userAvatar } : require('../../assets/images/icon.png')} style={styles.avatar} contentFit="cover" transition={150} />
             <View>
               <Text style={styles.userName}>{post.userName}</Text>
               <Text style={styles.time}>{timeAgo(post.createdAt)}</Text>

@@ -1,0 +1,48 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    function underMB(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // ── Imágenes de eventos — events/{userId}/... ───────────────────────────
+    match /events/{userId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) && isImage() && underMB(5);
+    }
+
+    // ── Avatares — avatars/{userId}/... ─────────────────────────────────────
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) && isImage() && underMB(2);
+    }
+
+    // ── Portadas — covers/{userId}/... ──────────────────────────────────────
+    match /covers/{userId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) && isImage() && underMB(3);
+    }
+
+    // ── Imágenes de posts — posts/{userId}/... ──────────────────────────────
+    match /posts/{userId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) && isImage() && underMB(5);
+    }
+
+    // Bloquear todo lo demás
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

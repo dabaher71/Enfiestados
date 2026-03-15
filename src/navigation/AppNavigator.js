@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { auth } from '../config/firebase';
 
+import ErrorBoundary from '../components/ErrorBoundary';
 import LoadingScreen from '../components/LoadingScreen';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import ChatsScreen from '../screens/ChatsScreen';
@@ -45,27 +46,29 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
-          <>
-            <Stack.Screen name="MainApp" component={MainTabNavigator} />
-            <Stack.Screen name="EventDetail" component={EventDetailScreen} />
-            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-            <Stack.Screen name="Chats" component={ChatsScreen} />
-            <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
-            <Stack.Screen name="EditEvent" component={EditEventScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="CreatePost" component={CreatePostScreen} />
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <ErrorBoundary>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {user ? (
+            <>
+              <Stack.Screen name="MainApp" component={MainTabNavigator} />
+              <Stack.Screen name="EventDetail" component={EventDetailScreen} />
+              <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+              <Stack.Screen name="Chats" component={ChatsScreen} />
+              <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+              <Stack.Screen name="EditEvent" component={EditEventScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+            </>
+          ) : (
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+            </>
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ErrorBoundary>
   );
 }

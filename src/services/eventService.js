@@ -71,9 +71,14 @@ export const toggleAttendance = async (eventId, userId) => {
   }
 };
 
-export const deleteEvent = async (eventId) => {
+export const deleteEvent = async (eventId, userId) => {
   try {
-    await deleteDoc(doc(db, 'events', eventId));
+    const eventRef = doc(db, 'events', eventId);
+    const eventSnap = await getDoc(eventRef);
+    if (!eventSnap.exists() || eventSnap.data().organizerId !== userId) {
+      throw new Error('No tienes permiso para eliminar este evento');
+    }
+    await deleteDoc(eventRef);
   } catch (error) {
     console.error('Error al eliminar evento:', error);
     throw error;
@@ -116,15 +121,21 @@ export const updateEvent = async (eventId, eventData) => {
     throw error;
   }
 };
-export const deleteComment = async (eventId, commentId) => {
+export const deleteComment = async (eventId, commentId, userId) => {
   try {
     const eventRef = doc(db, 'events', eventId);
     const eventSnap = await getDoc(eventRef);
     const eventData = eventSnap.data();
-    
-    const comments = eventData.comments || [];
-    const updatedComments = comments.filter(c => c.id !== commentId);
-    
+
+    const comment = (eventData.comments || []).find(c => c.id === commentId);
+    if (!comment) throw new Error('Comentario no encontrado');
+
+    const commentOwnerId = comment.userId || comment.uid || comment.authorId;
+    if (commentOwnerId !== userId && eventData.organizerId !== userId) {
+      throw new Error('No tienes permiso para eliminar este comentario');
+    }
+
+    const updatedComments = (eventData.comments || []).filter(c => c.id !== commentId);
     await updateDoc(eventRef, { comments: updatedComments });
     return updatedComments;
   } catch (error) {

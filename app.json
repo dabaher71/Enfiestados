@@ -16,11 +16,15 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.enfiestados.app",
+      "bundleIdentifier": "com.david.enfiestados",
+      "config": {
+        "googleMapsApiKey": "AIzaSyDi9Yyw542VSGaEp5EOW-BA2c7tUTh-u2I"
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos acceso a tu cámara para tomar fotos de eventos y perfil",
         "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tu galería para subir fotos de eventos y perfil",
-        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos"
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos"
       }
     },
     "android": {
@@ -55,7 +59,8 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-5363568499936245~8795174061"
+          "androidAppId": "ca-app-pub-5363568499936245~8795174061",
+          "iosAppId": "ca-app-pub-5363568499936245~8795174061"
         }
       ],
       "expo-notifications",
@@ -74,8 +79,7 @@
       ],
       "expo-updates",
       "expo-font",
-      "expo-router",
-      "react-native-google-mobile-ads"
+      "expo-router"
     ],
     "notification": {
       "icon": "./assets/images/logo.png",

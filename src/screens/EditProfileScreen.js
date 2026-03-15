@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { validateImageSize } from '../utils/security';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
@@ -73,6 +74,12 @@ export default function EditProfileScreen({ route, navigation }) {
     });
 
     if (!result.canceled) {
+      const maxBytes = type === 'avatar' ? 2 * 1024 * 1024 : 3 * 1024 * 1024;
+      if (!validateImageSize(result.assets[0], maxBytes)) {
+        const limitMB = type === 'avatar' ? 2 : 3;
+        Alert.alert('Imagen demasiado grande', `La imagen debe ser menor a ${limitMB}MB`);
+        return;
+      }
       if (type === 'avatar') {
         setAvatar(result.assets[0].uri);
       } else {
@@ -168,7 +175,7 @@ export default function EditProfileScreen({ route, navigation }) {
         </View>
 
         <TouchableOpacity style={styles.coverContainer} onPress={() => pickImage('cover')}>
-          <Image source={{ uri: coverImage || 'https://via.placeholder.com/400x150' }} style={styles.coverImage} />
+          <Image source={coverImage ? { uri: coverImage } : require('../../assets/images/icon.png')} style={styles.coverImage} />
           <View style={styles.coverOverlay}>
             <Ionicons name="camera" size={30} color="#fff" />
           </View>
@@ -176,7 +183,7 @@ export default function EditProfileScreen({ route, navigation }) {
 
         <View style={styles.avatarSection}>
           <TouchableOpacity style={styles.avatarContainer} onPress={() => pickImage('avatar')}>
-            <Image source={{ uri: avatar || 'https://via.placeholder.com/100' }} style={styles.avatar} />
+            <Image source={avatar ? { uri: avatar } : require('../../assets/images/icon.png')} style={styles.avatar} />
             <View style={styles.avatarOverlay}>
               <Ionicons name="camera" size={24} color="#fff" />
             </View>

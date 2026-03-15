@@ -2,8 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import { Animated, Dimensions, FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+import { safeOpenURL } from '../utils/security';
 import { SearchListSkeleton } from '../components/SkeletonLoader';
+import ExternalEventSearchCard from '../components/ExternalEventSearchCard';
+import NativeAdCard from '../components/NativeAdCard';
+import useExternalEvents from '../hooks/useExternalEvents';
 import { subscribeToEvents } from '../services/eventService';
 
 const { width } = Dimensions.get('window');
@@ -62,6 +68,29 @@ const CATEGORY_COLORS = {
   'Networking': '#00cec9', 'Educación': '#a29bfe', 'Cine': '#fd79a8',
   'Teatro': '#e84393', 'Salud': '#55efc4', 'Naturaleza': '#00b894',
 };
+
+// Ordenamiento por fecha ascendente (más próxima primero)
+function getEventTimestamp(ev) {
+  if (ev?._isExternal) {
+    if (!ev.dateISO) return Infinity;
+    const ts = new Date(ev.dateISO).getTime();
+    return isNaN(ts) ? Infinity : ts;
+  }
+  const d = ev?.date;
+  if (!d) return Infinity;
+  if (typeof d.toMillis === 'function') return d.toMillis();
+  if (typeof d === 'number') return d;
+  const parts = d.split('/');
+  if (parts.length === 3) {
+    const ts = new Date(+parts[2], +parts[1] - 1, +parts[0]).getTime();
+    if (!isNaN(ts)) return ts;
+  }
+  const parsed = Date.parse(d);
+  return isNaN(parsed) ? Infinity : parsed;
+}
+
+const sortByDateAsc = (arr) =>
+  arr.slice().sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
 
 // Fuera del componente: no se recrea en cada render
 function formatDate(dateString) {
@@ -144,6 +173,7 @@ const markerStyles = StyleSheet.create({
 });
 
 export default function SearchScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [events, setEvents] = useState([]);
   const [visibleEvents, setVisibleEvents] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,6 +185,8 @@ export default function SearchScreen({ navigation }) {
   const [mapRegion, setMapRegion] = useState(COSTA_RICA_REGION);
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const { data: externalEvents } = useExternalEvents();
 
   const mapRef = useRef(null);
   const flatListRef = useRef(null);
@@ -174,7 +206,14 @@ export default function SearchScreen({ navigation }) {
 
   // useMemo: sustituye filterEvents() + useEffect — recalcula solo cuando cambian sus deps
   const filteredEvents = useMemo(() => {
-    let filtered = [...events];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    // Excluir eventos cuya fecha ya pasó
+    let filtered = events.filter(e => {
+      const date = parseDate(e.date);
+      if (!date) return true;
+      return date >= today;
+    });
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(e =>
@@ -203,10 +242,72 @@ export default function SearchScreen({ navigation }) {
     return filtered;
   }, [events, searchQuery, selectedCategory, selectedTime, selectedProvince]);
 
+  // Eventos externos: descartar pasados + filtro por texto
+  const filteredExternalEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let result = externalEvents.filter(e => {
+      if (e.dateISO) return new Date(e.dateISO) >= today;
+      return true; // sin fecha conocida: mostrar igual
+    });
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(e =>
+        e.title?.toLowerCase().includes(q) ||
+        e.locationText?.toLowerCase().includes(q) ||
+        e.source?.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [externalEvents, searchQuery]);
+
   // Sync visibleEvents cuando cambian los filtros
   useEffect(() => {
     setVisibleEvents(filteredEvents);
   }, [filteredEvents]);
+
+  // Lista combinada ordenada por fecha + ads intercalados cada 4 eventos
+  const listDataWithAds = useMemo(() => {
+    const allEvents = sortByDateAsc([...filteredEvents, ...filteredExternalEvents]);
+    const result = [];
+    allEvents.forEach((event, index) => {
+      result.push(event);
+      if ((index + 1) % 4 === 0) {
+        result.push({ _isAd: true, id: `ad_${index}` });
+      }
+    });
+    return result;
+  }, [filteredEvents, filteredExternalEvents]);
+
+  // Memoizar markers para evitar recrear el array en cada render
+  const mapMarkers = useMemo(() =>
+    filteredEvents.map((event, index) => {
+      const isSelected = selectedEvent?.id === event.id;
+      const pinColor = isSelected ? '#6c5ce7' : (CATEGORY_COLORS[event.category] || '#e74c3c');
+
+      if (Platform.OS === 'android') {
+        return (
+          <Marker
+            key={event.id}
+            coordinate={{ latitude: event.location.lat, longitude: event.location.lng }}
+            onPress={() => handleMarkerPress(event, index)}
+            pinColor={pinColor}
+          />
+        );
+      }
+      return (
+        <Marker
+          key={event.id}
+          coordinate={{ latitude: event.location.lat, longitude: event.location.lng }}
+          onPress={() => handleMarkerPress(event, index)}
+        >
+          <CustomMarker event={event} isSelected={isSelected} />
+        </Marker>
+      );
+    }),
+  [filteredEvents, selectedEvent, handleMarkerPress]);
 
   const onRegionChangeComplete = (region) => {
     setMapRegion(region);
@@ -222,9 +323,9 @@ export default function SearchScreen({ navigation }) {
     setVisibleEvents(visible);
   };
 
-  const handleMarkerPress = (event, index) => {
+  const handleMarkerPress = useCallback((event, index) => {
     setSelectedEvent(event);
-    
+
     mapRef.current?.animateToRegion({
       latitude: event.location.lat,
       longitude: event.location.lng,
@@ -236,10 +337,14 @@ export default function SearchScreen({ navigation }) {
     if (visibleIndex >= 0) {
       flatListRef.current?.scrollToIndex({ index: visibleIndex, animated: true });
     }
-  };
+  }, [visibleEvents]);
 
   const handleCardPress = useCallback((event) => {
-    navigation.navigate('EventDetail', { event });
+    if (event._isExternal) {
+      safeOpenURL(event.eventUrl);
+    } else {
+      navigation.navigate('EventDetail', { event });
+    }
   }, [navigation]);
 
   const onScrollEnd = (e) => {
@@ -299,7 +404,7 @@ export default function SearchScreen({ navigation }) {
       onPress={() => handleCardPress(item)}
       activeOpacity={0.9}
     >
-      <Image source={{ uri: item.image || 'https://via.placeholder.com/300x150' }} style={styles.eventImage} />
+      <Image source={item.image ? { uri: item.image } : require('../../assets/images/icon.png')} style={styles.eventImage} />
       <View style={styles.eventInfo}>
         <View style={styles.eventHeader}>
           <View style={styles.categoryBadge}>
@@ -326,9 +431,20 @@ export default function SearchScreen({ navigation }) {
     </TouchableOpacity>
   ), [selectedEvent, handleCardPress]);
 
-  const renderListEventCard = useCallback(({ item }) => (
+  const renderListEventCard = useCallback(({ item }) => {
+    if (item._isAd) {
+      return <NativeAdCard />;
+    }
+    if (item._isExternal) {
+      return (
+        <View style={styles.listContainer_externalRow}>
+          <ExternalEventSearchCard event={item} />
+        </View>
+      );
+    }
+    return (
     <TouchableOpacity style={styles.listCard} onPress={() => handleCardPress(item)}>
-      <Image source={{ uri: item.image || 'https://via.placeholder.com/300x150' }} style={styles.listCardImage} />
+      <Image source={item.image ? { uri: item.image } : require('../../assets/images/icon.png')} style={styles.listCardImage} />
       <View style={styles.listCardInfo}>
         <View style={styles.listCardHeader}>
           <View style={styles.categoryBadgeSmall}>
@@ -361,12 +477,13 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
     </TouchableOpacity>
-  ), [handleCardPress]);
+  );
+}, [handleCardPress]);
 
   return (
     <View style={styles.container}>
       {/* Header con búsqueda */}
-      <View style={styles.searchHeader}>
+      <View style={[styles.searchHeader, { paddingTop: insets.top + 10 }]}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color="#888" />
           <TextInput
@@ -447,7 +564,9 @@ export default function SearchScreen({ navigation }) {
       {/* Contador de resultados */}
       <View style={styles.resultsCount}>
         <Text style={styles.resultsText}>
-          {viewMode === 'map' ? visibleEvents.length : filteredEvents.length} eventos 
+          {viewMode === 'map'
+            ? visibleEvents.length
+            : filteredEvents.length + filteredExternalEvents.length} eventos
           {selectedProvince !== 'all' && ` en ${selectedProvince}`}
         </Text>
       </View>
@@ -462,37 +581,7 @@ export default function SearchScreen({ navigation }) {
             showsUserLocation={true}
             showsMyLocationButton={false}
           >
-            {filteredEvents.map((event, index) => {
-              const isSelected = selectedEvent?.id === event.id;
-              const pinColor = isSelected ? '#6c5ce7' : (CATEGORY_COLORS[event.category] || '#e74c3c');
-              
-              if (Platform.OS === 'android') {
-                return (
-                  <Marker
-                    key={event.id}
-                    coordinate={{
-                      latitude: event.location.lat,
-                      longitude: event.location.lng,
-                    }}
-                    onPress={() => handleMarkerPress(event, index)}
-                    pinColor={pinColor}
-                  />
-                );
-              }
-              
-              return (
-                <Marker
-                  key={event.id}
-                  coordinate={{
-                    latitude: event.location.lat,
-                    longitude: event.location.lng,
-                  }}
-                  onPress={() => handleMarkerPress(event, index)}
-                >
-                  <CustomMarker event={event} isSelected={isSelected} />
-                </Marker>
-              );
-            })}
+            {mapMarkers}
           </MapView>
 
           {visibleEvents.length > 0 && (
@@ -526,16 +615,13 @@ export default function SearchScreen({ navigation }) {
       ) : loading ? (
         <SearchListSkeleton count={5} />
       ) : (
-        <FlatList
-          data={filteredEvents}
+        <FlashList
+          data={listDataWithAds}
           keyExtractor={(item) => item.id}
           renderItem={renderListEventCard}
+          estimatedItemSize={120}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          windowSize={10}
-          removeClippedSubviews={true}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="search-outline" size={60} color="#888" />
@@ -603,7 +689,7 @@ export default function SearchScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
-  searchHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 10, gap: 8 },
+  searchHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingBottom: 10, gap: 8 },
   searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, color: '#fff', fontSize: 15, marginLeft: 8 },
   filterButton: { backgroundColor: '#2d2d44', borderRadius: 10, padding: 10, position: 'relative' },
@@ -645,6 +731,7 @@ const styles = StyleSheet.create({
   eventDetailText: { color: '#aaa', fontSize: 11, marginLeft: 5, flex: 1 },
   myLocationButton: { position: 'absolute', top: 15, right: 15, backgroundColor: '#fff', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
   listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
+  listContainer_externalRow: { paddingHorizontal: 0 },
   listCard: { flexDirection: 'row', backgroundColor: '#2d2d44', borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
   listCardImage: { width: 100, height: 120, backgroundColor: '#3d3d5c' },
   listCardInfo: { flex: 1, padding: 12 },
