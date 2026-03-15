@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  FlatList,
   Image,
   Platform,
   StyleSheet,
@@ -10,92 +9,48 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { FeedSkeleton } from '../components/SkeletonLoader';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EventCard from '../components/EventCard';
+import ExternalEventCard from '../components/ExternalEventCard';
 import NativeAdCard from '../components/NativeAdCard';
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
+import useExternalEvents from '../hooks/useExternalEvents';
 import { registerForPushNotifications } from '../services/pushNotificationService';
 
 
-// --- Card de publicidad hardcodeada ---
-function AdCard({ onPress }) {
-  return (
-    <TouchableOpacity style={adStyles.card} onPress={onPress}>
-      <View style={adStyles.header}>
-        <Text style={adStyles.category}>Publicidad</Text>
-      </View>
-      <View style={adStyles.content}>
-        <Text style={adStyles.title}>¡Descubre ofertas especiales!</Text>
-        <Text style={adStyles.text}>
-          Este espacio es para mostrar anuncios integrados en tu feed.
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-const adStyles = StyleSheet.create({
-  card: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginVertical: 10,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  header: {
-    marginBottom: 8,
-  },
-  category: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#6c5ce7',
-  },
-  content: {
-    gap: 6,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  text: {
-    fontSize: 14,
-    color: '#ccc',
-  },
-});
-
 // --- Funciones auxiliares ---
+
+// Devuelve un timestamp numérico para cualquier tipo de evento.
+// Eventos externos: usa dateISO (ISO string correcto).
+// Eventos nativos: parsea date como DD/MM/YYYY.
 const getEventTimestamp = (ev) => {
-  const d = ev?.date || ev?.fecha || ev?.eventDate || ev?.scheduledAt || null;
-  if (!d) return 0;
+  if (ev?._isExternal) {
+    if (!ev.dateISO) return Infinity;
+    const ts = new Date(ev.dateISO).getTime();
+    return isNaN(ts) ? Infinity : ts;
+  }
+  const d = ev?.date;
+  if (!d) return Infinity;
   if (typeof d.toMillis === 'function') return d.toMillis();
   if (typeof d === 'number') return d;
+  // Formato DD/MM/YYYY usado por eventos nativos
+  const parts = d.split('/');
+  if (parts.length === 3) {
+    const ts = new Date(+parts[2], +parts[1] - 1, +parts[0]).getTime();
+    if (!isNaN(ts)) return ts;
+  }
   const parsed = Date.parse(d);
-  return Number.isNaN(parsed) ? 0 : parsed;
+  return isNaN(parsed) ? Infinity : parsed;
 };
 
-const sortEventsByClosestToNow = (events = []) => {
-  const now = Date.now();
-  return events.slice().sort((a, b) => {
-    const ta = getEventTimestamp(a);
-    const tb = getEventTimestamp(b);
-    const da = ta - now;
-    const db = tb - now;
-    const aFuture = da >= 0;
-    const bFuture = db >= 0;
-    if (aFuture && !bFuture) return -1;
-    if (!aFuture && bFuture) return 1;
-    if (aFuture && bFuture) return da - db;
-    return Math.abs(da) - Math.abs(db);
-  });
-};
+// Ordena ascendente: fecha más próxima primero, más lejana al final.
+// Eventos sin fecha reconocible van al fondo (Infinity).
+const sortByDateAsc = (events = []) =>
+  events.slice().sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
 
 export default function HomeScreen({ navigation }) {
   const [events, setEvents] = useState([]);
@@ -104,8 +59,7 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const userId = auth.currentUser?.uid;
-  const orderedEvents = useMemo(() => sortEventsByClosestToNow(events), [events]);
-  const [displayedEvents, setDisplayedEvents] = useState([]);
+  const { data: externalEvents } = useExternalEvents();
 
   useEffect(() => {
     loadUserFollowing();
@@ -135,19 +89,25 @@ export default function HomeScreen({ navigation }) {
     } catch (e) { return false; }
   };
 
-  const filterEventsByTab = () => {
-    let source = (orderedEvents || []).filter(ev => !isEventExpired(ev));
-    if (activeTab === 'following') {
-      source = source.filter(ev => following?.includes(ev.organizerId) || false);
-    } else if (activeTab === 'recent') {
-      source = source.slice();
-    }
-    setDisplayedEvents(source);
-  };
+  const displayedEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  useEffect(() => {
-    filterEventsByTab();
-  }, [activeTab, orderedEvents, following]);
+    const native = events.filter(ev => !isEventExpired(ev));
+
+    if (activeTab === 'siguiendo') {
+      return sortByDateAsc(
+        native.filter(ev => following?.includes(ev.organizerId) || false)
+      );
+    }
+
+    // "parati": nativos + externos futuros, todos ordenados por fecha
+    const validExternal = externalEvents.filter(e => {
+      if (e.dateISO) return new Date(e.dateISO) >= today;
+      return true;
+    });
+    return sortByDateAsc([...native, ...validExternal]);
+  }, [activeTab, events, following, externalEvents]);
 
   const loadUserFollowing = async () => {
     try {
@@ -202,21 +162,32 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
-  const handleEventPress = useCallback((event) => {
-    navigation.navigate('EventDetail', { event });
+  // Dispatcher pattern: referencia estable — EventCard no re-renderiza por este prop
+  const dispatch = useCallback(({ type, payload }) => {
+    if (type === 'PRESS') navigation.navigate('EventDetail', { event: payload });
   }, [navigation]);
 
-  const renderItem = useCallback(({ item, index }) => {
-    if (index > 0 && (index + 1) % 5 === 0) {
-      return (
-        <>
-          <EventCard event={item} onPress={() => handleEventPress(item)} />
-          <NativeAdCard />
-        </>
-      );
+  // Feed con ads intercalados cada 2 eventos
+  const feedWithAds = useMemo(() => {
+    const result = [];
+    displayedEvents.forEach((event, index) => {
+      result.push(event);
+      if ((index + 1) % 2 === 0) {
+        result.push({ _isAd: true, id: `ad_${index}` });
+      }
+    });
+    return result;
+  }, [displayedEvents]);
+
+  const renderItem = useCallback(({ item }) => {
+    if (item._isAd) {
+      return <NativeAdCard />;
     }
-    return <EventCard event={item} onPress={() => handleEventPress(item)} />;
-  }, [handleEventPress]);
+    if (item._isExternal) {
+      return <ExternalEventCard event={item} style={styles.externalCardFeed} />;
+    }
+    return <EventCard event={item} dispatch={dispatch} />;
+  }, [dispatch]);
 
   if (loading) {
     return (
@@ -279,18 +250,15 @@ export default function HomeScreen({ navigation }) {
       {displayedEvents.length === 0 ? (
         renderEmptyState()
       ) : (
-        <FlatList
-          data={displayedEvents}
+        <FlashList
+          data={feedWithAds}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          estimatedItemSize={280}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
-          windowSize={10}
-          removeClippedSubviews={true}
         />
       )}
     </SafeAreaView>
@@ -302,6 +270,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1a2e',
     paddingTop: Platform.OS === 'android' ? 8 : 0,
+  },
+  externalCardFeed: {
+    width: 'auto',
+    marginHorizontal: 20,
+    marginVertical: 6,
+    marginRight: 20,
   },
   loadingContainer: {
     flex: 1,

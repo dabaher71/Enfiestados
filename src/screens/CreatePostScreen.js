@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { validateImageSize, INPUT_LIMITS } from '../utils/security';
 import { useState } from 'react';
 import { Image } from 'expo-image';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -18,6 +19,10 @@ export default function CreatePostScreen({ navigation }) {
       quality: 0.8,
     });
     if (!result.canceled) {
+      if (!validateImageSize(result.assets[0])) {
+        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
+        return;
+      }
       setImage(result.assets[0].uri);
     }
   };
@@ -33,6 +38,10 @@ export default function CreatePostScreen({ navigation }) {
       quality: 0.8,
     });
     if (!result.canceled) {
+      if (!validateImageSize(result.assets[0])) {
+        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
+        return;
+      }
       setImage(result.assets[0].uri);
     }
   };
@@ -75,6 +84,7 @@ export default function CreatePostScreen({ navigation }) {
         multiline
         value={text}
         onChangeText={setText}
+        maxLength={INPUT_LIMITS.POST_TEXT}
         autoFocus
       />
 

@@ -3,7 +3,8 @@ import * as Clipboard from 'expo-clipboard';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import { Alert, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { safeOpenURL } from '../utils/security';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import CommentsSection from '../components/CommentsSection';
@@ -135,7 +136,7 @@ export default function EventDetailScreen({ route, navigation }) {
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: async () => {
         try {
-          await deleteEvent(event.id);
+          await deleteEvent(event.id, userId);
           Alert.alert('Exito', 'Evento eliminado');
           navigation.goBack();
         } catch (error) {
@@ -154,7 +155,7 @@ export default function EventDetailScreen({ route, navigation }) {
     const lat = event.location?.lat;
     const lng = event.location?.lng;
     if (lat && lng) {
-      Linking.openURL('https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng);
+      safeOpenURL('https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng);
     }
   };
 
@@ -241,8 +242,8 @@ export default function EventDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={{flex: 1}} 
+      <KeyboardAvoidingView
+        style={styles.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
@@ -253,7 +254,7 @@ export default function EventDetailScreen({ route, navigation }) {
       >
         
         <View style={styles.imageContainer}>
-          <Image source={{ uri: event.image || 'https://via.placeholder.com/400x250' }} style={styles.image} />
+          <Image source={event.image ? { uri: event.image } : require('../../assets/images/icon.png')} style={styles.image} />
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
@@ -270,7 +271,7 @@ export default function EventDetailScreen({ route, navigation }) {
               </TouchableOpacity>
               <TouchableOpacity style={styles.optionItem} onPress={handleDelete}>
                 <Ionicons name="trash-outline" size={20} color="#e74c3c" />
-                <Text style={[styles.optionText, {color: '#e74c3c'}]}>Eliminar evento</Text>
+                <Text style={[styles.optionText, styles.deleteOptionText]}>Eliminar evento</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -296,7 +297,7 @@ export default function EventDetailScreen({ route, navigation }) {
           </View>
           <Text style={styles.title}>{event.title}</Text>
           <TouchableOpacity style={styles.organizer} onPress={() => navigation.navigate('UserProfile', { userId: event.organizerId })}>
-            <Image source={{ uri: organizerAvatar || event.organizerAvatar || 'https://via.placeholder.com/50' }} style={styles.organizerAvatar} />
+            <Image source={(organizerAvatar || event.organizerAvatar) ? { uri: organizerAvatar || event.organizerAvatar } : require('../../assets/images/icon.png')} style={styles.organizerAvatar} />
             <View>
               <Text style={styles.organizerLabel}>Organizado por</Text>
               <Text style={styles.organizerName}>{organizerName || event.organizerName}</Text>
@@ -326,7 +327,7 @@ export default function EventDetailScreen({ route, navigation }) {
               <View style={styles.infoIcon}>
                 <Ionicons name="location" size={20} color="#6c5ce7" />
               </View>
-              <View style={{flex: 1}}>
+              <View style={styles.infoFlex}>
                 <Text style={styles.infoLabel}>Ubicacion</Text>
                 <Text style={styles.infoValue}>{event.location?.name || 'Por definir'}</Text>
               </View>
@@ -398,13 +399,13 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
             <View style={styles.shareOptions}>
               <TouchableOpacity style={styles.shareOption} onPress={shareExternal}>
-                <View style={[styles.shareIconCircle, {backgroundColor: '#00b894'}]}>
+                <View style={[styles.shareIconCircle, styles.shareIconGreen]}>
                   <Ionicons name="share-social" size={24} color="#fff" />
                 </View>
                 <Text style={styles.shareOptionText}>Compartir en...</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.shareOption} onPress={copyLink}>
-                <View style={[styles.shareIconCircle, {backgroundColor: '#0984e3'}]}>
+                <View style={[styles.shareIconCircle, styles.shareIconBlue]}>
                   <Ionicons name="link" size={24} color="#fff" />
                 </View>
                 <Text style={styles.shareOptionText}>Copiar link</Text>
@@ -432,6 +433,11 @@ export default function EventDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#1a1a2e'},
+  flex1: {flex: 1},
+  infoFlex: {flex: 1},
+  deleteOptionText: {color: '#e74c3c'},
+  shareIconGreen: {backgroundColor: '#00b894'},
+  shareIconBlue: {backgroundColor: '#0984e3'},
   imageContainer: {position: 'relative'},
   image: {width: '100%', height: 250, backgroundColor: '#2d2d44'},
   backButton: {position: 'absolute', top: Platform.OS === 'android' ? 40 : 10, left: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8},

@@ -1,47 +1,78 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-// Detectar Expo Go y desactivar comportamiento de notificaciones
-const isExpoGo = Constants.appOwnership === 'expo' && Platform.OS === 'android';
+/**
+ * Comprueba si el entorno actual soporta push notifications.
+ * Devuelve false en:
+ *   - Expo Go Android (SDK 53+ no soporta push remoto)
+ *   - Simuladores iOS/Android
+ *   - Builds nativos con Push Notifications capability desactivada (Apple ID gratuito)
+ */
+const isPushSupported = async () => {
+  // Expo Go en Android — no soportado desde SDK 53
+  if (Constants.appOwnership === 'expo' && Platform.OS === 'android') return false;
 
-if (isExpoGo) {
-  console.log('pushNotificationService: Expo Go detectado — notificaciones deshabilitadas (stubs).');
-}
+  try {
+    const { default: Device } = await import('expo-device');
 
-// Registrar dispositivo para push notifications (stub en Expo Go)
+    // Simuladores nunca pueden registrarse para push
+    if (!Device.isDevice) return false;
+
+    const Notifications = await import('expo-notifications');
+    const { status } = await Notifications.getPermissionsAsync();
+
+    // 'denied' o 'undetermined' sin capability = push no disponible
+    return status === 'granted';
+  } catch {
+    return false;
+  }
+};
+
+// Registrar dispositivo para push notifications
 export const registerForPushNotifications = async (userId) => {
-  if (isExpoGo) return null;
-  // En builds reales se puede reactivar la implementación con import('expo-notifications') aquí
-  return null;
-};
+  try {
+    if (!(await isPushSupported())) return null;
 
-// Enviar notificación push (no-op en Expo Go)
-export const sendPushNotification = async (expoPushToken, title, body, data = {}) => {
-  if (isExpoGo) return;
-  // Implementación real desde servidor/dev build
-};
+    const Notifications = await import('expo-notifications');
 
-// Escuchar notificaciones recibidas (devuelve un handler "remover" no-op)
-export const addNotificationReceivedListener = (callback) => {
-  if (isExpoGo) {
-    console.log('addNotificationReceivedListener: stub (Expo Go).');
-    return { remove: () => {} };
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('Permiso de push no concedido.');
+      return null;
+    }
+
+    const { data: token } = await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+    });
+
+    return token;
+  } catch (e) {
+    // Captura errores de entitlement faltante sin crashear la app
+    console.warn('registerForPushNotifications: no disponible —', e?.message || e);
+    return null;
   }
-  // Implementación real cuando se active expo-notifications
+};
+
+// Enviar notificación push (solo desde servidor — aquí es no-op)
+export const sendPushNotification = async (_expoPushToken, _title, _body, _data = {}) => {
+  // La notificación push real se envía desde el backend, no desde el cliente
+};
+
+// Listeners seguros — siempre devuelven un objeto con .remove()
+// La implementación real requiere Push Notifications capability activa en Xcode.
+export const addNotificationReceivedListener = (_callback) => {
   return { remove: () => {} };
 };
 
-// Escuchar cuando el usuario toca una notificación (no-op en Expo Go)
-export const addNotificationResponseListener = (callback) => {
-  if (isExpoGo) {
-    console.log('addNotificationResponseListener: stub (Expo Go).');
-    return { remove: () => {} };
-  }
+export const addNotificationResponseListener = (_callback) => {
   return { remove: () => {} };
 };
 
-// Obtener la última notificación que abrió la app (stub)
-export const getLastNotificationResponse = async () => {
-  if (isExpoGo) return null;
-  return null;
-};
+export const getLastNotificationResponse = async () => null;

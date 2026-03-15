@@ -5,9 +5,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
@@ -89,7 +89,7 @@ export default function ChatsScreen({ navigation }) {
         onPress={() => handleChatPress(item)}
       >
         <Image
-          source={{ uri: otherUser?.avatar || 'https://via.placeholder.com/50' }}
+          source={otherUser?.avatar ? { uri: otherUser.avatar } : require('../../assets/images/icon.png')}
           style={styles.avatar}
         />
         <View style={styles.chatContent}>
@@ -134,14 +134,12 @@ export default function ChatsScreen({ navigation }) {
           </Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={chats}
           keyExtractor={(item) => item.id}
           renderItem={renderChat}
+          estimatedItemSize={85}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={10}
         />
       )}
     </SafeAreaView>

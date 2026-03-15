@@ -130,7 +130,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteComment(eventId, comment.id);
+              await deleteComment(eventId, comment.id, userId);
               setComments(prev => prev.filter(c => c.id !== comment.id));
             } catch (error) {
               console.error('Error eliminando comentario:', error);
@@ -171,7 +171,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         delayLongPress={500}
       >
         <Image
-          source={{ uri: item.userAvatar || 'https://via.placeholder.com/40' }}
+          source={item.userAvatar ? { uri: item.userAvatar } : require('../../assets/images/icon.png')}
           style={styles.commentAvatar}
           contentFit="cover"
           transition={150}
@@ -185,7 +185,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
                 <TouchableOpacity
                   onPress={() => handleDelete(item)}
                   style={styles.deleteButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  hitSlop={styles.deleteHitSlop}
                 >
                   <Ionicons name="trash-outline" size={14} color="#e74c3c" />
                 </TouchableOpacity>
@@ -307,6 +307,7 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: 4,
   },
+  deleteHitSlop: { top: 10, bottom: 10, left: 10, right: 10 },
   commentText: {
     color: '#ddd',
     fontSize: 14,

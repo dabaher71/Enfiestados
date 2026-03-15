@@ -37,24 +37,42 @@ export default function App() {
     // }
 
     // Sólo cargar expo-notifications en runtime si no estamos en Expo Go (Android)
-    let notificationsModule;
     (async () => {
       try {
-        if (!(Constants.appOwnership === 'expo' && Platform.OS === 'android')) {
-          notificationsModule = await import('expo-notifications');
-          notificationListener.current = notificationsModule.addNotificationReceivedListener(n => {
-            console.log('Notificación recibida:', n);
-          });
-          responseListener.current = notificationsModule.addNotificationResponseReceivedListener(r => {
-            console.log('Usuario tocó notificación:', r);
-          });
-          // Si tienes registerForPushNotifications en un servicio que usa expo-notifications,
-          // llama a esa función aquí (asegúrate de que el servicio importe expo-notifications dinámicamente).
-        } else {
-          console.log('Omitiendo expo-notifications en Expo Go (Android). Usa un dev build para probar push.');
+        // Omitir en Expo Go Android (no soportado desde SDK 53)
+        if (Constants.appOwnership === 'expo' && Platform.OS === 'android') {
+          console.log('expo-notifications omitido en Expo Go Android.');
+          return;
         }
+
+        // Verificar que el dispositivo soporte notificaciones push antes de cargar el módulo
+        const { default: Device } = await import('expo-device');
+        if (!Device.isDevice) {
+          // Simulador: no puede registrarse para push
+          console.log('expo-notifications omitido en simulador.');
+          return;
+        }
+
+        const notificationsModule = await import('expo-notifications');
+
+        // Verificar permisos antes de añadir listeners (evita crash si capability está desactivada)
+        const { status } = await notificationsModule.getPermissionsAsync();
+        if (status === 'undetermined' || status === 'denied') {
+          // Sin permiso o sin capability — añadir solo listeners locales es seguro,
+          // pero registrar para push token crasheará; no lo hacemos.
+          console.log('Push Notifications no disponibles en este dispositivo/cuenta.');
+          return;
+        }
+
+        notificationListener.current = notificationsModule.addNotificationReceivedListener(n => {
+          console.log('Notificación recibida:', n);
+        });
+        responseListener.current = notificationsModule.addNotificationResponseReceivedListener(r => {
+          console.log('Usuario tocó notificación:', r);
+        });
       } catch (e) {
-        console.warn('No se pudieron inicializar notificaciones:', e?.message || e);
+        // Captura errores de entitlement faltante (NSCocoaErrorDomain 3000) u otros
+        console.warn('Push Notifications no disponibles:', e?.message || e);
       }
     })();
 

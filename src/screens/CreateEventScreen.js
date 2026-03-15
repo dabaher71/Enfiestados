@@ -21,6 +21,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { createEvent } from '../services/eventService';
 import { auth, storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { isValidWebURL, validateImageSize, validatePrice, INPUT_LIMITS } from '../utils/security';
 
 const CATEGORIES = [
   { id: 'musica', name: 'Música', icon: 'musical-notes' },
@@ -94,6 +95,10 @@ export default function CreateEventScreen({ navigation }) {
     });
 
     if (!result.canceled) {
+      if (!validateImageSize(result.assets[0])) {
+        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
+        return;
+      }
       setImage(result.assets[0].uri);
     }
   };
@@ -112,6 +117,10 @@ export default function CreateEventScreen({ navigation }) {
     });
 
     if (!result.canceled) {
+      if (!validateImageSize(result.assets[0])) {
+        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
+        return;
+      }
       setImage(result.assets[0].uri);
     }
   };
@@ -135,7 +144,7 @@ export default function CreateEventScreen({ navigation }) {
         xhr.open('GET', uri, true);
         xhr.send(null);
       });
-      const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+      const filename = `events/${auth.currentUser?.uid}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
       const storageRef = ref(storage, filename);
       await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
@@ -187,19 +196,37 @@ export default function CreateEventScreen({ navigation }) {
   };
 
   const handleCreate = async () => {
-    if (!title || !category) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || !category) {
       Alert.alert('Error', 'Por favor completa los campos obligatorios');
       return;
     }
-
+    if (trimmedTitle.length > INPUT_LIMITS.EVENT_TITLE) {
+      Alert.alert('Error', `El título no puede superar ${INPUT_LIMITS.EVENT_TITLE} caracteres`);
+      return;
+    }
+    if (description.trim().length > INPUT_LIMITS.EVENT_DESCRIPTION) {
+      Alert.alert('Error', `La descripción no puede superar ${INPUT_LIMITS.EVENT_DESCRIPTION} caracteres`);
+      return;
+    }
     if (!isVirtual && !locationCoords) {
       Alert.alert('Error', 'Por favor selecciona la ubicación en el mapa');
       return;
     }
-
     if (isVirtual && !virtualLink) {
       Alert.alert('Error', 'Por favor ingresa el link del evento virtual');
       return;
+    }
+    if (isVirtual && !isValidWebURL(virtualLink)) {
+      Alert.alert('Error', 'El link del evento debe comenzar con https:// o http://');
+      return;
+    }
+    if (!isFree) {
+      const parsedPrice = validatePrice(price);
+      if (parsedPrice === null) {
+        Alert.alert('Error', 'Ingresa un precio válido entre 0 y 1,000,000');
+        return;
+      }
     }
 
     setLoading(true);
@@ -214,20 +241,20 @@ export default function CreateEventScreen({ navigation }) {
       }
 
       await createEvent({
-        title,
-        description,
+        title: trimmedTitle,
+        description: description.trim(),
         category,
         date: formatDate(date),
         time: formatTime(time),
         location: {
-          name: locationName,
+          name: locationName.trim(),
           lat: locationCoords?.latitude || 0,
           lng: locationCoords?.longitude || 0,
         },
         isVirtual,
-        virtualLink: isVirtual ? virtualLink : '',
+        virtualLink: isVirtual ? virtualLink.trim() : '',
         isFree,
-        price: isFree ? 0 : parseFloat(price) || 0,
+        price: isFree ? 0 : validatePrice(price),
         organizerId: user.uid,
         organizerName: user.displayName || user.email.split('@')[0],
         organizerAvatar: user.photoURL || '',
@@ -301,6 +328,7 @@ export default function CreateEventScreen({ navigation }) {
               placeholderTextColor="#888"
               value={title}
               onChangeText={setTitle}
+              maxLength={INPUT_LIMITS.EVENT_TITLE}
             />
           </View>
 
@@ -315,6 +343,7 @@ export default function CreateEventScreen({ navigation }) {
               onChangeText={setDescription}
               multiline
               numberOfLines={4}
+              maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
             />
           </View>
 

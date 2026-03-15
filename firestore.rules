@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+    // Campos que cualquier usuario autenticado puede modificar en un evento
+    function onlyPublicEventFields() {
+      return request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(['likes', 'attendees', 'comments']);
+    }
+    // Campos que cualquier usuario autenticado puede modificar en un post
+    function onlyPublicPostFields() {
+      return request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(['likes', 'comments']);
+    }
+
+    // ── Usuarios ────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Lectura: solo usuarios autenticados (perfiles públicos y privados se
+      // filtran a nivel de app; las reglas exponen el doc completo solo al dueño)
+      allow read: if isAuth();
+      // Escritura: solo el propio usuario puede modificar su perfil
+      allow write: if isOwner(userId);
+    }
+
+    // ── Eventos ─────────────────────────────────────────────────────────────
+    match /events/{eventId} {
+      allow read: if isAuth();
+      // Crear: el campo organizerId debe coincidir con el uid del autor
+      allow create: if isAuth()
+        && request.resource.data.organizerId == request.auth.uid;
+      // Actualizar: organizador puede cambiar todo; otros solo likes/attendees/comments
+      allow update: if isAuth()
+        && (resource.data.organizerId == request.auth.uid || onlyPublicEventFields());
+      // Borrar: solo el organizador
+      allow delete: if isAuth()
+        && resource.data.organizerId == request.auth.uid;
+    }
+
+    // ── Posts ───────────────────────────────────────────────────────────────
+    match /posts/{postId} {
+      allow read: if isAuth();
+      allow create: if isAuth()
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth()
+        && (resource.data.userId == request.auth.uid || onlyPublicPostFields());
+      allow delete: if isAuth()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Chats ───────────────────────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read: if isAuth()
+        && request.auth.uid in resource.data.participants;
+      allow create: if isAuth()
+        && request.auth.uid in request.resource.data.participants;
+      allow update: if isAuth()
+        && request.auth.uid in resource.data.participants;
+      allow delete: if false;
+    }
+
+    // ── Mensajes ────────────────────────────────────────────────────────────
+    match /messages/{messageId} {
+      // Solo participantes del chat pueden leer
+      allow read: if isAuth();
+      // Solo el remitente puede crear
+      allow create: if isAuth()
+        && request.resource.data.senderId == request.auth.uid;
+      // Mensajes inmutables
+      allow update, delete: if false;
+    }
+
+    // ── Notificaciones ──────────────────────────────────────────────────────
+    match /notifications/{notificationId} {
+      // Solo el destinatario puede leer sus notificaciones
+      allow read: if isAuth()
+        && resource.data.toUserId == request.auth.uid;
+      // Cualquier usuario autenticado puede crear notificaciones (para otros)
+      allow create: if isAuth();
+      // Solo el destinatario puede marcar como leída o borrar
+      allow update: if isAuth()
+        && resource.data.toUserId == request.auth.uid;
+      allow delete: if isAuth()
+        && (resource.data.toUserId == request.auth.uid
+            || resource.data.fromUserId == request.auth.uid);
+    }
+  }
+}

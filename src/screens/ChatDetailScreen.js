@@ -148,7 +148,7 @@ export default function ChatDetailScreen({ route, navigation }) {
     return (
       <View style={[styles.messageRow, isMyMessage && styles.myMessageRow]}>
         {!isMyMessage && (
-          <Image source={{ uri: otherUser.avatar || 'https://via.placeholder.com/30' }} style={styles.messageAvatar} />
+          <Image source={otherUser.avatar ? { uri: otherUser.avatar } : require('../../assets/images/icon.png')} style={styles.messageAvatar} />
         )}
         {isEvent ? (
           (() => {
