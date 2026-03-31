@@ -14,12 +14,27 @@ import {
 } from 'react-native';
 import logo from '../../assets/images/logo.png';
 import { auth } from '../config/firebase';
+import { signInWithGoogle } from '../services/googleAuthService';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      if (error.code !== 'SIGN_IN_CANCELLED') {
+        Alert.alert('Error', 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -94,7 +109,10 @@ export default function LoginScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity
+            style={styles.forgotPassword}
+            onPress={() => navigation.navigate('ForgotPassword')}
+          >
             <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
           </TouchableOpacity>
 
@@ -121,17 +139,34 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* Social Login */}
-          <View style={styles.socialButtons}>
-            <TouchableOpacity style={styles.socialButton}>
-              <Ionicons name="logo-google" size={24} color="#fff" />
+          {Platform.OS === 'android' ? (
+            <TouchableOpacity
+              style={[styles.googleButtonFull, googleLoading && styles.buttonDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading}
+              activeOpacity={0.85}
+            >
+              <View style={styles.googleIconWrap}>
+                <Ionicons name="logo-google" size={20} color="#fff" />
+              </View>
+              <Text style={styles.googleButtonFullText}>
+                {googleLoading ? 'Conectando...' : 'Continuar con Google'}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton}>
-              <Ionicons name="logo-apple" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton}>
-              <Ionicons name="logo-facebook" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          ) : (
+            <View style={styles.socialButtons}>
+              <TouchableOpacity
+                style={[styles.socialButton, googleLoading && styles.buttonDisabled]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+              >
+                <Ionicons name="logo-google" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.socialButton}>
+                <Ionicons name="logo-apple" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
 
           <TouchableOpacity 
             style={styles.linkButton}
@@ -265,5 +300,33 @@ const styles = StyleSheet.create({
   linkBold: {
     color: '#6c5ce7',
     fontWeight: 'bold',
+  },
+  googleButtonFull: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2d2d44',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: '#3d3d5c',
+  },
+  googleIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EA4335',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  googleButtonFullText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+    marginRight: 32,
   },
 });

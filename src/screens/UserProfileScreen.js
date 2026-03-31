@@ -8,6 +8,7 @@ import { db, auth } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { getOrCreateChat } from '../services/chatService';
+import ReportModal from '../components/ReportModal';
 import EventCard from '../components/EventCard';
 
 export default function UserProfileScreen({ route, navigation }) {
@@ -17,6 +18,8 @@ export default function UserProfileScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   
   const currentUserId = auth.currentUser?.uid;
   const isOwnProfile = currentUserId === userId;
@@ -35,6 +38,9 @@ export default function UserProfileScreen({ route, navigation }) {
         setUser(userData);
         setIsFollowing(userData.followers?.includes(currentUserId) || false);
         setHasPendingRequest(userData.followRequests?.includes(currentUserId) || false);
+        // Verificar si el usuario actual lo tiene bloqueado
+        const myDoc = await getDoc(doc(db, 'users', currentUserId));
+        setIsBlocked(myDoc.data()?.usuariosBloqueados?.includes(userId) || false);
       }
     } catch (error) {
       console.error('Error al cargar usuario:', error);
@@ -116,6 +122,45 @@ export default function UserProfileScreen({ route, navigation }) {
     }
   };
 
+  const handleBlock = useCallback(() => {
+    const action = isBlocked ? 'Desbloquear' : 'Bloquear';
+    const message = isBlocked
+      ? `¿Desbloquear a ${user?.name}? Podrá volver a seguirte y ver tu perfil.`
+      : `¿Bloquear a ${user?.name}? No podrá ver tu perfil ni interactuar contigo.`;
+    Alert.alert(action, message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: action,
+        style: isBlocked ? 'default' : 'destructive',
+        onPress: async () => {
+          try {
+            const myRef = doc(db, 'users', currentUserId);
+            if (isBlocked) {
+              await updateDoc(myRef, { usuariosBloqueados: arrayRemove(userId) });
+              setIsBlocked(false);
+            } else {
+              // Bloquear: quitar relación de follow también
+              await updateDoc(myRef, {
+                usuariosBloqueados: arrayUnion(userId),
+                following: arrayRemove(userId),
+                followers: arrayRemove(userId),
+              });
+              await updateDoc(doc(db, 'users', userId), {
+                followers: arrayRemove(currentUserId),
+                following: arrayRemove(currentUserId),
+              });
+              setIsBlocked(true);
+              setIsFollowing(false);
+              setHasPendingRequest(false);
+            }
+          } catch (_) {
+            Alert.alert('Error', 'No se pudo completar la acción');
+          }
+        },
+      },
+    ]);
+  }, [isBlocked, userId, currentUserId, user]);
+
   const handleEventPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
   }, [navigation]);
@@ -162,7 +207,9 @@ export default function UserProfileScreen({ route, navigation }) {
         </View>
 
         <View style={styles.coverContainer}>
-          <Image source={user.coverImage ? { uri: user.coverImage } : require('../../assets/images/icon.png')} style={styles.coverImage} />
+          {user.coverImage ? (
+            <Image source={{ uri: user.coverImage }} style={styles.coverImage} />
+          ) : null}
         </View>
 
         <View style={styles.profileSection}>
@@ -194,23 +241,40 @@ export default function UserProfileScreen({ route, navigation }) {
 
           {!isOwnProfile && (
             <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.followButton, 
-                  isFollowing && styles.followingButton,
-                  hasPendingRequest && styles.pendingButton
-                ]}
-                onPress={handleFollow}
-              >
-                <Ionicons name={getFollowButtonIcon()} size={20} color="#fff" />
-                <Text style={styles.followButtonText}>{getFollowButtonText()}</Text>
+              {!isBlocked && (
+                <TouchableOpacity
+                  style={[
+                    styles.followButton,
+                    isFollowing && styles.followingButton,
+                    hasPendingRequest && styles.pendingButton
+                  ]}
+                  onPress={handleFollow}
+                >
+                  <Ionicons name={getFollowButtonIcon()} size={20} color="#fff" />
+                  <Text style={styles.followButtonText}>{getFollowButtonText()}</Text>
+                </TouchableOpacity>
+              )}
+
+              {!isBlocked && (
+                <TouchableOpacity style={styles.messageButton} onPress={handleMessage}>
+                  <Ionicons name="chatbubble" size={20} color="#fff" />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity style={styles.blockButton} onPress={handleBlock}>
+                <Ionicons
+                  name={isBlocked ? 'ban-outline' : 'ban'}
+                  size={20}
+                  color={isBlocked ? '#888' : '#e74c3c'}
+                />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.messageButton} onPress={handleMessage}>
-                <Ionicons name="chatbubble" size={20} color="#fff" />
+              <TouchableOpacity style={styles.blockButton} onPress={() => setShowReport(true)}>
+                <Ionicons name="flag-outline" size={20} color="#888" />
               </TouchableOpacity>
             </View>
           )}
+          <ReportModal visible={showReport} onClose={() => setShowReport(false)} targetType="user" targetId={userId} />
         </View>
 
         {canViewContent ? (
@@ -265,6 +329,7 @@ const styles = StyleSheet.create({
   pendingButton: {backgroundColor: '#fdcb6e'},
   followButtonText: {color: '#fff', fontWeight: '600', marginLeft: 8},
   messageButton: {backgroundColor: '#2d2d44', padding: 12, borderRadius: 25},
+  blockButton: {backgroundColor: '#2d2d44', padding: 12, borderRadius: 25, marginLeft: 8},
   eventsSection: {paddingVertical: 20},
   sectionTitle: {fontSize: 18, fontWeight: '600', color: '#fff', paddingHorizontal: 20, marginBottom: 15},
   emptyState: {alignItems: 'center', paddingVertical: 40},

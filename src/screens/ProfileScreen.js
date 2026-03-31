@@ -15,7 +15,8 @@ import EventCard from '../components/EventCard';
 import PostCard from '../components/PostCard';
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
-import { subscribeToUserPosts } from '../services/postService';
+import { addPostComment, deletePost, subscribeToUserPosts, togglePostLike } from '../services/postService';
+import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 
 export default function ProfileScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -80,6 +81,58 @@ export default function ProfileScreen({ navigation }) {
     }
   }, [navigation, currentUser.uid]);
 
+  const handlePostLike = useCallback(async (postId) => {
+    try {
+      const { likes, ownerId, added } = await togglePostLike(postId, currentUser.uid);
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes } : p));
+      if (added && ownerId && ownerId !== currentUser.uid) {
+        createNotification({
+          type: NOTIFICATION_TYPES.POST_LIKE,
+          fromUserId: currentUser.uid,
+          fromUserName: currentUser.displayName || currentUser.email.split('@')[0],
+          fromUserAvatar: currentUser.photoURL || '',
+          toUserId: ownerId,
+          message: 'le dio like a tu publicación',
+          postId,
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  }, [currentUser]);
+
+  const handlePostComment = useCallback(async (postId, text) => {
+    try {
+      const userName = currentUser.displayName || currentUser.email.split('@')[0];
+      const userAvatar = currentUser.photoURL || '';
+      const { comment, ownerId } = await addPostComment(postId, {
+        userId: currentUser.uid,
+        userName,
+        userAvatar,
+        text,
+      });
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p
+      ));
+      if (ownerId && ownerId !== currentUser.uid) {
+        createNotification({
+          type: NOTIFICATION_TYPES.POST_COMMENT,
+          fromUserId: currentUser.uid,
+          fromUserName: userName,
+          fromUserAvatar: userAvatar,
+          toUserId: ownerId,
+          message: 'comentó en tu publicación',
+          postId,
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  }, [currentUser]);
+
+  const handlePostDelete = useCallback(async (postId) => {
+    try {
+      await deletePost(postId, currentUser.uid);
+      setPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (_) {}
+  }, [currentUser.uid]);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -99,7 +152,9 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.coverContainer}>
-          <Image source={user?.coverImage ? { uri: user.coverImage } : require('../../assets/images/icon.png')} style={styles.coverImage} />
+          {user?.coverImage ? (
+            <Image source={{ uri: user.coverImage }} style={styles.coverImage} />
+          ) : null}
         </View>
 
         <View style={styles.profileSection}>
@@ -168,7 +223,15 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               ) : (
                 posts.map(post => (
-                  <PostCard key={post.id} post={post} onUserPress={handleUserPress} />
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    currentUserId={currentUser.uid}
+                    onLike={handlePostLike}
+                    onComment={handlePostComment}
+                    onDelete={handlePostDelete}
+                    onUserPress={handleUserPress}
+                  />
                 ))
               )}
             </>

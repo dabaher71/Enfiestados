@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { useEffect, useRef } from 'react';
 import { AppState, Platform, StatusBar } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 
 // Configurar cómo se muestran las notificaciones
@@ -114,9 +115,9 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
       <AppNavigator />
-    </>
+    </GestureHandlerRootView>
   );
 }

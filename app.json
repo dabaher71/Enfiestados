@@ -21,6 +21,13 @@
         "googleMapsApiKey": "AIzaSyDi9Yyw542VSGaEp5EOW-BA2c7tUTh-u2I"
       },
       "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h"
+            ]
+          }
+        ],
         "NSCameraUsageDescription": "Necesitamos acceso a tu cámara para tomar fotos de eventos y perfil",
         "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tu galería para subir fotos de eventos y perfil",
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos",
@@ -79,7 +86,8 @@
       ],
       "expo-updates",
       "expo-font",
-      "expo-router"
+      "expo-router",
+      "@react-native-google-signin/google-signin"
     ],
     "notification": {
       "icon": "./assets/images/logo.png",

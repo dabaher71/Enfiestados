@@ -1,7 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged } from 'firebase/auth';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { auth } from '../config/firebase';
 
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -11,6 +11,7 @@ import ChatsScreen from '../screens/ChatsScreen';
 import EditEventScreen from '../screens/EditEventScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -21,27 +22,22 @@ import CreatePostScreen from '../screens/CreatePostScreen';
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(undefined); // undefined = todavía no sabemos
+  const unsubscribeRef = useRef(null);
 
   useEffect(() => {
     if (!auth) {
-      console.error('Auth no está inicializado');
-      setLoading(false);
+      setUser(null);
       return;
     }
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setTimeout(() => {
-        setLoading(false);
-      }, 5000);
+    unsubscribeRef.current = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser ?? null);
     });
-
-    return () => unsubscribe();
+    return () => unsubscribeRef.current?.();
   }, []);
 
-  if (loading) {
+  // Mientras Firebase no responde aún
+  if (user === undefined) {
     return <LoadingScreen />;
   }
 
@@ -65,6 +61,7 @@ export default function AppNavigator() {
             <>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Register" component={RegisterScreen} />
+              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             </>
           )}
         </Stack.Navigator>

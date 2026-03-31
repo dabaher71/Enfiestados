@@ -8,6 +8,7 @@ import { safeOpenURL } from '../utils/security';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import CommentsSection from '../components/CommentsSection';
+import ReportModal from '../components/ReportModal';
 import { auth, db } from '../config/firebase';
 import { getOrCreateChat, sendMessage } from '../services/chatService';
 import { deleteEvent, toggleAttendance, toggleLike } from '../services/eventService';
@@ -19,6 +20,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [attendees, setAttendees] = useState(event.attendees || []);
   const [showOptions, setShowOptions] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [chats, setChats] = useState([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [organizerAvatar, setOrganizerAvatar] = useState(event.organizerAvatar || '');
@@ -258,23 +260,36 @@ export default function EventDetailScreen({ route, navigation }) {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          {isOrganizer ? (
-            <TouchableOpacity style={styles.optionsButton} onPress={() => setShowOptions(!showOptions)}>
-              <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity style={styles.optionsButton} onPress={() => setShowOptions(!showOptions)}>
+            <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
+          </TouchableOpacity>
           {showOptions ? (
             <View style={styles.optionsMenu}>
-              <TouchableOpacity style={styles.optionItem} onPress={handleEdit}>
-                <Ionicons name="create-outline" size={20} color="#fff" />
-                <Text style={styles.optionText}>Editar evento</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.optionItem} onPress={handleDelete}>
-                <Ionicons name="trash-outline" size={20} color="#e74c3c" />
-                <Text style={[styles.optionText, styles.deleteOptionText]}>Eliminar evento</Text>
-              </TouchableOpacity>
+              {isOrganizer ? (
+                <>
+                  <TouchableOpacity style={styles.optionItem} onPress={handleEdit}>
+                    <Ionicons name="create-outline" size={20} color="#fff" />
+                    <Text style={styles.optionText}>Editar evento</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.optionItem} onPress={handleDelete}>
+                    <Ionicons name="trash-outline" size={20} color="#e74c3c" />
+                    <Text style={[styles.optionText, styles.deleteOptionText]}>Eliminar evento</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity style={styles.optionItem} onPress={() => { setShowOptions(false); setShowReportModal(true); }}>
+                  <Ionicons name="flag-outline" size={20} color="#e74c3c" />
+                  <Text style={[styles.optionText, styles.deleteOptionText]}>Reportar evento</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : null}
+          <ReportModal
+            visible={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            targetType="event"
+            targetId={event.id}
+          />
           <View style={[styles.typeBadge, event.isVirtual ? styles.virtualBadge : styles.presentialBadge]}>
             <Ionicons name={event.isVirtual ? "videocam" : "location"} size={14} color="#fff" />
             <Text style={styles.typeBadgeText}>{event.isVirtual ? 'Virtual' : 'Presencial'}</Text>

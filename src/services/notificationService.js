@@ -2,12 +2,16 @@ import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy
 import { db } from '../config/firebase';
 
 export const NOTIFICATION_TYPES = {
-  LIKE: 'like',
-  COMMENT: 'comment',
+  LIKE: 'like',              // like en evento
+  COMMENT: 'comment',        // comentario en evento
   FOLLOW: 'follow',
   FOLLOW_REQUEST: 'follow_request',
   FOLLOW_ACCEPTED: 'follow_accepted',
-  ATTEND: 'attend',
+  ATTEND: 'attend',          // asistencia a evento
+  POST_LIKE: 'post_like',    // like en publicación
+  POST_COMMENT: 'post_comment', // comentario en publicación
+  NEW_EVENT: 'new_event',    // usuario seguido creó un evento
+  NEW_POST: 'new_post',      // usuario seguido creó una publicación
 };
 
 export const subscribeToNotifications = (userId, callback) => {
@@ -45,7 +49,7 @@ export const createNotification = async (notificationData) => {
     });
     return docRef.id;
   } catch (error) {
-    console.error('Error al crear notificacion:', error);
+    // error silenciado en producción
     throw error;
   }
 };
@@ -55,7 +59,7 @@ export const markAsRead = async (notificationId) => {
     const notificationRef = doc(db, 'notifications', notificationId);
     await updateDoc(notificationRef, { read: true });
   } catch (error) {
-    console.error('Error al marcar como leida:', error);
+    // error silenciado
     throw error;
   }
 };
@@ -77,9 +81,20 @@ export const markAllAsRead = async (userId) => {
 
     await batch.commit();
   } catch (error) {
-    console.error('Error al marcar todas como leidas:', error);
+    // error silenciado
     throw error;
   }
+};
+
+// Notifica a una lista de seguidores (máx 20 a la vez para no saturar)
+export const notifyFollowers = async (followerIds = [], notificationData) => {
+  if (!followerIds.length) return;
+  const batch = followerIds.slice(0, 20);
+  await Promise.allSettled(
+    batch.map(followerId =>
+      createNotification({ ...notificationData, toUserId: followerId })
+    )
+  );
 };
 
 export const deleteNotification = async (notificationId) => {
