@@ -1,12 +1,14 @@
 import {
-  addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -15,48 +17,30 @@ import { db } from '../config/firebase';
 const chatsCollection = collection(db, 'chats');
 const messagesCollection = collection(db, 'messages');
 
-// Obtener o crear chat entre dos usuarios
+const MAX_MESSAGE_LENGTH = 1000;
+
+// ID determinista: evita chats duplicados por race condition
+const getChatId = (uid1, uid2) => [uid1, uid2].sort().join('_');
+
 export const getOrCreateChat = async (userId1, userId2) => {
-  try {
-    // Buscar chat existente
-    const q = query(
-      chatsCollection,
-      where('participants', 'array-contains', userId1)
-    );
-    
-    const snapshot = await getDocs(q);
-    
-    // Buscar si existe chat con el otro usuario
-    const existingChat = snapshot.docs.find(doc => {
-      const data = doc.data();
-      return data.participants.includes(userId2);
-    });
+  const chatId = getChatId(userId1, userId2);
+  const chatRef = doc(db, 'chats', chatId);
+  const chatSnap = await getDoc(chatRef);
 
-    if (existingChat) {
-      return { id: existingChat.id, ...existingChat.data() };
-    }
-
-    // Crear nuevo chat
-    const newChat = await addDoc(chatsCollection, {
-      participants: [userId1, userId2],
-      lastMessage: '',
-      lastMessageTime: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    });
-
-    return { 
-      id: newChat.id, 
-      participants: [userId1, userId2],
-      lastMessage: '',
-      lastMessageTime: new Date().toISOString(),
-    };
-  } catch (error) {
-    console.error('Error al obtener/crear chat:', error);
-    throw error;
+  if (chatSnap.exists()) {
+    return { id: chatSnap.id, ...chatSnap.data() };
   }
+
+  const newChat = {
+    participants: [userId1, userId2],
+    lastMessage: '',
+    lastMessageTime: new Date().toISOString(),
+    createdAt: serverTimestamp(),
+  };
+  await setDoc(chatRef, newChat);
+  return { id: chatId, ...newChat };
 };
 
-// Escuchar chats de un usuario
 export const subscribeToChats = (userId, callback) => {
   const q = query(
     chatsCollection,
@@ -64,57 +48,43 @@ export const subscribeToChats = (userId, callback) => {
     orderBy('lastMessageTime', 'desc'),
     limit(50)
   );
-
   return onSnapshot(q, (snapshot) => {
-    const chats = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const chats = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     callback(chats);
   });
 };
 
-// Escuchar mensajes de un chat
 export const subscribeToMessages = (chatId, callback) => {
   const q = query(
     messagesCollection,
     where('chatId', '==', chatId),
     orderBy('timestamp', 'asc')
   );
-
   return onSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const messages = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     callback(messages);
   });
 };
 
-// Enviar mensaje
 export const sendMessage = async (chatId, senderId, text) => {
-  try {
-    // Agregar mensaje
-    await addDoc(messagesCollection, {
-      chatId,
-      senderId,
-      text,
-      timestamp: new Date().toISOString(),
-      read: false,
-    });
+  if (!text || !text.trim()) throw new Error('Mensaje vacío');
+  const trimmed = text.trim().slice(0, MAX_MESSAGE_LENGTH);
 
-    // Actualizar último mensaje del chat
-    await updateDoc(doc(db, 'chats', chatId), {
-      lastMessage: text,
-      lastMessageTime: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Error al enviar mensaje:', error);
-    throw error;
-  }
+  const messagesRef = collection(db, 'messages');
+  await setDoc(doc(messagesRef), {
+    chatId,
+    senderId,
+    text: trimmed,
+    timestamp: new Date().toISOString(),
+    read: false,
+  });
+
+  await updateDoc(doc(db, 'chats', chatId), {
+    lastMessage: trimmed.length > 60 ? trimmed.slice(0, 60) + '…' : trimmed,
+    lastMessageTime: new Date().toISOString(),
+  });
 };
 
-// Marcar mensajes como leídos
 export const markMessagesAsRead = async (chatId, userId) => {
   try {
     const q = query(
@@ -123,15 +93,11 @@ export const markMessagesAsRead = async (chatId, userId) => {
       where('senderId', '!=', userId),
       where('read', '==', false)
     );
-
     const snapshot = await getDocs(q);
-    
-    const promises = snapshot.docs.map(docSnap => 
-      updateDoc(doc(db, 'messages', docSnap.id), { read: true })
+    await Promise.all(
+      snapshot.docs.map(d => updateDoc(doc(db, 'messages', d.id), { read: true }))
     );
-
-    await Promise.all(promises);
-  } catch (error) {
-    console.error('Error al marcar como leídos:', error);
+  } catch (_) {
+    // No crítico — marcar como leído puede fallar silenciosamente
   }
 };

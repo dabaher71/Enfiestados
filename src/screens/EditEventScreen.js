@@ -20,6 +20,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
+import { validateImageSize, validateImageMime, isValidWebURL, INPUT_LIMITS } from '../utils/security';
 
 const CATEGORIES = [
   { id: 'musica', name: 'Música', icon: 'musical-notes' },
@@ -93,30 +94,34 @@ export default function EditEventScreen({ route, navigation }) {
     });
 
     if (!result.canceled) {
-      setNewImage(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (!validateImageSize(asset)) {
+        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
+        return;
+      }
+      setNewImage(asset.uri);
     }
   };
 
   const uploadImage = async (uri) => {
-    try {
-      const blob = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.onload = () => resolve(xhr.response);
-        xhr.onerror = () => reject(new Error('Error al leer imagen'));
-        xhr.responseType = 'blob';
-        xhr.open('GET', uri, true);
-        xhr.send(null);
-      });
-      const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-      const storageRef = ref(storage, filename);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
-      blob.close();
-      return url;
-    } catch (error) {
-      console.error('Error al subir imagen:', error);
-      throw error;
+    const blob = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = () => resolve(xhr.response);
+      xhr.onerror = () => reject(new Error('Error al leer imagen'));
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    });
+    if (!validateImageMime(blob)) {
+      blob.close?.();
+      throw new Error('Tipo de archivo no permitido. Solo se aceptan imágenes JPG, PNG, WebP o GIF.');
     }
+    const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+    const storageRef = ref(storage, filename);
+    await uploadBytes(storageRef, blob, { contentType: blob.type });
+    const url = await getDownloadURL(storageRef);
+    blob.close?.();
+    return url;
   };
 
   const formatDate = (date) => {
@@ -171,6 +176,11 @@ export default function EditEventScreen({ route, navigation }) {
 
     if (isVirtual && !virtualLink) {
       Alert.alert('Error', 'Por favor ingresa el link del evento virtual');
+      return;
+    }
+
+    if (isVirtual && virtualLink && !isValidWebURL(virtualLink)) {
+      Alert.alert('Link inválido', 'El link debe comenzar con https://');
       return;
     }
 
@@ -278,6 +288,7 @@ export default function EditEventScreen({ route, navigation }) {
               onChangeText={setDescription}
               multiline
               numberOfLines={4}
+              maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
             />
           </View>
 

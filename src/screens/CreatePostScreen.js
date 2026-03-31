@@ -6,6 +6,9 @@ import { Image } from 'expo-image';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createPost } from '../services/postService';
+import { auth, db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 
 export default function CreatePostScreen({ navigation }) {
   const [text, setText] = useState('');
@@ -55,6 +58,21 @@ export default function CreatePostScreen({ navigation }) {
     try {
       await createPost({ text: text.trim(), image });
       navigation.goBack();
+
+      // Notificar a seguidores en segundo plano
+      const user = auth.currentUser;
+      if (user) {
+        getDoc(doc(db, 'users', user.uid)).then(userDoc => {
+          const followers = userDoc.data()?.followers || [];
+          notifyFollowers(followers, {
+            type: NOTIFICATION_TYPES.NEW_POST,
+            fromUserId: user.uid,
+            fromUserName: user.displayName || user.email.split('@')[0],
+            fromUserAvatar: user.photoURL || '',
+            message: 'hizo una nueva publicación',
+          });
+        }).catch(() => {});
+      }
     } catch (error) {
       Alert.alert('Error', 'No se pudo crear la publicación');
     }

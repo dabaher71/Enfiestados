@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { memo, useCallback, useState } from 'react';
 import { Image } from 'expo-image';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import ReportModal from './ReportModal';
 
 // Fuera del componente: no se recrea en cada render
 function timeAgo(date) {
@@ -18,6 +19,7 @@ function timeAgo(date) {
 function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPress }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [showReport, setShowReport] = useState(false);
   const isLiked = post.likes?.includes(currentUserId);
   const isOwner = post.userId === currentUserId;
 
@@ -40,6 +42,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
 
   return (
     <View style={styles.card}>
+      <ReportModal visible={showReport} onClose={() => setShowReport(false)} targetType="post" targetId={post.id} />
       {post.image ? (
         <Image source={{ uri: post.image }} style={styles.postImage} contentFit="cover" transition={200} />
       ) : null}
@@ -54,9 +57,13 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
 
             </View>
           </TouchableOpacity>
-          {isOwner && (
+          {isOwner ? (
             <TouchableOpacity onPress={handleDelete}>
               <Ionicons name="trash-outline" size={18} color="#ff4444" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={() => setShowReport(true)}>
+              <Ionicons name="flag-outline" size={18} color="#888" />
             </TouchableOpacity>
           )}
         </View>

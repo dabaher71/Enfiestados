@@ -1,6 +1,9 @@
-import { addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '../config/firebase';
+
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export const createPost = async ({ text, image }) => {
   const user = auth.currentUser;
@@ -19,12 +22,23 @@ export const createPost = async ({ text, image }) => {
         xhr.open('GET', image, true);
         xhr.send(null);
       });
-      const imageRef = ref(storage, 'posts/' + user.uid + '/' + Date.now() + '.jpg');
-      await uploadBytes(imageRef, blob);
+
+      // Validación de tipo MIME real
+      if (!ALLOWED_MIME_TYPES.includes(blob.type)) {
+        throw new Error('Tipo de archivo no permitido. Solo se aceptan imágenes JPG, PNG, WebP o GIF.');
+      }
+      if (blob.size > MAX_IMAGE_BYTES) {
+        throw new Error('La imagen supera el límite de 5 MB.');
+      }
+
+      // ID criptográfico usando Firestore auto-ref
+      const imageId = doc(collection(db, '_')).id;
+      const imageRef = ref(storage, `posts/${user.uid}/${imageId}`);
+      await uploadBytes(imageRef, blob, { contentType: blob.type });
       imageUrl = await getDownloadURL(imageRef);
-      blob.close();
+      blob.close?.();
     } catch (e) {
-      console.error('Image upload error:', e);
+      throw e; // propagar para que el caller muestre el error
     }
   }
 
@@ -32,7 +46,7 @@ export const createPost = async ({ text, image }) => {
     userId: user.uid,
     userName: userData.name || 'Usuario',
     userAvatar: userData.avatar || null,
-    text: text || '',
+    text: text ? text.slice(0, 1000) : '',
     image: imageUrl,
     likes: [],
     comments: [],
@@ -51,9 +65,40 @@ export const subscribeToUserPosts = (userId, callback) => {
   return onSnapshot(q, (snapshot) => {
     const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     callback(posts);
-  }, (error) => {
-    console.error('Error en posts:', error);
-    callback([]);
+  }, () => callback([]));
+};
+
+// Toggle like en post — transacción atómica + notificación al autor
+export const togglePostLike = async (postId, userId) => {
+  const postRef = doc(db, 'posts', postId);
+  const newLikes = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(postRef);
+    if (!snap.exists()) throw new Error('Publicación no encontrada');
+    const likes = snap.data().likes || [];
+    const updated = likes.includes(userId)
+      ? likes.filter(id => id !== userId)
+      : [...likes, userId];
+    tx.update(postRef, { likes: updated });
+    return { likes: updated, ownerId: snap.data().userId, added: !likes.includes(userId) };
+  });
+  return newLikes;
+};
+
+// Agregar comentario en post — transacción atómica
+export const addPostComment = async (postId, comment) => {
+  const postRef = doc(db, 'posts', postId);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(postRef);
+    if (!snap.exists()) throw new Error('Publicación no encontrada');
+    const comments = snap.data().comments || [];
+    const newComment = {
+      id: doc(collection(db, '_')).id,
+      ...comment,
+      text: comment.text.slice(0, 500),
+      createdAt: new Date().toISOString(),
+    };
+    tx.update(postRef, { comments: [...comments, newComment] });
+    return { comment: newComment, ownerId: snap.data().userId };
   });
 };
 

@@ -175,7 +175,9 @@ export default function EditProfileScreen({ route, navigation }) {
         </View>
 
         <TouchableOpacity style={styles.coverContainer} onPress={() => pickImage('cover')}>
-          <Image source={coverImage ? { uri: coverImage } : require('../../assets/images/icon.png')} style={styles.coverImage} />
+          {coverImage ? (
+            <Image source={{ uri: coverImage }} style={styles.coverImage} />
+          ) : null}
           <View style={styles.coverOverlay}>
             <Ionicons name="camera" size={30} color="#fff" />
           </View>

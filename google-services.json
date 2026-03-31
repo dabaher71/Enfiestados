@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "211216248478-oir25bd44tf6iv3gh9spro8a7imhpaoi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enfiestados.app",
+            "certificate_hash": "5d0a995ea74167211f5d176df7954c118f661f7d"
+          }
+        },
+        {
           "client_id": "211216248478-vnd4avn6mf7pn9tqhhbm6ercfmkqb4b0.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +37,13 @@
             {
               "client_id": "211216248478-vnd4avn6mf7pn9tqhhbm6ercfmkqb4b0.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.enfiestados.app"
+              }
             }
           ]
         }

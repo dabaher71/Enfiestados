@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Platform,
   StyleSheet,
@@ -17,7 +18,7 @@ import EventCard from '../components/EventCard';
 import ExternalEventCard from '../components/ExternalEventCard';
 import NativeAdCard from '../components/NativeAdCard';
 import { auth, db } from '../config/firebase';
-import { subscribeToEvents } from '../services/eventService';
+import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { registerForPushNotifications } from '../services/pushNotificationService';
 
@@ -58,14 +59,19 @@ export default function HomeScreen({ navigation }) {
   const [following, setFollowing] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
   const userId = auth.currentUser?.uid;
   const { data: externalEvents } = useExternalEvents();
 
   useEffect(() => {
     loadUserFollowing();
 
-    const unsubscribe = subscribeToEvents((allEvents) => {
-      setEvents(allEvents);
+    const unsubscribe = subscribeToEvents((firstPageEvents, cursor) => {
+      setEvents(firstPageEvents);
+      setLastDoc(cursor);
+      setHasMore(firstPageEvents.length === 20);
       setLoading(false);
     });
 
@@ -127,6 +133,34 @@ export default function HomeScreen({ navigation }) {
     await loadUserFollowing();
     setRefreshing(false);
   };
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !lastDoc) return;
+    setLoadingMore(true);
+    try {
+      const { events: moreEvents, lastDoc: newLastDoc, hasMore: more } = await fetchMoreEvents(lastDoc);
+      setEvents(prev => {
+        const existingIds = new Set(prev.map(e => e.id));
+        const newEvents = moreEvents.filter(e => !existingIds.has(e.id));
+        return [...prev, ...newEvents];
+      });
+      setLastDoc(newLastDoc);
+      setHasMore(more);
+    } catch (e) {
+      console.error('Error cargando más eventos:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, lastDoc]);
+
+  const renderFooter = useCallback(() => {
+    if (!loadingMore) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#6c5ce7" />
+      </View>
+    );
+  }, [loadingMore]);
 
   const renderEmptyState = () => {
     let icon = 'sparkles';
@@ -259,6 +293,9 @@ export default function HomeScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={renderFooter}
         />
       )}
     </SafeAreaView>
@@ -359,5 +396,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 15,
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
 });

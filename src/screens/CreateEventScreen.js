@@ -19,8 +19,10 @@ import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
 import { createEvent } from '../services/eventService';
-import { auth, storage } from '../config/firebase';
+import { auth, storage, db } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc } from 'firebase/firestore';
+import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 import { isValidWebURL, validateImageSize, validatePrice, INPUT_LIMITS } from '../utils/security';
 
 const CATEGORIES = [
@@ -240,7 +242,7 @@ export default function CreateEventScreen({ navigation }) {
         setUploadingImage(false);
       }
 
-      await createEvent({
+      const eventData = {
         title: trimmedTitle,
         description: description.trim(),
         category,
@@ -261,11 +263,26 @@ export default function CreateEventScreen({ navigation }) {
         image: imageURL,
         capacity: 0,
         hasParking: false,
-      });
+      };
+      const newEventId = await createEvent(eventData);
 
       Alert.alert('¡Éxito!', 'Evento creado correctamente', [
         { text: 'OK', onPress: () => navigation.navigate('Home') }
       ]);
+
+      // Notificar a seguidores en segundo plano
+      getDoc(doc(db, 'users', user.uid)).then(userDoc => {
+        const followers = userDoc.data()?.followers || [];
+        notifyFollowers(followers, {
+          type: NOTIFICATION_TYPES.NEW_EVENT,
+          fromUserId: user.uid,
+          fromUserName: user.displayName || user.email.split('@')[0],
+          fromUserAvatar: user.photoURL || '',
+          message: `creó un nuevo evento: ${trimmedTitle}`,
+          eventId: newEventId,
+          eventData: { ...eventData, id: newEventId },
+        });
+      }).catch(() => {});
 
       // Limpiar formulario
       setTitle('');

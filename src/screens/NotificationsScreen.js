@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
@@ -20,6 +21,10 @@ function getNotificationIcon(type) {
     case NOTIFICATION_TYPES.FOLLOW_REQUEST:  return { name: 'person-add-outline', color: '#fdcb6e' };
     case NOTIFICATION_TYPES.FOLLOW_ACCEPTED: return { name: 'checkmark-circle', color: '#00b894' };
     case NOTIFICATION_TYPES.ATTEND:          return { name: 'calendar', color: '#00b894' };
+    case NOTIFICATION_TYPES.POST_LIKE:       return { name: 'heart', color: '#fd79a8' };
+    case NOTIFICATION_TYPES.POST_COMMENT:    return { name: 'chatbubble-ellipses', color: '#74b9ff' };
+    case NOTIFICATION_TYPES.NEW_EVENT:       return { name: 'calendar-outline', color: '#a29bfe' };
+    case NOTIFICATION_TYPES.NEW_POST:        return { name: 'images-outline', color: '#55efc4' };
     default:                                 return { name: 'notifications', color: '#888' };
   }
 }
@@ -42,8 +47,9 @@ function formatTime(dateString) {
 // --- Componentes extraídos (antes vivían dentro de NotificationsScreen) ---
 // Extraerlos elimina el problema de re-creación en cada render del padre.
 
-const NotificationItem = memo(function NotificationItem({ item, onPress }) {
+const NotificationItem = memo(function NotificationItem({ item, onPress, onDelete }) {
   const [avatar, setAvatar] = useState(item.fromUserAvatar || '');
+  const swipeRef = useRef(null);
   const icon = getNotificationIcon(item.type);
 
   useEffect(() => {
@@ -60,31 +66,47 @@ const NotificationItem = memo(function NotificationItem({ item, onPress }) {
     return () => { mounted = false; };
   }, [item.fromUserId]);
 
+  const renderRightActions = (progress, dragX) => {
+    const scale = dragX.interpolate({ inputRange: [-80, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => { swipeRef.current?.close(); onDelete(item.id); }}
+      >
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <Ionicons name="trash-outline" size={22} color="#fff" />
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
-    <TouchableOpacity
-      style={[styles.notificationItem, !item.read && styles.unreadItem]}
-      onPress={() => onPress(item)}
-    >
-      <View style={styles.avatarContainer}>
-        {avatar ? (
-          <Image source={{ uri: avatar }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Ionicons name="person" size={20} color="#888" />
+    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} overshootRight={false}>
+      <TouchableOpacity
+        style={[styles.notificationItem, !item.read && styles.unreadItem]}
+        onPress={() => onPress(item)}
+      >
+        <View style={styles.avatarContainer}>
+          {avatar ? (
+            <Image source={{ uri: avatar }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Ionicons name="person" size={20} color="#888" />
+            </View>
+          )}
+          <View style={[styles.iconBadge, { backgroundColor: icon.color }]}>
+            <Ionicons name={icon.name} size={12} color="#fff" />
           </View>
-        )}
-        <View style={[styles.iconBadge, { backgroundColor: icon.color }]}>
-          <Ionicons name={icon.name} size={12} color="#fff" />
         </View>
-      </View>
-      <View style={styles.notificationContent}>
-        <Text style={styles.notificationText}>
-          <Text style={styles.userName}>{item.fromUserName}</Text> {item.message}
-        </Text>
-        <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
-      </View>
-      {!item.read && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
+        <View style={styles.notificationContent}>
+          <Text style={styles.notificationText}>
+            <Text style={styles.userName}>{item.fromUserName}</Text> {item.message}
+          </Text>
+          <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
+        </View>
+        {!item.read && <View style={styles.unreadDot} />}
+      </TouchableOpacity>
+    </Swipeable>
   );
 });
 
@@ -226,6 +248,21 @@ export default function NotificationsScreen({ navigation }) {
     };
   }, [userId]);
 
+  const navigateToEvent = useCallback(async (eventId, eventData) => {
+    if (eventData && eventData.title) {
+      navigation.navigate('EventDetail', { event: { id: eventId, ...eventData } });
+      return;
+    }
+    try {
+      const snap = await getDoc(doc(db, 'events', eventId));
+      if (snap.exists()) {
+        navigation.navigate('EventDetail', { event: { id: snap.id, ...snap.data() } });
+      }
+    } catch {
+      // fallback silencioso
+    }
+  }, [navigation]);
+
   const handleNotificationPress = useCallback(async (notification) => {
     if (!notification.read) await markAsRead(notification.id);
     switch (notification.type) {
@@ -233,8 +270,22 @@ export default function NotificationsScreen({ navigation }) {
       case NOTIFICATION_TYPES.COMMENT:
       case NOTIFICATION_TYPES.ATTEND:
         if (notification.eventId) {
-          navigation.navigate('EventDetail', { event: { id: notification.eventId, ...notification.eventData } });
+          navigateToEvent(notification.eventId, notification.eventData);
         }
+        break;
+      case NOTIFICATION_TYPES.POST_LIKE:
+      case NOTIFICATION_TYPES.POST_COMMENT:
+        navigation.navigate('UserProfile', { userId: notification.fromUserId });
+        break;
+      case NOTIFICATION_TYPES.NEW_EVENT:
+        if (notification.eventId) {
+          navigateToEvent(notification.eventId, notification.eventData);
+        } else {
+          navigation.navigate('UserProfile', { userId: notification.fromUserId });
+        }
+        break;
+      case NOTIFICATION_TYPES.NEW_POST:
+        navigation.navigate('UserProfile', { userId: notification.fromUserId });
         break;
       case NOTIFICATION_TYPES.FOLLOW:
       case NOTIFICATION_TYPES.FOLLOW_REQUEST:
@@ -242,7 +293,15 @@ export default function NotificationsScreen({ navigation }) {
         navigation.navigate('UserProfile', { userId: notification.fromUserId });
         break;
     }
-  }, [navigation]);
+  }, [navigation, navigateToEvent]);
+
+  const handleDeleteNotification = useCallback(async (notificationId) => {
+    try {
+      await deleteNotification(notificationId);
+    } catch {
+      Alert.alert('Error', 'No se pudo eliminar la notificación');
+    }
+  }, []);
 
   const handleAcceptRequest = useCallback(async (notification) => {
     try {
@@ -313,8 +372,8 @@ export default function NotificationsScreen({ navigation }) {
   const regularNotifications = notifications.filter(n => n.type !== NOTIFICATION_TYPES.FOLLOW_REQUEST);
 
   const renderNotification = useCallback(({ item }) => (
-    <NotificationItem item={item} onPress={handleNotificationPress} />
-  ), [handleNotificationPress]);
+    <NotificationItem item={item} onPress={handleNotificationPress} onDelete={handleDeleteNotification} />
+  ), [handleNotificationPress, handleDeleteNotification]);
 
   const renderFollowRequest = useCallback(({ item }) => (
     <FollowRequestItem
@@ -481,4 +540,5 @@ const styles = StyleSheet.create({
   emptyState: {flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40},
   emptyTitle: {color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 15},
   emptyText: {color: '#888', fontSize: 14, textAlign: 'center', marginTop: 8},
+  deleteAction: {backgroundColor: '#e74c3c', justifyContent: 'center', alignItems: 'center', width: 72},
 });

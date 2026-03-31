@@ -11,9 +11,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { signInWithGoogle } from '../services/googleAuthService';
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -21,8 +22,22 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      if (error.code !== 'SIGN_IN_CANCELLED') {
+        Alert.alert('Error', 'No se pudo continuar con Google. Inténtalo de nuevo.');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleRegister = async () => {
     const trimmedName = name.trim();
@@ -80,7 +95,13 @@ export default function RegisterScreen({ navigation }) {
         updatedAt: serverTimestamp(),
       });
 
-      Alert.alert('¡Bienvenido!', `Cuenta creada correctamente. ¡Hola, ${trimmedName}!`);
+      // Enviar correo de verificación
+      await sendEmailVerification(user);
+
+      Alert.alert(
+        '¡Cuenta creada!',
+        `Hola ${trimmedName}, te enviamos un correo de verificación. Revisa tu bandeja de entrada antes de iniciar sesión.`
+      );
     } catch (error) {
       Alert.alert('Error al registrarse', _getFriendlyAuthError(error.code));
     } finally {
@@ -243,6 +264,25 @@ export default function RegisterScreen({ navigation }) {
               )}
             </TouchableOpacity>
 
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>o continúa con</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Sign-In */}
+            <TouchableOpacity
+              style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading}
+            >
+              <Ionicons name="logo-google" size={20} color="#fff" style={{ marginRight: 10 }} />
+              <Text style={styles.googleButtonText}>
+                {googleLoading ? 'Conectando...' : 'Registrarse con Google'}
+              </Text>
+            </TouchableOpacity>
+
             {/* Terms */}
             <Text style={styles.termsText}>
               Al registrarte, aceptas nuestros{' '}
@@ -369,6 +409,37 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginRight: 8,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#2d2d44',
+  },
+  dividerText: {
+    color: '#888',
+    paddingHorizontal: 15,
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2d2d44',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#3d3d5c',
+  },
+  googleButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   termsText: {
     color: '#888',

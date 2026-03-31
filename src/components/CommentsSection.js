@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import {
   Alert,
@@ -14,11 +14,16 @@ import {
 } from 'react-native';
 import { auth, db } from '../config/firebase';
 import { addComment, deleteComment } from '../services/eventService';
+import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
+
+const MAX_COMMENT_LENGTH = 500;
+const COMMENT_COOLDOWN_MS = 5000;
 
 export default function CommentsSection({ eventId, comments: initialComments, organizerId }) {
   const [comments, setComments] = useState(initialComments || []);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
+  const lastCommentTime = useRef(0);
 
   const user = auth.currentUser;
   const userId = user?.uid;
@@ -88,25 +93,40 @@ export default function CommentsSection({ eventId, comments: initialComments, or
   const handleSubmit = async () => {
     if (!newComment.trim()) return;
 
+    const now = Date.now();
+    if (now - lastCommentTime.current < COMMENT_COOLDOWN_MS) {
+      Alert.alert('Espera un momento', 'Puedes comentar cada 5 segundos.');
+      return;
+    }
+
     setLoading(true);
     try {
       const userName = currentUserData?.name || user?.displayName || user?.email.split('@')[0];
       const userAvatar = currentUserData?.avatar || user?.photoURL || '';
 
+      lastCommentTime.current = Date.now();
       const comment = await addComment(eventId, {
         userId,
         userName,
         userAvatar,
-        text: newComment.trim(),
+        text: newComment.trim().slice(0, MAX_COMMENT_LENGTH),
       });
 
-      setComments(prev => [...prev, {
-        ...comment,
-        userAvatar,
-        userName,
-      }]);
-
+      setComments(prev => [...prev, { ...comment, userAvatar, userName }]);
       setNewComment('');
+
+      // Notificar al organizador si no es su propio comentario
+      if (organizerId && organizerId !== userId) {
+        createNotification({
+          type: NOTIFICATION_TYPES.COMMENT,
+          fromUserId: userId,
+          fromUserName: userName,
+          fromUserAvatar: userAvatar,
+          toUserId: organizerId,
+          message: 'comentó en tu evento',
+          eventId,
+        }).catch(() => {});
+      }
     } catch (error) {
       console.error('Error al comentar:', error);
     }
@@ -223,8 +243,9 @@ export default function CommentsSection({ eventId, comments: initialComments, or
           placeholder="Escribe un comentario..."
           placeholderTextColor="#888"
           value={newComment}
-          onChangeText={setNewComment}
+          onChangeText={(t) => setNewComment(t.slice(0, MAX_COMMENT_LENGTH))}
           multiline
+          maxLength={MAX_COMMENT_LENGTH}
         />
         <TouchableOpacity
           style={[styles.sendButton, (!newComment.trim() || loading) && styles.sendButtonDisabled]}

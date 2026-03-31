@@ -1,145 +1,131 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  startAfter,
+  updateDoc,
+} from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 export const eventsCollection = collection(db, 'events');
 
-export const subscribeToEvents = (onUpdate) => {
-  const q = query(eventsCollection, orderBy('createdAt', 'desc'), limit(100));
-  
-  const unsubscribe = onSnapshot(q, (snapshot) => {
-    const events = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    onUpdate(events);
-  });
+const PAGE_SIZE = 20;
 
-  return unsubscribe;
+// Suscripción en tiempo real para la primera página
+export const subscribeToEvents = (onUpdate) => {
+  const q = query(eventsCollection, orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
+  return onSnapshot(q, (snapshot) => {
+    const events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
+    onUpdate(events, lastDoc);
+  });
+};
+
+// Carga de páginas adicionales (sin tiempo real)
+export const fetchMoreEvents = async (lastDoc) => {
+  const q = query(eventsCollection, orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
+  const snapshot = await getDocs(q);
+  const events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  const newLastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
+  return { events, lastDoc: newLastDoc, hasMore: snapshot.docs.length === PAGE_SIZE };
 };
 
 export const createEvent = async (eventData) => {
-  try {
-    const docRef = await addDoc(eventsCollection, {
-      ...eventData,
-      likes: [],
-      attendees: [],
-      comments: [],
-      createdAt: new Date().toISOString(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error al crear evento:', error);
-    throw error;
-  }
+  const docRef = await addDoc(eventsCollection, {
+    ...eventData,
+    likes: [],
+    attendees: [],
+    comments: [],
+    createdAt: new Date().toISOString(),
+  });
+  return docRef.id;
 };
 
+// Transacción atómica — elimina race condition en likes concurrentes
 export const toggleLike = async (eventId, userId) => {
-  try {
-    const eventRef = doc(db, 'events', eventId);
-    const eventSnap = await getDoc(eventRef);
-    const eventData = eventSnap.data();
-    
-    const likes = eventData.likes || [];
+  const eventRef = doc(db, 'events', eventId);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef);
+    if (!snap.exists()) throw new Error('Evento no encontrado');
+    const likes = snap.data().likes || [];
     const newLikes = likes.includes(userId)
       ? likes.filter(id => id !== userId)
       : [...likes, userId];
-    
-    await updateDoc(eventRef, { likes: newLikes });
+    tx.update(eventRef, { likes: newLikes });
     return newLikes;
-  } catch (error) {
-    console.error('Error al dar like:', error);
-    throw error;
-  }
+  });
 };
 
+// Transacción atómica — elimina race condition en asistencia concurrente
 export const toggleAttendance = async (eventId, userId) => {
-  try {
-    const eventRef = doc(db, 'events', eventId);
-    const eventSnap = await getDoc(eventRef);
-    const eventData = eventSnap.data();
-    
-    const attendees = eventData.attendees || [];
+  const eventRef = doc(db, 'events', eventId);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef);
+    if (!snap.exists()) throw new Error('Evento no encontrado');
+    const attendees = snap.data().attendees || [];
     const newAttendees = attendees.includes(userId)
       ? attendees.filter(id => id !== userId)
       : [...attendees, userId];
-    
-    await updateDoc(eventRef, { attendees: newAttendees });
+    tx.update(eventRef, { attendees: newAttendees });
     return newAttendees;
-  } catch (error) {
-    console.error('Error al marcar asistencia:', error);
-    throw error;
-  }
+  });
 };
 
 export const deleteEvent = async (eventId, userId) => {
-  try {
-    const eventRef = doc(db, 'events', eventId);
-    const eventSnap = await getDoc(eventRef);
-    if (!eventSnap.exists() || eventSnap.data().organizerId !== userId) {
-      throw new Error('No tienes permiso para eliminar este evento');
-    }
-    await deleteDoc(eventRef);
-  } catch (error) {
-    console.error('Error al eliminar evento:', error);
-    throw error;
+  const eventRef = doc(db, 'events', eventId);
+  const eventSnap = await getDoc(eventRef);
+  if (!eventSnap.exists() || eventSnap.data().organizerId !== userId) {
+    throw new Error('No tienes permiso para eliminar este evento');
   }
+  await deleteDoc(eventRef);
 };
 
+// ID generado por Firestore (no Date.now) — elimina colisiones
 export const addComment = async (eventId, comment) => {
-  try {
-    const eventRef = doc(db, 'events', eventId);
-    const eventSnap = await getDoc(eventRef);
-    const eventData = eventSnap.data();
-    
-    const comments = eventData.comments || [];
-    const newComment = {
-      id: Date.now().toString(),
-      ...comment,
-      createdAt: new Date().toISOString(),
-    };
-    
-    await updateDoc(eventRef, { 
-      comments: [...comments, newComment] 
-    });
-    
+  const eventRef = doc(db, 'events', eventId);
+  const commentId = doc(collection(db, '_')).id;
+  const newComment = {
+    id: commentId,
+    ...comment,
+    text: comment.text.slice(0, 500),
+    createdAt: new Date().toISOString(),
+  };
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef);
+    if (!snap.exists()) throw new Error('Evento no encontrado');
+    const comments = snap.data().comments || [];
+    tx.update(eventRef, { comments: [...comments, newComment] });
     return newComment;
-  } catch (error) {
-    console.error('Error al agregar comentario:', error);
-    throw error;
-  }
+  });
 };
 
 export const updateEvent = async (eventId, eventData) => {
-  try {
-    const eventRef = doc(db, 'events', eventId);
-    await updateDoc(eventRef, {
-      ...eventData,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Error al actualizar evento:', error);
-    throw error;
-  }
+  const eventRef = doc(db, 'events', eventId);
+  await updateDoc(eventRef, { ...eventData, updatedAt: new Date().toISOString() });
 };
+
 export const deleteComment = async (eventId, commentId, userId) => {
-  try {
-    const eventRef = doc(db, 'events', eventId);
-    const eventSnap = await getDoc(eventRef);
-    const eventData = eventSnap.data();
-
-    const comment = (eventData.comments || []).find(c => c.id === commentId);
+  const eventRef = doc(db, 'events', eventId);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef);
+    if (!snap.exists()) throw new Error('Evento no encontrado');
+    const comments = snap.data().comments || [];
+    const comment = comments.find(c => c.id === commentId);
     if (!comment) throw new Error('Comentario no encontrado');
-
     const commentOwnerId = comment.userId || comment.uid || comment.authorId;
-    if (commentOwnerId !== userId && eventData.organizerId !== userId) {
+    if (commentOwnerId !== userId && snap.data().organizerId !== userId) {
       throw new Error('No tienes permiso para eliminar este comentario');
     }
-
-    const updatedComments = (eventData.comments || []).filter(c => c.id !== commentId);
-    await updateDoc(eventRef, { comments: updatedComments });
-    return updatedComments;
-  } catch (error) {
-    console.error('Error al eliminar comentario:', error);
-    throw error;
-  }
+    const updated = comments.filter(c => c.id !== commentId);
+    tx.update(eventRef, { comments: updated });
+    return updated;
+  });
 };
