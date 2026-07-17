@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from '../components/UserAvatar';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +14,11 @@ import EventCard from '../components/EventCard';
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params;
+  // sanity check: si no llega un userId válido, volver atrás
+  if (!userId || typeof userId !== 'string' || userId.length < 4) {
+    navigation.goBack();
+    return null;
+  }
   const [user, setUser] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -161,6 +167,21 @@ export default function UserProfileScreen({ route, navigation }) {
     ]);
   }, [isBlocked, userId, currentUserId, user]);
 
+  const isExpired = (event) => {
+    try {
+      const [day, month, year] = event.date.split('/');
+      const [hours, minutes] = (event.time || '23:59').split(':');
+      return new Date(year, month - 1, day, hours, minutes) < new Date();
+    } catch { return false; }
+  };
+
+  const { activeEvents, expiredEvents } = useMemo(() => {
+    const parse = e => { const [d,m,y] = e.date.split('/'); return new Date(y,m-1,d); };
+    const active = events.filter(e => !isExpired(e)).sort((a,b) => parse(a)-parse(b));
+    const expired = events.filter(e => isExpired(e)).sort((a,b) => parse(b)-parse(a));
+    return { activeEvents: active, expiredEvents: expired };
+  }, [events]);
+
   const handleEventPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
   }, [navigation]);
@@ -213,7 +234,7 @@ export default function UserProfileScreen({ route, navigation }) {
         </View>
 
         <View style={styles.profileSection}>
-          <Image source={user.avatar ? { uri: user.avatar } : require('../../assets/images/icon.png')} style={styles.avatar} />
+          <UserAvatar uri={user.avatar} size={90} style={styles.avatar} />
           
           <View style={styles.nameRow}>
             <Text style={styles.name}>{user.name}</Text>
@@ -286,9 +307,37 @@ export default function UserProfileScreen({ route, navigation }) {
                 <Text style={styles.emptyText}>No ha organizado eventos aun</Text>
               </View>
             ) : (
-              events.map(event => (
-                <EventCard key={event.id} event={event} onPress={() => handleEventPress(event)} />
-              ))
+              <>
+                {activeEvents.length > 0 && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Ionicons name="radio-button-on" size={14} color="#00b894" />
+                      <Text style={styles.sectionLabel}>Activos</Text>
+                      <Text style={styles.sectionCount}>{activeEvents.length}</Text>
+                    </View>
+                    {activeEvents.map(event => (
+                      <EventCard key={event.id} event={event} onPress={() => handleEventPress(event)} />
+                    ))}
+                  </>
+                )}
+                {expiredEvents.length > 0 && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Ionicons name="time-outline" size={14} color="#888" />
+                      <Text style={[styles.sectionLabel, styles.sectionLabelMuted]}>Pasados</Text>
+                      <Text style={styles.sectionCount}>{expiredEvents.length}</Text>
+                    </View>
+                    {expiredEvents.map(event => (
+                      <View key={event.id} style={styles.expiredWrapper}>
+                        <EventCard event={event} onPress={() => handleEventPress(event)} />
+                        <View style={styles.expiredOverlay} pointerEvents="none">
+                          <Text style={styles.expiredLabel}>FINALIZADO</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
             )}
           </View>
         ) : (
@@ -332,6 +381,13 @@ const styles = StyleSheet.create({
   blockButton: {backgroundColor: '#2d2d44', padding: 12, borderRadius: 25, marginLeft: 8},
   eventsSection: {paddingVertical: 20},
   sectionTitle: {fontSize: 18, fontWeight: '600', color: '#fff', paddingHorizontal: 20, marginBottom: 15},
+  sectionHeader: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, gap: 6},
+  sectionLabel: {fontSize: 14, fontWeight: '700', color: '#fff', flex: 1},
+  sectionLabelMuted: {color: '#888'},
+  sectionCount: {fontSize: 13, color: '#888', fontWeight: '600'},
+  expiredWrapper: {position: 'relative'},
+  expiredOverlay: {position: 'absolute', top: 10, left: 20, right: 20, bottom: 10, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center'},
+  expiredLabel: {color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 1, opacity: 0.9},
   emptyState: {alignItems: 'center', paddingVertical: 40},
   emptyText: {color: '#888', marginTop: 10},
   privateSection: {padding: 20},

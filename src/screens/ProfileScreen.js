@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from '../components/UserAvatar';
 import {
     ActivityIndicator,
     ScrollView,
@@ -70,6 +71,28 @@ export default function ProfileScreen({ navigation }) {
       setEvents(userEvents);
     });
   };
+
+  const isExpired = (event) => {
+    try {
+      const [day, month, year] = event.date.split('/');
+      const [hours, minutes] = (event.time || '23:59').split(':');
+      return new Date(year, month - 1, day, hours, minutes) < new Date();
+    } catch { return false; }
+  };
+
+  const { activeEvents, expiredEvents } = useMemo(() => {
+    const active = events.filter(e => !isExpired(e))
+      .sort((a, b) => {
+        const parse = d => { const [dd,mm,yy] = d.date.split('/'); return new Date(yy,mm-1,dd); };
+        return parse(a) - parse(b);
+      });
+    const expired = events.filter(e => isExpired(e))
+      .sort((a, b) => {
+        const parse = d => { const [dd,mm,yy] = d.date.split('/'); return new Date(yy,mm-1,dd); };
+        return parse(b) - parse(a); // más reciente primero
+      });
+    return { activeEvents: active, expiredEvents: expired };
+  }, [events]);
 
   const handleEventPress = useCallback((event) => {
     navigation.navigate('EventDetail', { event });
@@ -158,16 +181,39 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.profileSection}>
-          <Image source={user?.avatar ? { uri: user.avatar } : require('../../assets/images/icon.png')} style={styles.avatar} />
+          <UserAvatar uri={user?.avatar} size={90} style={styles.avatar} />
           <Text style={styles.name}>{user?.name || 'Usuario'}</Text>
           <Text style={styles.email}>{currentUser.email}</Text>
           {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
 
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{events.length}</Text>
-              <Text style={styles.statLabel}>Eventos</Text>
+          {/* Accesos especiales */}
+          {(user?.isAdmin || user?.isAdvertiser) && (
+            <View style={styles.specialBtns}>
+              {user?.isAdvertiser && (
+                <TouchableOpacity style={styles.specialBtn} onPress={() => navigation.navigate('AdCenter')}>
+                  <Ionicons name="megaphone" size={16} color="#6c5ce7" />
+                  <Text style={styles.specialBtnText}>Centro de Anuncios</Text>
+                </TouchableOpacity>
+              )}
+              {user?.isAdmin && (
+                <TouchableOpacity style={[styles.specialBtn, styles.adminBtn]} onPress={() => navigation.navigate('Admin')}>
+                  <Ionicons name="shield-checkmark" size={16} color="#fff" />
+                  <Text style={[styles.specialBtnText, { color: '#fff' }]}>Panel Admin</Text>
+                </TouchableOpacity>
+              )}
             </View>
+          )}
+
+          {/* Invitación a anunciarse (solo si no es anunciante aún) */}
+          {!user?.isAdvertiser && !user?.isAdmin && (
+            <TouchableOpacity style={styles.advertiseInvite} onPress={() => navigation.navigate('AdvertiserRequest')}>
+              <Ionicons name="megaphone-outline" size={16} color="#6c5ce7" />
+              <Text style={styles.advertiseInviteText}>¿Querés publicitar en Enfiestados?</Text>
+              <Ionicons name="chevron-forward" size={14} color="#6c5ce7" />
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{posts.length}</Text>
               <Text style={styles.statLabel}>Posts</Text>
@@ -187,6 +233,11 @@ export default function ProfileScreen({ navigation }) {
           <TouchableOpacity style={[styles.tab, activeTab === 'eventos' && styles.tabActive]} onPress={() => setActiveTab('eventos')}>
             <Ionicons name="calendar" size={22} color={activeTab === 'eventos' ? '#6c5ce7' : '#888'} />
             <Text style={[styles.tabText, activeTab === 'eventos' && styles.tabTextActive]}>Eventos</Text>
+            {events.length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'eventos' && styles.tabBadgeActive]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'eventos' && styles.tabBadgeTextActive]}>{events.length}</Text>
+              </View>
+            )}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.tab, activeTab === 'publicaciones' && styles.tabActive]} onPress={() => setActiveTab('publicaciones')}>
             <Ionicons name="grid" size={22} color={activeTab === 'publicaciones' ? '#6c5ce7' : '#888'} />
@@ -205,9 +256,38 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             ) : (
-              events.map(event => (
-                <EventCard key={event.id} event={event} onPress={() => handleEventPress(event)} />
-              ))
+              <>
+                {activeEvents.length > 0 && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Ionicons name="radio-button-on" size={14} color="#00b894" />
+                      <Text style={styles.sectionTitle}>Activos</Text>
+                      <Text style={styles.sectionCount}>{activeEvents.length}</Text>
+                    </View>
+                    {activeEvents.map(event => (
+                      <EventCard key={event.id} event={event} onPress={() => handleEventPress(event)} />
+                    ))}
+                  </>
+                )}
+
+                {expiredEvents.length > 0 && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Ionicons name="time-outline" size={14} color="#888" />
+                      <Text style={[styles.sectionTitle, styles.sectionTitleMuted]}>Pasados</Text>
+                      <Text style={styles.sectionCount}>{expiredEvents.length}</Text>
+                    </View>
+                    {expiredEvents.map(event => (
+                      <View key={event.id} style={styles.expiredWrapper}>
+                        <EventCard event={event} onPress={() => handleEventPress(event)} />
+                        <View style={styles.expiredOverlay}>
+                          <Text style={styles.expiredLabel}>Finalizado</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
             )
           ) : (
             <>
@@ -272,4 +352,21 @@ const styles = StyleSheet.create({
   emptySubtext: { color: '#666', fontSize: 14, marginTop: 5 },
   createButton: { backgroundColor: '#6c5ce7', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, marginTop: 20 },
   createButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, gap: 6 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#fff', flex: 1 },
+  sectionTitleMuted: { color: '#888' },
+  sectionCount: { fontSize: 13, color: '#888', fontWeight: '600' },
+  expiredWrapper: { position: 'relative' },
+  expiredOverlay: { position: 'absolute', top: 10, left: 20, right: 20, bottom: 10, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' },
+  expiredLabel: { color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 1, opacity: 0.9 },
+  specialBtns: { flexDirection: 'row', gap: 10, marginBottom: 12, flexWrap: 'wrap' },
+  specialBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#2d2d44', borderWidth: 1, borderColor: '#6c5ce7', gap: 6 },
+  adminBtn: { backgroundColor: '#6c5ce7', borderColor: '#6c5ce7' },
+  specialBtnText: { color: '#6c5ce7', fontWeight: '700', fontSize: 13 },
+  tabBadge: { backgroundColor: '#3d3d54', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, marginLeft: 6 },
+  tabBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  tabBadgeText: { color: '#888', fontSize: 11, fontWeight: '700' },
+  tabBadgeTextActive: { color: '#fff' },
+  advertiseInvite: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 16, marginBottom: 14, gap: 8 },
+  advertiseInviteText: { color: '#6c5ce7', fontSize: 13, flex: 1 },
 });

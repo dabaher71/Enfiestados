@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { deleteUser, signOut } from 'firebase/auth';
-import { deleteDoc, doc } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../config/firebase';
+import { auth } from '../config/firebase';
 
 export default function SettingsScreen({ navigation }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -27,66 +26,6 @@ export default function SettingsScreen({ navigation }) {
           }
         },
       ]
-    );
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Eliminar cuenta',
-      'Esta accion es permanente y no se puede deshacer. Se eliminaran todos tus datos, eventos y mensajes.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar cuenta', 
-          style: 'destructive',
-          onPress: () => confirmDeleteAccount()
-        },
-      ]
-    );
-  };
-
-  const confirmDeleteAccount = () => {
-    Alert.prompt(
-      'Confirmar eliminacion',
-      'Escribe "ELIMINAR" para confirmar',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          style: 'destructive',
-          onPress: async (text) => {
-            if (text === 'ELIMINAR') {
-              try {
-                const userId = auth.currentUser.uid;
-                
-                // Eliminar documento del usuario
-                await deleteDoc(doc(db, 'users', userId));
-                
-                // Eliminar cuenta de auth
-                await deleteUser(auth.currentUser);
-                
-                Alert.alert('Cuenta eliminada', 'Tu cuenta ha sido eliminada correctamente');
-              } catch (error) {
-                console.error('Error eliminando cuenta:', error);
-                if (error.code === 'auth/requires-recent-login') {
-                  Alert.alert(
-                    'Sesion expirada', 
-                    'Por seguridad, debes volver a iniciar sesion antes de eliminar tu cuenta',
-                    [
-                      { text: 'OK', onPress: () => signOut(auth) }
-                    ]
-                  );
-                } else {
-                  Alert.alert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.');
-                }
-              }
-            } else {
-              Alert.alert('Error', 'Texto incorrecto. Escribe ELIMINAR para confirmar.');
-            }
-          }
-        },
-      ],
-      'plain-text'
     );
   };
 
@@ -193,18 +132,6 @@ export default function SettingsScreen({ navigation }) {
             iconColor="#e74c3c"
             title="Cerrar sesion"
             onPress={handleLogout}
-            danger
-          />
-        </View>
-
-        <SectionHeader title="Zona de peligro" />
-        <View style={styles.section}>
-          <SettingItem
-            icon="trash-outline"
-            iconColor="#e74c3c"
-            title="Eliminar cuenta"
-            subtitle="Esta accion es permanente"
-            onPress={handleDeleteAccount}
             danger
           />
         </View>

@@ -1,18 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from '../components/UserAvatar';
 import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { safeOpenURL } from '../utils/security';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import CommentsSection from '../components/CommentsSection';
+import ImageViewerModal from '../components/ImageViewerModal';
 import ReportModal from '../components/ReportModal';
 import { auth, db } from '../config/firebase';
 import { getOrCreateChat, sendMessage } from '../services/chatService';
 import { deleteEvent, toggleAttendance, toggleLike } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
+import { recordSignal } from '../services/signalService';
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
@@ -21,6 +24,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [showOptions, setShowOptions] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
   const [chats, setChats] = useState([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [organizerAvatar, setOrganizerAvatar] = useState(event.organizerAvatar || '');
@@ -30,22 +34,29 @@ export default function EventDetailScreen({ route, navigation }) {
   const isLiked = likes.includes(userId);
   const isAttending = attendees.includes(userId);
   const isOrganizer = userId === event.organizerId;
+  const lastLoadRef = useRef(0);
   // helper to try several possible uid fields inside a comment object
   const getCommentUserId = (c) => c.userId || c.uid || c.authorId || (c.user && (c.user.uid || c.user.id)) || c.ownerId;
 
   const eventLink = `https://enfiestados.app/evento/${event.id}`;
 
   const loadOrganizerAndComments = async () => {
-    try {
-      // organizer latest data
-      if (event.organizerId) {
+    // Organizer fetch aislado: si el perfil es privado las reglas lo bloquean,
+    // pero no debe impedir cargar los comentarios ni crashear la pantalla.
+    if (event.organizerId) {
+      try {
         const orgDoc = await getDoc(doc(db, 'users', event.organizerId));
         if (orgDoc.exists()) {
           const data = orgDoc.data();
           setOrganizerAvatar(data.avatar || '');
           setOrganizerName(data.name || data.displayName || event.organizerName || '');
         }
+      } catch {
+        // Usa los datos del evento como fallback (organizerName/organizerAvatar)
       }
+    }
+
+    try {
 
       // comments: replace avatar/name with latest user data when available
       if (event.comments && event.comments.length > 0) {
@@ -55,8 +66,8 @@ export default function EventDetailScreen({ route, navigation }) {
           try {
             const uDoc = await getDoc(doc(db, 'users', uid));
             if (uDoc.exists()) userMap[uid] = uDoc.data();
-          } catch (err) {
-            console.error('Error cargando usuario de comentario', uid, err);
+          } catch {
+            // perfil privado o sin permisos — usa los datos guardados en el comentario
           }
         }
         const updatedComments = event.comments.map(c => {
@@ -80,11 +91,16 @@ export default function EventDetailScreen({ route, navigation }) {
   };
 
   useEffect(() => {
-    // load on mount
     loadOrganizerAndComments();
-    // reload when screen focused (so avatar updates when user returns)
+    lastLoadRef.current = Date.now();
+    if (userId) recordSignal(userId, event, 'open');
+
     const unsub = navigation.addListener?.('focus', () => {
-      loadOrganizerAndComments();
+      // solo recarga si pasaron más de 30 segundos desde la última carga
+      if (Date.now() - lastLoadRef.current > 30_000) {
+        loadOrganizerAndComments();
+        lastLoadRef.current = Date.now();
+      }
     });
     return () => {
       if (unsub && typeof unsub === 'function') unsub();
@@ -95,6 +111,7 @@ export default function EventDetailScreen({ route, navigation }) {
     try {
       const newLikes = await toggleLike(event.id, userId);
       setLikes(newLikes);
+      recordSignal(userId, event, isLiked ? 'unlike' : 'like');
       if (!isLiked) {
         await createNotification({
           type: NOTIFICATION_TYPES.LIKE,
@@ -116,6 +133,7 @@ export default function EventDetailScreen({ route, navigation }) {
     try {
       const newAttendees = await toggleAttendance(event.id, userId);
       setAttendees(newAttendees);
+      recordSignal(userId, event, isAttending ? 'unattend' : 'attend');
       if (!isAttending) {
         await createNotification({
           type: NOTIFICATION_TYPES.ATTEND,
@@ -256,7 +274,9 @@ export default function EventDetailScreen({ route, navigation }) {
       >
         
         <View style={styles.imageContainer}>
-          <Image source={event.image ? { uri: event.image } : require('../../assets/images/icon.png')} style={styles.image} />
+          <TouchableOpacity activeOpacity={0.9} onPress={() => event.image && setShowImageViewer(true)}>
+            <Image source={event.image ? { uri: event.image } : require('../../assets/images/icon.png')} style={styles.image} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
@@ -312,7 +332,7 @@ export default function EventDetailScreen({ route, navigation }) {
           </View>
           <Text style={styles.title}>{event.title}</Text>
           <TouchableOpacity style={styles.organizer} onPress={() => navigation.navigate('UserProfile', { userId: event.organizerId })}>
-            <Image source={(organizerAvatar || event.organizerAvatar) ? { uri: organizerAvatar || event.organizerAvatar } : require('../../assets/images/icon.png')} style={styles.organizerAvatar} />
+            <UserAvatar uri={organizerAvatar || event.organizerAvatar} size={40} style={styles.organizerAvatar} />
             <View>
               <Text style={styles.organizerLabel}>Organizado por</Text>
               <Text style={styles.organizerName}>{organizerName || event.organizerName}</Text>
@@ -387,7 +407,13 @@ export default function EventDetailScreen({ route, navigation }) {
               <Text style={styles.statLabel}>comentarios</Text>
             </View>
           </View>
-          <CommentsSection eventId={event.id} comments={commentsState} organizerId={event.organizerId} />
+          <CommentsSection
+            eventId={event.id}
+            comments={commentsState}
+            organizerId={event.organizerId}
+            event={event}
+            onUserPress={(uid) => navigation.navigate('UserProfile', { userId: uid })}
+          />
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -442,6 +468,11 @@ export default function EventDetailScreen({ route, navigation }) {
           </View>
         </View>
       </Modal>
+      <ImageViewerModal
+        uri={event.image}
+        visible={showImageViewer}
+        onClose={() => setShowImageViewer(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -4,6 +4,19 @@ import { useEffect, useRef } from 'react';
 import { AppState, Platform, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
+import { sanitizeError } from './src/utils/security';
+
+// Override global: evita que objetos Firebase completos (con tokens, configs)
+// se logueen accidentalmente en producción.
+if (!__DEV__) {
+  const _origError = console.error;
+  console.error = (...args) => {
+    const safe = args.map(a =>
+      a instanceof Error || (a && typeof a === 'object' && a.code) ? sanitizeError(a) : a
+    );
+    _origError(...safe);
+  };
+}
 
 // Configurar cómo se muestran las notificaciones
 // Notifications.setNotificationHandler({

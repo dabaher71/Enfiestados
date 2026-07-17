@@ -11,27 +11,16 @@ import ExternalEventSearchCard from '../components/ExternalEventSearchCard';
 import NativeAdCard from '../components/NativeAdCard';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { subscribeToEvents } from '../services/eventService';
+import { CATEGORIES as BASE_CATEGORIES, CATEGORY_COLORS, getCategoryColor } from '../constants/categories';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
 const CARD_HEIGHT = 200;
 
-// Categorías estándar
+// Para el filtro de búsqueda: "Todos" + categorías del catálogo central
 const CATEGORIES = [
   { id: 'all', label: 'Todos', icon: 'apps' },
-  { id: 'Música', label: 'Música', icon: 'musical-notes' },
-  { id: 'Deportes', label: 'Deportes', icon: 'football' },
-  { id: 'Arte', label: 'Arte', icon: 'color-palette' },
-  { id: 'Tecnología', label: 'Tech', icon: 'laptop' },
-  { id: 'Comida', label: 'Comida', icon: 'restaurant' },
-  { id: 'Fiesta', label: 'Fiesta', icon: 'beer' },
-  { id: 'Networking', label: 'Network', icon: 'people' },
-  { id: 'Educación', label: 'Edu', icon: 'school' },
-  { id: 'Cine', label: 'Cine', icon: 'film' },
-  { id: 'Teatro', label: 'Teatro', icon: 'mic' },
-  { id: 'Salud', label: 'Salud', icon: 'fitness' },
-  { id: 'Naturaleza', label: 'Natura', icon: 'leaf' },
-  { id: 'Otro', label: 'Otro', icon: 'ellipsis-horizontal' },
+  ...BASE_CATEGORIES.map(c => ({ id: c.id, label: c.name, icon: c.icon })),
 ];
 
 // Filtros de tiempo
@@ -62,12 +51,6 @@ const COSTA_RICA_REGION = {
   longitudeDelta: 0.5,
 };
 
-const CATEGORY_COLORS = {
-  'Música': '#e74c3c', 'Deportes': '#00b894', 'Arte': '#fdcb6e',
-  'Tecnología': '#0984e3', 'Comida': '#e17055', 'Fiesta': '#6c5ce7',
-  'Networking': '#00cec9', 'Educación': '#a29bfe', 'Cine': '#fd79a8',
-  'Teatro': '#e84393', 'Salud': '#55efc4', 'Naturaleza': '#00b894',
-};
 
 // Ordenamiento por fecha ascendente (más próxima primero)
 function getEventTimestamp(ev) {
@@ -285,7 +268,7 @@ export default function SearchScreen({ navigation }) {
   const mapMarkers = useMemo(() =>
     filteredEvents.map((event, index) => {
       const isSelected = selectedEvent?.id === event.id;
-      const pinColor = isSelected ? '#6c5ce7' : (CATEGORY_COLORS[event.category] || '#e74c3c');
+      const pinColor = isSelected ? '#6c5ce7' : getCategoryColor(event.category);
 
       if (Platform.OS === 'android') {
         return (

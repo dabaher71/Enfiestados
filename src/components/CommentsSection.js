@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from './UserAvatar';
 import {
   Alert,
   FlatList,
@@ -15,11 +16,12 @@ import {
 import { auth, db } from '../config/firebase';
 import { addComment, deleteComment } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
+import { recordSignal } from '../services/signalService';
 
 const MAX_COMMENT_LENGTH = 500;
 const COMMENT_COOLDOWN_MS = 5000;
 
-export default function CommentsSection({ eventId, comments: initialComments, organizerId }) {
+export default function CommentsSection({ eventId, comments: initialComments, organizerId, event, onUserPress }) {
   const [comments, setComments] = useState(initialComments || []);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,6 +116,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
 
       setComments(prev => [...prev, { ...comment, userAvatar, userName }]);
       setNewComment('');
+      if (event) recordSignal(userId, event, 'comment');
 
       // Notificar al organizador si no es su propio comentario
       if (organizerId && organizerId !== userId) {
@@ -183,6 +186,8 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     const isOrganizer = organizerId === userId;
     const canDelete = isMyComment || isOrganizer;
 
+    const commentUserId = commentOwnerId;
+
     return (
       <TouchableOpacity
         style={styles.commentItem}
@@ -190,12 +195,12 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         activeOpacity={canDelete ? 0.7 : 1}
         delayLongPress={500}
       >
-        <Image
-          source={item.userAvatar ? { uri: item.userAvatar } : require('../../assets/images/icon.png')}
-          style={styles.commentAvatar}
-          contentFit="cover"
-          transition={150}
-        />
+        <TouchableOpacity
+          onPress={() => commentUserId && onUserPress?.(commentUserId)}
+          activeOpacity={0.8}
+        >
+          <UserAvatar uri={item.userAvatar} size={36} style={styles.commentAvatar} />
+        </TouchableOpacity>
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
             <Text style={styles.commentUser}>{item.userName || item.name || 'Usuario'}</Text>

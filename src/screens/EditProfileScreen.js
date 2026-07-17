@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from '../components/UserAvatar';
 import {
   ActivityIndicator,
   Alert,
@@ -185,7 +186,7 @@ export default function EditProfileScreen({ route, navigation }) {
 
         <View style={styles.avatarSection}>
           <TouchableOpacity style={styles.avatarContainer} onPress={() => pickImage('avatar')}>
-            <Image source={avatar ? { uri: avatar } : require('../../assets/images/icon.png')} style={styles.avatar} />
+            <UserAvatar uri={avatar} size={90} style={styles.avatar} />
             <View style={styles.avatarOverlay}>
               <Ionicons name="camera" size={24} color="#fff" />
             </View>
@@ -230,6 +231,19 @@ export default function EditProfileScreen({ route, navigation }) {
             />
           </View>
 
+          {/* Intereses */}
+          <TouchableOpacity
+            style={styles.interestsBtn}
+            onPress={() => navigation.navigate('Interests', { onboarding: false })}
+          >
+            <Ionicons name="sparkles" size={20} color="#6c5ce7" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.interestsBtnTitle}>Mis intereses</Text>
+              <Text style={styles.interestsBtnSub}>Actualizá qué tipo de eventos querés ver</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#555" />
+          </TouchableOpacity>
+
           <View style={styles.privacySection}>
             <Text style={styles.sectionTitle}>Privacidad</Text>
             <View style={styles.privacyOption}>
@@ -261,6 +275,9 @@ export default function EditProfileScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  interestsBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', borderRadius: 14, padding: 16, marginHorizontal: 20, marginBottom: 16, gap: 14 },
+  interestsBtnTitle: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  interestsBtnSub: { color: '#888', fontSize: 12, marginTop: 2 },
   container: {flex: 1, backgroundColor: '#1a1a2e'},
   header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15},
   headerTitle: {fontSize: 18, fontWeight: '600', color: '#fff'},

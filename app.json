@@ -17,6 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.david.enfiestados",
+      "buildNumber": "7",
       "config": {
         "googleMapsApiKey": "AIzaSyDi9Yyw542VSGaEp5EOW-BA2c7tUTh-u2I"
       },
