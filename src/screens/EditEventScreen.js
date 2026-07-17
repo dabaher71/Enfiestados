@@ -21,17 +21,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import { validateImageSize, validateImageMime, isValidWebURL, INPUT_LIMITS } from '../utils/security';
-
-const CATEGORIES = [
-  { id: 'musica', name: 'Música', icon: 'musical-notes' },
-  { id: 'fiesta', name: 'Fiesta', icon: 'beer' },
-  { id: 'deporte', name: 'Deporte', icon: 'football' },
-  { id: 'arte', name: 'Arte', icon: 'color-palette' },
-  { id: 'tech', name: 'Tecnología', icon: 'laptop' },
-  { id: 'comida', name: 'Comida', icon: 'restaurant' },
-  { id: 'networking', name: 'Networking', icon: 'people' },
-  { id: 'otro', name: 'Otro', icon: 'ellipsis-horizontal' },
-];
+import { CATEGORIES } from '../constants/categories';
 
 export default function EditEventScreen({ route, navigation }) {
   const { event } = route.params;

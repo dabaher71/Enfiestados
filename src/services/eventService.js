@@ -10,8 +10,10 @@ import {
   orderBy,
   query,
   runTransaction,
+  serverTimestamp,
   startAfter,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -44,7 +46,7 @@ export const createEvent = async (eventData) => {
     likes: [],
     attendees: [],
     comments: [],
-    createdAt: new Date().toISOString(),
+    createdAt: serverTimestamp(),
   });
   return docRef.id;
 };
@@ -110,6 +112,21 @@ export const addComment = async (eventId, comment) => {
 export const updateEvent = async (eventId, eventData) => {
   const eventRef = doc(db, 'events', eventId);
   await updateDoc(eventRef, { ...eventData, updatedAt: new Date().toISOString() });
+};
+
+// Obtiene eventos por lista de IDs (lotes de 10 por límite de Firestore 'in')
+export const fetchEventsByIds = async (ids) => {
+  if (!ids?.length) return [];
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 10) {
+    batches.push(ids.slice(i, i + 10));
+  }
+  const results = await Promise.all(
+    batches.map(batch =>
+      getDocs(query(eventsCollection, where('__name__', 'in', batch)))
+    )
+  );
+  return results.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
 };
 
 export const deleteComment = async (eventId, commentId, userId) => {

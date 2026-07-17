@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { memo, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../config/firebase';
+import { recordSignal } from '../services/signalService';
 
 // Fuera del componente: no se recrea en cada render
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -18,8 +19,27 @@ function formatDate(dateString) {
 }
 
 // Acepta `dispatch` (patrón dispatcher) o `onPress` (compatibilidad)
-function EventCard({ event, dispatch, onPress }) {
+// onHide: callback cuando el usuario oculta el evento (señal negativa)
+function EventCard({ event, dispatch, onPress, userId, onHide }) {
   const handlePress = dispatch ? () => dispatch({ type: 'PRESS', payload: event }) : onPress;
+
+  const handleLongPress = () => {
+    Alert.alert(
+      'Ocultar evento',
+      '¿No te interesa este evento?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'No me interesa',
+          style: 'destructive',
+          onPress: () => {
+            if (userId) recordSignal(userId, event, 'hide');
+            onHide?.(event.id);
+          },
+        },
+      ]
+    );
+  };
   const [organizerAvatar, setOrganizerAvatar] = useState(event.organizerAvatar || '');
   const [organizerName, setOrganizerName] = useState(event.organizerName || '');
 
@@ -67,7 +87,7 @@ function EventCard({ event, dispatch, onPress }) {
   const { day, month } = formatDate(event.date);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.9}>
+    <TouchableOpacity style={styles.card} onPress={handlePress} onLongPress={handleLongPress} activeOpacity={0.9}>
       {/* Imagen */}
       <View style={styles.imageContainer}>
         <Image
@@ -107,7 +127,7 @@ function EventCard({ event, dispatch, onPress }) {
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
             <Ionicons name="location-outline" size={14} color="#888" />
-            <Text style={styles.infoText} numberOfLines={1}>
+            <Text style={styles.infoText} numberOfLines={1} ellipsizeMode="tail">
               {event.location?.name || 'Por definir'}
             </Text>
           </View>
@@ -133,7 +153,7 @@ function EventCard({ event, dispatch, onPress }) {
                 <Ionicons name="person" size={14} color="#888" />
               </View>
             )}
-            <Text style={styles.organizerName} numberOfLines={1}>
+            <Text style={styles.organizerName} numberOfLines={1} ellipsizeMode="tail">
               {organizerName || event.organizerName || 'Organizador'}
             </Text>
           </View>
@@ -172,7 +192,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     position: 'relative',
-    height: 160,
+    height: 360,
   },
   image: {
     width: '100%',
@@ -224,7 +244,7 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
   },
   content: {
-    padding: 15,
+    padding: 20,
   },
   categoryRow: {
     flexDirection: 'row',
@@ -238,20 +258,20 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     color: '#6c5ce7',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
   title: {
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 10,
-    lineHeight: 24,
+    marginBottom: 12,
+    lineHeight: 35,
   },
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   infoItem: {
     flexDirection: 'row',
@@ -261,7 +281,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     color: '#888',
-    fontSize: 13,
+    fontSize: 14,
     marginLeft: 5,
   },
   footer: {
@@ -290,7 +310,7 @@ const styles = StyleSheet.create({
   },
   organizerName: {
     color: '#aaa',
-    fontSize: 13,
+    fontSize: 14,
     flex: 1,
   },
   stats: {
@@ -303,7 +323,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     color: '#888',
-    fontSize: 13,
+    fontSize: 14,
     marginLeft: 4,
   },
 });

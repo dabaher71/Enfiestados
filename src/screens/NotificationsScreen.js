@@ -438,7 +438,11 @@ export default function NotificationsScreen({ navigation }) {
         >
           <Ionicons name="chatbubbles" size={20} color={activeTab === 'mensajes' ? '#6c5ce7' : '#888'} />
           <Text style={[styles.tabText, activeTab === 'mensajes' && styles.tabTextActive]}>Mensajes</Text>
-          {chats.length > 0 && <View style={styles.badgeGreen}><Text style={styles.badgeText}>{chats.length}</Text></View>}
+          {chats.filter(c => c.unreadFor?.includes(userId)).length > 0 && (
+            <View style={styles.badgeGreen}>
+              <Text style={styles.badgeText}>{chats.filter(c => c.unreadFor?.includes(userId)).length}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 

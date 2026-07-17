@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
@@ -49,25 +49,38 @@ function CreateIcon({ focused, size }) {
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [unreadChats, setUnreadChats] = useState(0);
   const userId = auth.currentUser?.uid;
 
   // Suscripción en tiempo real a notificaciones no leídas
   useEffect(() => {
     if (!userId) return;
-
     const q = query(
       collection(db, 'notifications'),
       where('toUserId', '==', userId),
       where('read', '==', false)
     );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUnreadCount(snapshot.docs.length);
-    });
-
-    return () => unsubscribe();
+    const unsub = onSnapshot(q, snap => setUnreadNotifs(snap.docs.length));
+    return () => unsub();
   }, [userId]);
+
+  // Suscripción en tiempo real a chats con mensajes no leídos
+  // Firestore no permite dos array-contains en un mismo query, así que filtramos unreadFor en cliente
+  useEffect(() => {
+    if (!userId) return;
+    const q = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', userId)
+    );
+    const unsub = onSnapshot(q, snap => {
+      const unread = snap.docs.filter(d => d.data().unreadFor?.includes(userId));
+      setUnreadChats(unread.length);
+    });
+    return () => unsub();
+  }, [userId]);
+
+  const totalUnread = useMemo(() => unreadNotifs + unreadChats, [unreadNotifs, unreadChats]);
 
   // Altura dinámica: respeta el home indicator (iOS) y el notch inferior (Android)
   const tabBarHeight = Platform.select({
@@ -141,7 +154,7 @@ export default function MainTabNavigator() {
                   focused={focused}
                   color={color}
                   size={size}
-                  count={unreadCount}
+                  count={totalUnread}
                 />
               );
             case 'Profile':

@@ -1,6 +1,6 @@
 # Enfiestados — Tareas y Contexto del Proyecto
 
-## Versión actual: v0.5 (en main)
+## Versión actual: v0.6 (en main)
 
 ---
 
@@ -49,7 +49,7 @@
 
 ## En progreso (sin commitear — rama main)
 
-### Auth v0.6
+### Auth v0.6 ✅
 - [x] `ForgotPasswordScreen.js` — recuperación de contraseña via Firebase email
 - [x] `googleAuthService.js` — Google Sign-In con `@react-native-google-signin/google-signin`
 - [x] `LoginScreen` — botón Google funcional + navegación a ForgotPassword
@@ -60,23 +60,27 @@
 - [x] `postService` — mejoras
 - [x] `CommentsSection` — mejoras
 - [x] `firestore.rules` — reglas actualizadas
-- [ ] **Pendiente: hacer commit de todo esto como v0.6**
+- [x] Commit v0.6 realizado y pusheado a GitHub
 
-### Acciones externas pendientes (no se hacen desde el código)
-- [x] **`firebase deploy --only firestore:rules`** — activar reglas de la colección `reports` (y todos los cambios acumulados desde v0.5)
-- [x] Confirmar que Google Sign-In funciona en build Android (SHA-1 registrado en Firebase Console y `google-services.json` actualizado)
-- [x] Rotar Google Maps API Key en Google Cloud Console y restringirla al bundle ID de la app
-
-### Verificaciones antes del commit v0.6
-- [ ] Confirmar que Google Sign-In funciona en build Android (requiere SHA-1 registrado en Firebase Console y `google-services.json` actualizado)
-- [ ] Verificar Google Sign-In en iOS (requiere config en `app.json` si aplica)
-- [ ] Probar flujo completo de ForgotPassword
+### Algoritmo de feed personalizado v0.7 (en progreso)
+- [x] `signalService.js` — tracking de señales por usuario (view, longView, open, like, attend, comment, hide) → escribe a `userSignals/{userId}/interactions/{eventId}` y actualiza `interestVector` en `users/{userId}`
+- [x] `feedService.js` — scoring client-side: afinidad de categoría (40%), popularidad log-scale (25%), recencia (25%), score social reservado (10%)
+- [x] `EventCard.js` — long press "No me interesa" → señal negativa + ocultar card del feed
+- [x] `HomeScreen.js` — tab "Para ti" usa `scoreAndRankEvents()`, `onViewableItemsChanged` mide tiempo de vista (>3s = longView), `getItemType` para reciclado eficiente en FlashList
+- [x] `EventDetailScreen.js` — señales: `open` al entrar, `like`/`unlike` y `attend`/`unattend` al tocar
+- [x] `CommentsSection.js` — señal `comment` al publicar
+- [x] `eventService.js` — `fetchEventsByIds()` para feeds pre-computados (preparado para v2)
+- [x] Actualizar reglas de Firestore para colección `userSignals` (permitir write solo al propio usuario)
+- [x] Cloud Function de scoring pre-computado — `computePersonalizedFeeds` corre cada 30 min para usuarios activos, escribe `feeds/{userId}`; `refreshMyFeed` callable desde pull-to-refresh ✅ deployada
+- [x] `lastActive` en `users/{userId}` — se actualiza con `serverTimestamp()` en cada login/apertura de app (requerido por `computePersonalizedFeeds` para filtrar usuarios activos)
+- [x] Señal social: amigos que asisten al mismo evento — implementada en Cloud Function usando `following` del usuario
 
 ---
 
 ## Pendientes / Roadmap
 
 ### Funcionalidades por implementar
+- [ ] Agrandar cards — EventCard y ExternalEventCard (imagen más alta, texto más grande)
 - [ ] Sistema de tickets / RSVP formal
 - [ ] Mapa con clustering de eventos cercanos
 - [ ] Búsqueda por texto libre (nombre de evento)
@@ -99,29 +103,30 @@
 - [x] Prevenir reportes duplicados (query antes de insertar en `createReport`)
 
 **Fase 3 — Panel de administración**
-- [ ] Web app o pantalla admin para revisar reportes pendientes
-- [ ] Acciones: desestimar, advertir al usuario, eliminar contenido, banear cuenta
-- [ ] Notificación al usuario reportado cuando se toma acción
-- [ ] Firebase Cloud Function para procesar acciones (eliminar docs, deshabilitar auth)
+- [ ] Pantalla admin en la app (requiere campo `isAdmin: true` en el doc del usuario admin)
+- [x] `processReportAction` Cloud Function — acciones: dismiss, warn, delete_content, ban ✅ deployada
+- [x] Notificación al usuario reportado cuando se toma acción (warn envía notificación tipo `admin_warning`)
+- [x] Ban deshabilita la cuenta en Firebase Auth + marca `banned: true` en Firestore
 
 **Fase 4 — Automatización**
-- [ ] Auto-ocultar contenido con más de N reportes mientras se revisa
+- [x] `onReportCreated` Cloud Function — auto-oculta contenido al llegar a 5 reportes (pendiente retry deploy por permisos Eventarc)
 - [ ] Sistema de apelaciones para usuarios baneados
 - [ ] Dashboard de estadísticas de moderación
 
 ### Mejoras técnicas
-- [ ] Migrar `createdAt` de eventos a `serverTimestamp()` — requiere migración de datos existentes en Firestore (cambio de tipo string → Timestamp)
+- [x] `createEvent` usa `serverTimestamp()` para nuevos eventos
+- [x] `scripts/migrateCreatedAt.js` — script one-time para migrar docs existentes (requiere serviceAccount.json)
 - [x] Paginación en feed de eventos (20 por página, carga más al llegar al final)
-- [ ] Offline support con caché de Firestore
-- [ ] Manejo de errores global (actualmente cada pantalla maneja sus propios errores)
+- [ ] Offline support con caché de Firestore (requiere migrar a @react-native-firebase/firestore para soporte nativo completo)
+- [x] Manejo de errores global — `src/utils/errorHandler.js` con `getFriendlyError` + override de `console.error` en producción (App.js)
 
 ### Seguridad — pendientes (requieren acción externa o infraestructura)
 - [ ] **Rotar Google Maps API Key** en Google Cloud Console y restringirla al bundle ID de la app
 - [ ] **Implementar Firebase App Check** para rate limiting real en servidor (evita spam de eventos, comentarios, mensajes desde clientes modificados)
 - [ ] **expo-secure-store** en lugar de AsyncStorage para tokens de autenticación (evita extracción en dispositivos rooteados) — requiere instalación de paquete y refactor de `src/config/firebase.js`
 - [ ] **Cloud Functions** para validaciones críticas de servidor (organizerId, precios negativos, campos requeridos)
-- [ ] Sanitizar `console.error` en todas las pantallas usando `sanitizeError` de `src/utils/security.js` (actualmente loguea objetos Firebase completos)
-- [ ] `serverTimestamp()` en `eventService.createEvent` — requiere migración de datos en Firestore
+- [x] Sanitizar `console.error` — override global en App.js (solo producción), sanitiza objetos Firebase antes de loguear
+- [x] `serverTimestamp()` en `eventService.createEvent` — implementado; ejecutar `scripts/migrateCreatedAt.js` para docs existentes
 
 ### Producción / Distribución
 - [ ] Build de producción Android firmado

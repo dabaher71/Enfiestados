@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from '../components/UserAvatar';
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
@@ -31,8 +32,8 @@ export default function ChatDetailScreen({ route, navigation }) {
       if (userDoc.exists()) {
         setOtherUser(userDoc.data());
       }
-    } catch (error) {
-      console.log('Error cargando usuario:', error);
+    } catch {
+      // no-crítico: ya tenemos nombre/avatar del route.params como fallback
     }
   };
 
@@ -148,7 +149,7 @@ export default function ChatDetailScreen({ route, navigation }) {
     return (
       <View style={[styles.messageRow, isMyMessage && styles.myMessageRow]}>
         {!isMyMessage && (
-          <Image source={otherUser.avatar ? { uri: otherUser.avatar } : require('../../assets/images/icon.png')} style={styles.messageAvatar} />
+          <UserAvatar uri={otherUser.avatar} size={32} style={styles.messageAvatar} />
         )}
         {isEvent ? (
           (() => {

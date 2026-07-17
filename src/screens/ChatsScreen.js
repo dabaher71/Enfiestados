@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
+import UserAvatar from '../components/UserAvatar';
 import {
   View,
   Text,
@@ -88,10 +89,7 @@ export default function ChatsScreen({ navigation }) {
         style={styles.chatItem}
         onPress={() => handleChatPress(item)}
       >
-        <Image
-          source={otherUser?.avatar ? { uri: otherUser.avatar } : require('../../assets/images/icon.png')}
-          style={styles.avatar}
-        />
+        <UserAvatar uri={otherUser?.avatar} size={50} style={styles.avatar} />
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
             <Text style={styles.userName}>{otherUser?.name || 'Usuario'}</Text>

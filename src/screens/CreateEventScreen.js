@@ -24,17 +24,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, getDoc } from 'firebase/firestore';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 import { isValidWebURL, validateImageSize, validatePrice, INPUT_LIMITS } from '../utils/security';
-
-const CATEGORIES = [
-  { id: 'musica', name: 'Música', icon: 'musical-notes' },
-  { id: 'fiesta', name: 'Fiesta', icon: 'beer' },
-  { id: 'deporte', name: 'Deporte', icon: 'football' },
-  { id: 'arte', name: 'Arte', icon: 'color-palette' },
-  { id: 'tech', name: 'Tecnología', icon: 'laptop' },
-  { id: 'comida', name: 'Comida', icon: 'restaurant' },
-  { id: 'networking', name: 'Networking', icon: 'people' },
-  { id: 'otro', name: 'Otro', icon: 'ellipsis-horizontal' },
-];
+import { CATEGORIES } from '../constants/categories';
 
 export default function CreateEventScreen({ navigation }) {
   const [title, setTitle] = useState('');
@@ -561,6 +551,7 @@ export default function CreateEventScreen({ navigation }) {
             style={[styles.createButton, loading && styles.createButtonDisabled]}
             onPress={handleCreate}
             disabled={loading}
+            activeOpacity={0.75}
           >
             {loading ? (
               <View style={styles.loadingContainer}>

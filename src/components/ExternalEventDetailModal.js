@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { safeOpenURL } from '../utils/security';
+import ImageViewerModal from './ImageViewerModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -13,6 +14,7 @@ const SOURCE_COLORS = {
 
 export default function ExternalEventDetailModal({ event, visible, onClose }) {
   const [imgError, setImgError] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
   if (!event) return null;
   const badgeColor = SOURCE_COLORS[event.source] || '#6c5ce7';
   const showPlaceholder = !event.imageUrl || imgError;
@@ -36,13 +38,15 @@ export default function ExternalEventDetailModal({ event, visible, onClose }) {
                 </Text>
               </View>
             ) : (
-              <Image
-                source={{ uri: event.imageUrl }}
-                style={styles.image}
-                contentFit="cover"
-                transition={300}
-                onError={() => setImgError(true)}
-              />
+              <TouchableOpacity activeOpacity={0.9} onPress={() => setShowImageViewer(true)}>
+                <Image
+                  source={{ uri: event.imageUrl }}
+                  style={styles.image}
+                  contentFit="cover"
+                  transition={300}
+                  onError={() => setImgError(true)}
+                />
+              </TouchableOpacity>
             )}
             {/* Badge fuente */}
             <View style={[styles.sourceBadge, { backgroundColor: badgeColor }]}>
@@ -91,6 +95,11 @@ export default function ExternalEventDetailModal({ event, visible, onClose }) {
           </ScrollView>
         </View>
       </View>
+      <ImageViewerModal
+        uri={event.imageUrl}
+        visible={showImageViewer}
+        onClose={() => setShowImageViewer(false)}
+      />
     </Modal>
   );
 }

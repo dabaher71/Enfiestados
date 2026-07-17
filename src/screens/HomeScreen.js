@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,11 +16,16 @@ import { FeedSkeleton } from '../components/SkeletonLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EventCard from '../components/EventCard';
 import ExternalEventCard from '../components/ExternalEventCard';
+import InternalAdCard from '../components/InternalAdCard';
 import NativeAdCard from '../components/NativeAdCard';
-import { auth, db } from '../config/firebase';
+import { auth, db, functions } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { registerForPushNotifications } from '../services/pushNotificationService';
+import { recordSignal, getHiddenEventIds } from '../services/signalService';
+import { scoreAndRankEvents } from '../services/feedService';
+import { fetchActiveAds } from '../services/adService';
 
 
 // --- Funciones auxiliares ---
@@ -62,11 +67,20 @@ export default function HomeScreen({ navigation }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
+  const [interestVector, setInterestVector] = useState({});
+  const [userInterests, setUserInterests] = useState([]);
+  const [hiddenIds, setHiddenIds] = useState(new Set());
+  const [internalAds, setInternalAds] = useState([]);
+  const adIndexRef = useRef(0);
   const userId = auth.currentUser?.uid;
   const { data: externalEvents } = useExternalEvents();
 
+  // Mapa de eventId → timestamp de cuando el card se hizo visible
+  const visibleSinceRef = useRef({});
+
   useEffect(() => {
     loadUserFollowing();
+    loadUserProfile();
 
     const unsubscribe = subscribeToEvents((firstPageEvents, cursor) => {
       setEvents(firstPageEvents);
@@ -84,6 +98,26 @@ export default function HomeScreen({ navigation }) {
 
     return () => unsubscribe();
   }, []);
+
+  const loadUserProfile = async () => {
+    if (!userId) return;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setInterestVector(data.interestVector || {});
+        const interests = data.interests || [];
+        setUserInterests(interests);
+        const ads = await fetchActiveAds({ province: data.location, interests });
+        setInternalAds(ads);
+        adIndexRef.current = 0;
+      }
+      const hidden = await getHiddenEventIds(userId);
+      setHiddenIds(hidden);
+    } catch {
+      // non-critical
+    }
+  };
 
 
   const isEventExpired = (event) => {
@@ -107,13 +141,13 @@ export default function HomeScreen({ navigation }) {
       );
     }
 
-    // "parati": nativos + externos futuros, todos ordenados por fecha
+    // "parati": nativos + externos futuros, ordenados por score personalizado
     const validExternal = externalEvents.filter(e => {
       if (e.dateISO) return new Date(e.dateISO) >= today;
       return true;
     });
-    return sortByDateAsc([...native, ...validExternal]);
-  }, [activeTab, events, following, externalEvents]);
+    return scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
+  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests]);
 
   const loadUserFollowing = async () => {
     try {
@@ -131,6 +165,14 @@ export default function HomeScreen({ navigation }) {
   const onRefresh = async () => {
     setRefreshing(true);
     await loadUserFollowing();
+    // Solicitar regeneración del feed personalizado en servidor
+    try {
+      const refreshMyFeed = httpsCallable(functions, 'refreshMyFeed');
+      await refreshMyFeed();
+      await loadUserProfile(); // recargar interestVector + hiddenIds actualizados
+    } catch {
+      // si falla la Cloud Function, el scoring local ya funciona como fallback
+    }
     setRefreshing(false);
   };
 
@@ -201,27 +243,67 @@ export default function HomeScreen({ navigation }) {
     if (type === 'PRESS') navigation.navigate('EventDetail', { event: payload });
   }, [navigation]);
 
-  // Feed con ads intercalados cada 2 eventos
+  // Tracking de tiempo de vista — cuando un card sale del viewport registra la señal
+  const onViewableItemsChanged = useCallback(({ changed }) => {
+    if (!userId) return;
+    const now = Date.now();
+    changed.forEach(({ item, isViewable }) => {
+      if (item._isAd || item._isInternalAd || item._isExternal) return;
+      if (isViewable) {
+        visibleSinceRef.current[item.id] = now;
+      } else {
+        const since = visibleSinceRef.current[item.id];
+        if (since) {
+          const durationMs = now - since;
+          delete visibleSinceRef.current[item.id];
+          // >3s = longView (señal fuerte), <3s = view (señal débil)
+          recordSignal(userId, item, durationMs >= 3000 ? 'longView' : 'view');
+        }
+      }
+    });
+  }, [userId]);
+
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
+
+  const handleHide = useCallback((eventId) => {
+    setHiddenIds(prev => new Set([...prev, eventId]));
+  }, []);
+
+  // Feed con ads cada 4 eventos: ads internos primero, AdMob como fallback
   const feedWithAds = useMemo(() => {
     const result = [];
+    let adSlot = 0;
     displayedEvents.forEach((event, index) => {
       result.push(event);
-      if ((index + 1) % 2 === 0) {
-        result.push({ _isAd: true, id: `ad_${index}` });
+      if ((index + 1) % 4 === 0) {
+        if (internalAds.length > 0) {
+          const ad = internalAds[adSlot % internalAds.length];
+          result.push({ _isInternalAd: true, ad, id: `iad_${adSlot}` });
+          adSlot++;
+        } else {
+          result.push({ _isAd: true, id: `ad_${index}` });
+        }
       }
     });
     return result;
-  }, [displayedEvents]);
+  }, [displayedEvents, internalAds]);
+
+  const handleAdEventPress = useCallback((eventId) => {
+    navigation.navigate('EventDetail', { eventId });
+  }, [navigation]);
 
   const renderItem = useCallback(({ item }) => {
+    if (item._isInternalAd) {
+      return <InternalAdCard ad={item.ad} onEventPress={handleAdEventPress} />;
+    }
     if (item._isAd) {
       return <NativeAdCard />;
     }
     if (item._isExternal) {
-      return <ExternalEventCard event={item} style={styles.externalCardFeed} />;
+      return <ExternalEventCard event={item} />;
     }
-    return <EventCard event={item} dispatch={dispatch} />;
-  }, [dispatch]);
+    return <EventCard event={item} dispatch={dispatch} userId={userId} onHide={handleHide} />;
+  }, [dispatch, userId, handleHide, handleAdEventPress]);
 
   if (loading) {
     return (
@@ -288,7 +370,13 @@ export default function HomeScreen({ navigation }) {
           data={feedWithAds}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          estimatedItemSize={280}
+          estimatedItemSize={430}
+          getItemType={(item) => {
+            if (item._isInternalAd) return 'internalAd';
+            if (item._isAd) return 'ad';
+            if (item._isExternal) return 'external';
+            return 'event';
+          }}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
@@ -296,6 +384,8 @@ export default function HomeScreen({ navigation }) {
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           ListFooterComponent={renderFooter}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig.current}
         />
       )}
     </SafeAreaView>
@@ -307,12 +397,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1a2e',
     paddingTop: Platform.OS === 'android' ? 8 : 0,
-  },
-  externalCardFeed: {
-    width: 'auto',
-    marginHorizontal: 20,
-    marginVertical: 6,
-    marginRight: 20,
   },
   loadingContainer: {
     flex: 1,

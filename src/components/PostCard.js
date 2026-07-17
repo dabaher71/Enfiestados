@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { memo, useCallback, useState } from 'react';
 import { Image } from 'expo-image';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import PostDetailModal from './PostDetailModal';
+import UserAvatar from './UserAvatar';
 import ReportModal from './ReportModal';
 
 // Fuera del componente: no se recrea en cada render
@@ -20,6 +22,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [showReport, setShowReport] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const isLiked = post.likes?.includes(currentUserId);
   const isOwner = post.userId === currentUserId;
 
@@ -41,8 +44,18 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
   const toggleComments = useCallback(() => setShowComments(v => !v), []);
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={() => setShowDetail(true)} activeOpacity={0.92}>
       <ReportModal visible={showReport} onClose={() => setShowReport(false)} targetType="post" targetId={post.id} />
+      <PostDetailModal
+        post={post}
+        visible={showDetail}
+        onClose={() => setShowDetail(false)}
+        currentUserId={currentUserId}
+        onLike={onLike}
+        onComment={onComment}
+        onDelete={onDelete}
+        onUserPress={onUserPress}
+      />
       {post.image ? (
         <Image source={{ uri: post.image }} style={styles.postImage} contentFit="cover" transition={200} />
       ) : null}
@@ -50,7 +63,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
       <View style={styles.content}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.userInfo} onPress={handleUserPress}>
-            <Image source={post.userAvatar ? { uri: post.userAvatar } : require('../../assets/images/icon.png')} style={styles.avatar} contentFit="cover" transition={150} />
+            <UserAvatar uri={post.userAvatar} size={36} style={styles.avatar} />
             <View>
               <Text style={styles.userName}>{post.userName}</Text>
               <Text style={styles.time}>{timeAgo(post.createdAt)}</Text>
@@ -104,7 +117,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
           </View>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

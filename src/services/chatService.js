@@ -58,7 +58,8 @@ export const subscribeToMessages = (chatId, callback) => {
   const q = query(
     messagesCollection,
     where('chatId', '==', chatId),
-    orderBy('timestamp', 'asc')
+    orderBy('timestamp', 'asc'),
+    limit(100)
   );
   return onSnapshot(q, (snapshot) => {
     const messages = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -69,6 +70,11 @@ export const subscribeToMessages = (chatId, callback) => {
 export const sendMessage = async (chatId, senderId, text) => {
   if (!text || !text.trim()) throw new Error('Mensaje vacío');
   const trimmed = text.trim().slice(0, MAX_MESSAGE_LENGTH);
+
+  // Obtener participantes para marcar al receptor con mensaje no leído
+  const chatSnap = await getDoc(doc(db, 'chats', chatId));
+  const participants = chatSnap.exists() ? chatSnap.data().participants : [];
+  const unreadFor = participants.filter(id => id !== senderId);
 
   const messagesRef = collection(db, 'messages');
   await setDoc(doc(messagesRef), {
@@ -82,6 +88,7 @@ export const sendMessage = async (chatId, senderId, text) => {
   await updateDoc(doc(db, 'chats', chatId), {
     lastMessage: trimmed.length > 60 ? trimmed.slice(0, 60) + '…' : trimmed,
     lastMessageTime: new Date().toISOString(),
+    unreadFor,
   });
 };
 
@@ -94,9 +101,14 @@ export const markMessagesAsRead = async (chatId, userId) => {
       where('read', '==', false)
     );
     const snapshot = await getDocs(q);
-    await Promise.all(
-      snapshot.docs.map(d => updateDoc(doc(db, 'messages', d.id), { read: true }))
-    );
+    await Promise.all([
+      ...snapshot.docs.map(d => updateDoc(doc(db, 'messages', d.id), { read: true })),
+      // Remover al usuario del array unreadFor del chat
+      updateDoc(doc(db, 'chats', chatId), {
+        unreadFor: (await getDoc(doc(db, 'chats', chatId)))
+          .data()?.unreadFor?.filter(id => id !== userId) ?? [],
+      }),
+    ]);
   } catch (_) {
     // No crítico — marcar como leído puede fallar silenciosamente
   }

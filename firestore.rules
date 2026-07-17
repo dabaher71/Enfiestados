@@ -17,12 +17,11 @@ service cloud.firestore {
     }
 
     // ── users ─────────────────────────────────────────────────────────────────
+    // Cualquier usuario autenticado puede leer perfiles (necesario para mostrar
+    // avatares en comentarios, chats y eventos). La lógica de privacidad
+    // (cuenta privada) se controla a nivel de app en UserProfileScreen.
     match /users/{userId} {
-      allow read: if isAuth() && (
-        isOwner(userId) ||
-        (resource.data.perfilPublico == true && !isBlocked(resource.data)) ||
-        (request.auth.uid in resource.data.get('followers', []) && !isBlocked(resource.data))
-      );
+      allow read: if isAuth();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
       allow delete: if isOwner(userId);
@@ -112,6 +111,54 @@ service cloud.firestore {
       // Cada usuario puede leer solo sus propios reportes (necesario para verificar duplicados)
       allow read: if isAuth() && resource.data.reporterId == request.auth.uid;
       allow update, delete: if false; // solo admin via Cloud Functions
+    }
+
+    // ── userSignals ───────────────────────────────────────────────────────────
+    // Cada usuario solo puede leer y escribir sus propias señales de comportamiento.
+    // Nadie más (ni otros usuarios) puede acceder a este historial.
+    match /userSignals/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /interactions/{eventId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) &&
+          request.resource.data.keys().hasOnly([
+            'viewCount', 'longViewCount', 'opened', 'liked',
+            'attended', 'commented', 'hidden', 'category', 'lastSeen'
+          ]);
+        allow delete: if false;
+      }
+    }
+
+    // ── ads ───────────────────────────────────────────────────────────────────
+    match /ads/{adId} {
+      // Cualquier usuario autenticado puede leer ads activos
+      allow read: if isAuth();
+      // Solo anunciantes pueden crear (verificado a nivel app; admin aprueba)
+      allow create: if isVerified() &&
+        request.resource.data.advertiserId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      // Solo el dueño puede pausar/reactivar (status: active/paused)
+      allow update: if isAuth() && (
+        resource.data.advertiserId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'updatedAt'])
+      ) || (
+        // TODO: migrar a Cloud Function para prevenir inflación de métricas
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['impressions', 'clicks'])
+      );
+      allow delete: if false;
+    }
+
+    // ── advertiserRequests ────────────────────────────────────────────────────
+    match /advertiserRequests/{reqId} {
+      allow create: if isVerified() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false; // solo admin via app
     }
 
     // ── notifications ─────────────────────────────────────────────────────────
