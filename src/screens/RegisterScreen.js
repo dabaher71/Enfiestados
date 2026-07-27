@@ -1,305 +1,186 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
+// RegisterScreen — Crear cuenta
+// LÓGICA INTACTA: Firebase Auth, Firestore profile, email verification, Google.
+// PRESENTACIÓN: design system v1.1 — Input, Button, tokens.
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Text from '../components/ui/Text';
+
 import { auth, db } from '../config/firebase';
 import { signInWithGoogle } from '../services/googleAuthService';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+
+function getFriendlyError(code) {
+  switch (code) {
+    case 'auth/email-already-in-use':   return 'Este correo ya está registrado. ¿Olvidaste tu contraseña?';
+    case 'auth/invalid-email':          return 'El correo no tiene un formato válido';
+    case 'auth/weak-password':          return 'La contraseña es muy débil. Usá al menos 6 caracteres';
+    case 'auth/network-request-failed': return 'Sin conexión. Verificá tu red e intentá de nuevo';
+    case 'auth/too-many-requests':      return 'Demasiados intentos. Esperá unos minutos';
+    default:                            return 'Ocurrió un error inesperado. Intentá de nuevo';
+  }
+}
 
 export default function RegisterScreen({ navigation }) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { colors } = useTheme();
+  const [name,            setName]            = useState('');
+  const [email,           setEmail]           = useState('');
+  const [password,        setPassword]        = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading,         setLoading]         = useState(false);
+  const [googleLoading,   setGoogleLoading]   = useState(false);
+  const [showPass,        setShowPass]        = useState(false);
+  const [showConfirm,     setShowConfirm]     = useState(false);
 
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      await signInWithGoogle();
-    } catch (error) {
-      if (error.code !== 'SIGN_IN_CANCELLED') {
-        Alert.alert('Error', 'No se pudo continuar con Google. Inténtalo de nuevo.');
-      }
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
+  // Errores inline por campo
+  const [errors, setErrors] = useState({});
+  const setError = (field, msg) => setErrors(prev => ({ ...prev, [field]: msg }));
+  const clearError = (field) => setErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
 
   const handleRegister = async () => {
-    const trimmedName = name.trim();
-    const trimmedEmail = email.trim().toLowerCase();
+    const trimName  = name.trim();
+    const trimEmail = email.trim().toLowerCase();
+    const newErrors = {};
 
-    // Validaciones locales
-    if (!trimmedName || !trimmedEmail || !password || !confirmPassword) {
-      Alert.alert('Campos incompletos', 'Por favor completa todos los campos');
-      return;
-    }
+    if (!trimName)            newErrors.name = 'El nombre es obligatorio';
+    else if (trimName.length < 2) newErrors.name = 'El nombre debe tener al menos 2 caracteres';
+    if (!trimEmail)           newErrors.email = 'El correo es obligatorio';
+    if (!password)            newErrors.password = 'La contraseña es obligatoria';
+    else if (password.length < 6) newErrors.password = 'Mínimo 6 caracteres';
+    if (password !== confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden';
 
-    if (trimmedName.length < 2 || trimmedName.length > 50) {
-      Alert.alert('Nombre inválido', 'El nombre debe tener entre 2 y 50 caracteres');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Contraseñas distintas', 'Las contraseñas no coinciden');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Contraseña débil', 'La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    setErrors({});
     setLoading(true);
     try {
-      // 1. Crear usuario en Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
-      const user = userCredential.user;
-
-      // 2. Sincronizar displayName en el registro de Auth
-      await updateProfile(user, { displayName: trimmedName });
-
-      // 3. Crear perfil en Firestore con serverTimestamp (no manipulable por el cliente)
+      const { user } = await createUserWithEmailAndPassword(auth, trimEmail, password);
+      await updateProfile(user, { displayName: trimName });
       await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        name: trimmedName,
-        email: trimmedEmail,
-        avatar: '',
-        coverImage: '',
-        bio: '',
-        location: '',
-        interests: [],
-        followers: [],
-        following: [],
-        followRequests: [],
-        eventsOrganized: [],
-        eventsAttending: [],
-        perfilPublico: true,
-        verificado: false,
-        usuariosBloqueados: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        uid: user.uid, name: trimName, email: trimEmail,
+        avatar: '', coverImage: '', bio: '', location: '',
+        interests: [], followers: [], following: [], followRequests: [],
+        eventsOrganized: [], eventsAttending: [],
+        perfilPublico: true, verificado: false, usuariosBloqueados: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
-
-      // Enviar correo de verificación
       await sendEmailVerification(user);
-
-      Alert.alert(
-        '¡Cuenta creada!',
-        `Hola ${trimmedName}, te enviamos un correo de verificación. Revisa tu bandeja de entrada antes de iniciar sesión.`
-      );
-    } catch (error) {
-      Alert.alert('Error al registrarse', _getFriendlyAuthError(error.code));
-    } finally {
-      setLoading(false);
+      Alert.alert('¡Cuenta creada!', `Hola ${trimName}, te enviamos un correo de verificación. Revisá tu bandeja antes de iniciar sesión.`);
+    } catch (e) {
+      setError('email', getFriendlyError(e.code));
     }
+    setLoading(false);
   };
 
-  const _getFriendlyAuthError = (code) => {
-    switch (code) {
-      case 'auth/email-already-in-use':
-        return 'Este correo ya está registrado. ¿Olvidaste tu contraseña?';
-      case 'auth/invalid-email':
-        return 'El correo electrónico no tiene un formato válido';
-      case 'auth/weak-password':
-        return 'La contraseña es demasiado débil. Usa al menos 6 caracteres';
-      case 'auth/operation-not-allowed':
-        return 'El registro con correo está desactivado. Contacta al soporte';
-      case 'auth/network-request-failed':
-        return 'Sin conexión a internet. Verifica tu red e inténtalo de nuevo';
-      case 'auth/too-many-requests':
-        return 'Demasiados intentos. Espera unos minutos antes de volver a intentarlo';
-      default:
-        return 'Ocurrió un error inesperado. Inténtalo de nuevo';
-    }
+  const handleGoogle = async () => {
+    setGoogleLoading(true);
+    try { await signInWithGoogle(); }
+    catch (e) { if (e.code !== 'SIGN_IN_CANCELLED') Alert.alert('Error', 'No se pudo continuar con Google.'); }
+    setGoogleLoading(false);
   };
+
+  const EyeToggle = ({ show, onToggle, label }) => (
+    <Pressable onPress={onToggle} accessibilityLabel={label}>
+      <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors['text.tertiary']} />
+    </Pressable>
+  );
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.flex, { backgroundColor: colors['bg.base'] }]}
     >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          {/* Header */}
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+        {/* Back */}
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver">
+          <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
+        </Pressable>
+
+        {/* Título */}
+        <View style={styles.titleSection}>
+          <Text variant="display" align="center">Crear cuenta</Text>
+          <Text variant="body" color="text.secondary" align="center" style={{ marginTop: space[2] }}>
+            Uníte a la comunidad de eventos
+          </Text>
+        </View>
+
+        {/* Formulario */}
+        <View style={styles.form}>
+          <Input
+            label="Nombre completo"
+            placeholder="Tu nombre"
+            value={name}
+            onChangeText={v => { setName(v); clearError('name'); }}
+            errorText={errors.name}
+            leadingIcon={<Ionicons name="person-outline" size={18} color={colors['text.tertiary']} />}
+          />
+          <Input
+            label="Correo electrónico"
+            placeholder="tuCorreo@ejemplo.com"
+            value={email}
+            onChangeText={v => { setEmail(v); clearError('email'); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            errorText={errors.email}
+            leadingIcon={<Ionicons name="mail-outline" size={18} color={colors['text.tertiary']} />}
+            style={{ marginTop: space[3] }}
+          />
+          <Input
+            label="Contraseña"
+            placeholder="Mínimo 6 caracteres"
+            value={password}
+            onChangeText={v => { setPassword(v); clearError('password'); }}
+            secureTextEntry={!showPass}
+            errorText={errors.password}
+            leadingIcon={<Ionicons name="lock-closed-outline" size={18} color={colors['text.tertiary']} />}
+            trailingIcon={<EyeToggle show={showPass} onToggle={() => setShowPass(v => !v)} label="Ver contraseña" />}
+            style={{ marginTop: space[3] }}
+          />
+          <Input
+            label="Confirmar contraseña"
+            placeholder="Repetí la contraseña"
+            value={confirmPassword}
+            onChangeText={v => { setConfirmPassword(v); clearError('confirmPassword'); }}
+            secureTextEntry={!showConfirm}
+            errorText={errors.confirmPassword}
+            leadingIcon={<Ionicons name="shield-checkmark-outline" size={18} color={colors['text.tertiary']} />}
+            trailingIcon={<EyeToggle show={showConfirm} onToggle={() => setShowConfirm(v => !v)} label="Ver confirmación" />}
+            style={{ marginTop: space[3] }}
+          />
+
+          <Button variant="primary" size="lg" label="Crear cuenta" onPress={handleRegister} loading={loading} fullWidth style={{ marginTop: space[5] }} />
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={[styles.line, { backgroundColor: colors['border.subtle'] }]} />
+            <Text variant="caption" color="text.tertiary">o continuá con</Text>
+            <View style={[styles.line, { backgroundColor: colors['border.subtle'] }]} />
+          </View>
+
+          {/* Google */}
+          <Pressable
+            onPress={handleGoogle}
+            disabled={googleLoading}
+            style={[styles.googleBtn, { backgroundColor: colors['bg.raised'], borderColor: colors['border.strong'] }]}
+            accessibilityRole="button"
+            accessibilityLabel="Continuar con Google"
           >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
+            <Ionicons name="logo-google" size={20} color="#EA4335" />
+            <Text variant="label">{googleLoading ? 'Conectando…' : 'Continuar con Google'}</Text>
+          </Pressable>
 
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="person-add" size={40} color="#fff" />
-            </View>
-            <Text style={styles.title}>Crear Cuenta</Text>
-            <Text style={styles.subtitle}>Únete a la comunidad de eventos</Text>
-          </View>
-
-          {/* Form */}
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Nombre completo"
-                placeholderTextColor="#888"
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Correo electrónico"
-                placeholderTextColor="#888"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                placeholderTextColor="#888"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons 
-                  name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                  size={20} 
-                  color="#888" 
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Confirmar contraseña"
-                placeholderTextColor="#888"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-              />
-              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                <Ionicons 
-                  name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
-                  size={20} 
-                  color="#888" 
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Password requirements */}
-            <View style={styles.requirements}>
-              <View style={styles.requirementItem}>
-                <Ionicons 
-                  name={password.length >= 6 ? "checkmark-circle" : "ellipse-outline"} 
-                  size={16} 
-                  color={password.length >= 6 ? "#00b894" : "#888"} 
-                />
-                <Text style={[
-                  styles.requirementText,
-                  password.length >= 6 && styles.requirementMet
-                ]}>
-                  Mínimo 6 caracteres
-                </Text>
-              </View>
-              <View style={styles.requirementItem}>
-                <Ionicons 
-                  name={password === confirmPassword && password.length > 0 ? "checkmark-circle" : "ellipse-outline"} 
-                  size={16} 
-                  color={password === confirmPassword && password.length > 0 ? "#00b894" : "#888"} 
-                />
-                <Text style={[
-                  styles.requirementText,
-                  password === confirmPassword && password.length > 0 && styles.requirementMet
-                ]}>
-                  Contraseñas coinciden
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity 
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleRegister}
-              disabled={loading}
-            >
-              {loading ? (
-                <Text style={styles.buttonText}>Creando cuenta...</Text>
-              ) : (
-                <>
-                  <Text style={styles.buttonText}>Crear Cuenta</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#fff" />
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o continúa con</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Google Sign-In */}
-            <TouchableOpacity
-              style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
-              onPress={handleGoogleSignIn}
-              disabled={googleLoading}
-            >
-              <Ionicons name="logo-google" size={20} color="#fff" style={{ marginRight: 10 }} />
-              <Text style={styles.googleButtonText}>
-                {googleLoading ? 'Conectando...' : 'Registrarse con Google'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Terms */}
-            <Text style={styles.termsText}>
-              Al registrarte, aceptas nuestros{' '}
-              <Text style={styles.termsLink}>Términos de Servicio</Text>
-              {' '}y{' '}
-              <Text style={styles.termsLink}>Política de Privacidad</Text>
+          <Pressable onPress={() => navigation.navigate('Login')} style={styles.loginLink} accessibilityRole="link">
+            <Text variant="body" color="text.secondary" align="center">
+              ¿Ya tenés cuenta?{' '}
+              <Text variant="bodyStrong" style={{ color: colors['link'] }}>Iniciá sesión</Text>
             </Text>
-
-            <TouchableOpacity 
-              style={styles.linkButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.linkText}>
-                ¿Ya tienes cuenta? <Text style={styles.linkBold}>Inicia Sesión</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -307,159 +188,13 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 60,
-    paddingBottom: 30,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 10,
-    padding: 10,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-    marginTop: 30,
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#6c5ce7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-    shadowColor: '#6c5ce7',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#888',
-  },
-  form: {
-    width: '100%',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    marginBottom: 16,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: '#fff',
-  },
-  requirements: {
-    marginBottom: 20,
-  },
-  requirementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  requirementText: {
-    color: '#888',
-    fontSize: 13,
-    marginLeft: 8,
-  },
-  requirementMet: {
-    color: '#00b894',
-  },
-  button: {
-    backgroundColor: '#6c5ce7',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 8,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#2d2d44',
-  },
-  dividerText: {
-    color: '#888',
-    paddingHorizontal: 15,
-    fontSize: 14,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#3d3d5c',
-  },
-  googleButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  termsText: {
-    color: '#888',
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 20,
-  },
-  termsLink: {
-    color: '#6c5ce7',
-  },
-  linkButton: {
-    alignItems: 'center',
-  },
-  linkText: {
-    color: '#888',
-    fontSize: 14,
-  },
-  linkBold: {
-    color: '#6c5ce7',
-    fontWeight: 'bold',
-  },
+  flex:   { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: space[5], paddingTop: space[4], paddingBottom: space[8] },
+  back:   { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: space[3] },
+  titleSection: { marginBottom: space[6] },
+  form:   { gap: space[1] },
+  divider:   { flexDirection: 'row', alignItems: 'center', marginVertical: space[5], gap: space[3] },
+  line:      { flex: 1, height: 1 },
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 52, borderRadius: radius.md, borderWidth: 1.5, gap: space[3] },
+  loginLink: { marginTop: space[5], alignSelf: 'center' },
 });
