@@ -4,21 +4,54 @@ import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
-import { formatEventDate, formatPrice } from '../../lib/format';
+import { formatTimeShort } from '../../lib/format';
 import StatusBadge from './StatusBadge';
 import Text from './Text';
 
-// trailing: 'badge' | 'price' | 'icon' | 'none'
-export default function EventRow({ event, trailing = 'price', onPress, onSave, trailingIcon }) {
+// Trailing badge: orden exacto del FIX_ROUND_1 § 2.4
+// 1. soldOutSoon  → "ÚLTIMAS"  (urgent)
+// 2. price === 0  → "GRATIS"   (free)
+// 3. price > 0    → precio     (neutral con texto ₡)
+// 4. sin dato     → nada
+function TrailingBadge({ event }) {
+  if (event.soldOutSoon) {
+    return <StatusBadge label="ÚLTIMAS" variant="urgent" />;
+  }
+  if (event.isFree === true || event.price === 0) {
+    return <StatusBadge label="Gratis" variant="free" />;
+  }
+  if (event.price > 0) {
+    return <StatusBadge label={`₡${Number(event.price).toLocaleString('es-CR')}`} variant="neutral" />;
+  }
+  // Sin dato de precio confiable — no mostrar nada (evita "GRATIS" falso en importados)
+  return null;
+}
+
+// Overline: "8:00 PM · SHOW" (hora + categoría). La fuente va abajo como subtítulo.
+function buildOverline(event) {
+  const time = formatTimeShort(event.time ?? event.eventTime ?? '');
+  const cat  = event.category ?? '';
+  return [time, cat.toUpperCase()].filter(Boolean).join(' · ');
+}
+
+// Subtítulo de ubicación. Si es importado, añade "Vía [fuente]"
+function buildSubtitle(event) {
+  const place  = event.location?.name ?? event.locationText ?? '';
+  const source = event._isExternal && event.source ? `Vía ${event.source}` : '';
+  return place || source || '';
+}
+
+// trailing: 'auto' | 'icon' | 'none'
+export default function EventRow({ event, trailing = 'auto', onPress, trailingIcon }) {
   const { colors } = useTheme();
-  const dateStr = formatEventDate(event.date, event.time);
-  const meta    = [event.category, dateStr].filter(Boolean).join(' · ').toUpperCase();
+  const overline = buildOverline(event);
+  const subtitle = buildSubtitle(event);
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${event.title}, ${dateStr}`}
+      accessibilityLabel={event.title}
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: pressed ? colors['bg.surface'] : 'transparent' },
@@ -40,26 +73,20 @@ export default function EventRow({ event, trailing = 'price', onPress, onSave, t
 
       {/* Contenido */}
       <View style={styles.content}>
-        <Text variant="overline" color="text.tertiary" numberOfLines={1}>{meta}</Text>
+        {overline ? (
+          <Text variant="overline" color="text.tertiary" numberOfLines={1}>{overline}</Text>
+        ) : null}
         <Text variant="title" numberOfLines={2} style={styles.title}>{event.title}</Text>
-        {event.location?.name && (
-          <Text variant="caption" color="text.secondary" numberOfLines={1}>
-            {event.location.name}
+        {subtitle ? (
+          <Text variant="caption" color="text.tertiary" numberOfLines={1} ellipsizeMode="tail">
+            {subtitle}
           </Text>
-        )}
+        ) : null}
       </View>
 
       {/* Trailing */}
       <View style={styles.trailing}>
-        {trailing === 'price' && (
-          <StatusBadge
-            label={formatPrice(event.price, event.isFree)}
-            variant={event.isFree ? 'free' : 'neutral'}
-          />
-        )}
-        {trailing === 'badge' && event.status && (
-          <StatusBadge label={event.status} variant="urgent" />
-        )}
+        {trailing === 'auto' && <TrailingBadge event={event} />}
         {trailing === 'icon' && trailingIcon}
       </View>
     </Pressable>
@@ -72,7 +99,7 @@ export function SponsoredCard({ event, onPress }) {
   return (
     <View>
       <View style={[styles.sponsoredLabel, { backgroundColor: colors['bg.surface'] }]}>
-        <Text variant="overline" color="text.tertiary">· PATROCINADO</Text>
+        <Text variant="overline" color="text.tertiary">PATROCINADO</Text>
       </View>
       <EventRow event={event} onPress={onPress} trailing="none" />
     </View>

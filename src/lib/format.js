@@ -1,9 +1,10 @@
 // Utilidades de formato — fuente única de verdad para fechas y precios.
 // Ninguna pantalla debe formatear fechas por su cuenta (§ 3 del design system).
 
-const DAYS_ES   = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const MONTHS_FULL = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const DAYS_ES      = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DAYS_FULL_ES = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MONTHS_ES    = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MONTHS_FULL  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
 // Parsea 'DD/MM/YYYY' o ISO string a Date
 function parseEventDate(raw) {
@@ -74,4 +75,41 @@ export function formatDateLong(rawDate) {
   const month = MONTHS_FULL[d.getMonth()];
   const year  = d.getFullYear();
   return `${DAYS_FULL[d.getDay()].charAt(0).toUpperCase() + DAYS_FULL[d.getDay()].slice(1)} ${day} de ${month} del ${year}`;
+}
+
+// Etiqueta del separador de día en el feed (FIX_ROUND_1 § 2.1)
+// Devuelve { label, isToday } para que el llamador pueda colorear
+// hoy      → { label: "HOY · VIERNES 25",   isToday: true  }
+// mañana   → { label: "MAÑANA · SÁBADO 26", isToday: false }
+// resto    → { label: "LUNES 28 DE JULIO",  isToday: false }
+export function formatDaySeparator(rawDate) {
+  const d = parseEventDate(rawDate);
+  if (!d) return { label: '', isToday: false };
+
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const dayName  = DAYS_FULL_ES[d.getDay()].toUpperCase();
+  const day      = d.getDate();
+  const month    = MONTHS_FULL[d.getMonth()].toUpperCase();
+
+  if (d.toDateString() === today.toDateString()) {
+    return { label: `HOY · ${dayName} ${day}`, isToday: true };
+  }
+  if (d.toDateString() === tomorrow.toDateString()) {
+    return { label: `MAÑANA · ${dayName} ${day}`, isToday: false };
+  }
+  return { label: `${dayName} ${day} DE ${month}`, isToday: false };
+}
+
+// Formatea hora en "8:00 pm" para el overline del EventRow
+export function formatTimeShort(rawTime) {
+  if (!rawTime) return '';
+  const m = String(rawTime).match(/(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/);
+  if (!m) return rawTime;
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const meridiem = m[3]?.toLowerCase() ?? (h >= 12 ? 'pm' : 'am');
+  if (!m[3] && h > 12) h -= 12;
+  if (!m[3] && h === 0) h = 12;
+  return `${h}:${min} ${meridiem}`;
 }

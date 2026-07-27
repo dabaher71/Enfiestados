@@ -9,7 +9,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Button from '../components/ui/Button';
 import Dialog from '../components/ui/Dialog';
-import MetaRow from '../components/ui/MetaRow';
 import { SwitchRow } from '../components/ui/Controls';
 import Text from '../components/ui/Text';
 
@@ -33,13 +32,49 @@ export default function SettingsScreen({ navigation }) {
     <Text variant="overline" color="text.tertiary" style={styles.sectionTitle}>{label}</Text>
   );
 
-  const Row = ({ icon, iconColor, label, subtitle, onPress, right }) => (
-    <MetaRow
-      icon={<Ionicons name={icon} size={20} color={iconColor ?? colors['text.secondary']} />}
-      label={label}
-      value={subtitle ?? ''}
+  // Cápsula neutra: fondo rgba(255,255,255,.07), icono text.secondary.
+  // Excepción: destructive → fondo status.urgent al 14%, icono coral.
+  const IconCapsule = ({ icon, destructive = false }) => (
+    <View style={[
+      styles.iconCapsule,
+      { backgroundColor: destructive
+          ? `${colors['status.urgent']}24`
+          : 'rgba(255,255,255,0.07)' },
+    ]}>
+      <Ionicons
+        name={icon}
+        size={20}
+        color={destructive ? '#FF8078' : colors['text.secondary']}
+      />
+    </View>
+  );
+
+  // Row: título 16/700 text.primary arriba, subtítulo 13.5/500 text.tertiary abajo (§ 7.2)
+  const Row = ({ icon, label, subtitle, value, onPress, destructive = false }) => (
+    <Pressable
       onPress={onPress}
-    />
+      disabled={!onPress}
+      style={[styles.row, { borderBottomColor: colors['border.subtle'] }]}
+      accessibilityRole={onPress ? 'button' : undefined}
+    >
+      <IconCapsule icon={icon} destructive={destructive} />
+      <View style={styles.rowText}>
+        <Text variant="subtitle" style={{ color: destructive ? colors['status.urgent'] : colors['text.primary'] }}>
+          {label}
+        </Text>
+        {subtitle ? (
+          <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'], marginTop: 1 }}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {value ? (
+        <Text variant="caption" color="text.tertiary">{value}</Text>
+      ) : null}
+      {onPress && (
+        <Ionicons name="chevron-forward" size={19} color={colors['text.tertiary']} />
+      )}
+    </Pressable>
   );
 
   return (
@@ -58,8 +93,10 @@ export default function SettingsScreen({ navigation }) {
         {/* Cuenta */}
         <SectionTitle label="CUENTA" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Row icon="person-outline" iconColor={colors['nav.selected']} label={t.settings.account} subtitle="Foto, nombre, biografía" onPress={() => navigation.navigate('EditProfile', { user: null })} />
-          <Row icon="lock-closed-outline" iconColor={colors['status.info']} label={t.settings.privacy} subtitle="Permisos, bloqueos" onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
+          <Row icon="person-outline"    label="Editar perfil"       subtitle="Foto, nombre, biografía"        onPress={() => navigation.navigate('EditProfile', { user: null })} />
+          <Row icon="sparkles-outline"  label="Mis intereses"       subtitle="Qué tipo de eventos querés ver"  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
+          <Row icon="location-outline"  label="Zona y distancia"    subtitle="Región y radio de búsqueda"      value="15 km"      onPress={() => Alert.alert('Zona', 'Próximamente…')} />
+          <Row icon="lock-closed-outline" label="Privacidad"        subtitle="Permisos y bloqueos"             onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
         </View>
 
         {/* Apariencia */}
@@ -109,29 +146,17 @@ export default function SettingsScreen({ navigation }) {
         {/* Información */}
         <SectionTitle label="INFORMACIÓN" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Row icon="document-text-outline" iconColor={colors['status.warning']} label="Términos y condiciones" onPress={() => Alert.alert('Términos', 'Próximamente…')} />
-          <Row icon="shield-checkmark-outline" iconColor={colors['status.free']} label="Política de privacidad" onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
-          <Row icon="help-circle-outline" iconColor={colors['status.info']} label="Ayuda y soporte" onPress={() => Alert.alert('Soporte', 'Escribinos a soporte@enfiestados.com')} />
-          <MetaRow
-            icon={<Ionicons name="information-circle-outline" size={20} color={colors['text.tertiary']} />}
-            label="Versión"
-            value={`${Constants.expoConfig?.version ?? '1.0.0'} (Beta)`}
-          />
+          <Row icon="document-text-outline"    label="Términos y condiciones" onPress={() => Alert.alert('Términos', 'Próximamente…')} />
+          <Row icon="shield-checkmark-outline" label="Política de privacidad" onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
+          <Row icon="help-circle-outline"      label="Ayuda y soporte"        onPress={() => Alert.alert('Soporte', 'Escribinos a soporte@enfiestados.com')} />
+          <Row icon="information-circle-outline" label="Versión"              value={`${Constants.expoConfig?.version ?? '1.0.0'} Beta`} />
         </View>
 
         {/* Sesión */}
         <SectionTitle label="SESIÓN" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Pressable
-            onPress={() => setShowLogout(true)}
-            style={[styles.logoutRow, { borderBottomColor: colors['border.subtle'] }]}
-            accessibilityRole="button"
-          >
-            <Ionicons name="log-out-outline" size={20} color={colors['status.urgent']} />
-            <Text variant="subtitle" style={{ color: colors['status.urgent'], marginLeft: space[3] }}>
-              {t.settings.logout}
-            </Text>
-          </Pressable>
+          <Row icon="log-out-outline"  label={t.settings.logout}    destructive onPress={() => setShowLogout(true)} />
+          <Row icon="trash-outline"    label="Eliminar cuenta"       destructive onPress={() => Alert.alert('Eliminar cuenta', 'Esta acción es irreversible. Contactá a soporte@enfiestados.com para proceder.')} />
         </View>
 
         {/* Footer */}
@@ -160,12 +185,34 @@ const styles = StyleSheet.create({
   header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4] },
   back:         { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { paddingHorizontal: space[5], paddingTop: space[5], paddingBottom: space[2] },
-  section:      { marginHorizontal: space[5], borderRadius: 16, paddingHorizontal: space[4], overflow: 'hidden' },
+  section:      { marginHorizontal: space[5], borderRadius: 16, overflow: 'hidden' },
+
+  // Row (§ 7.2): cápsula + texto + valor + chevron
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[4],
+    paddingVertical: space[3],
+    minHeight: 56,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: space[3],
+  },
+  iconCapsule: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rowText: { flex: 1 },
 
   themeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: space[4],
     paddingVertical: space[3],
+    minHeight: 56,
   },
   themeToggle: {
     flexDirection: 'row',
@@ -179,12 +226,6 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  logoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: space[4],
   },
 
   footer: { paddingVertical: space[8], alignItems: 'center' },

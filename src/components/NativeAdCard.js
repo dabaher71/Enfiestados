@@ -1,49 +1,43 @@
-import { Ionicons } from '@expo/vector-icons';
 import { memo, useCallback, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+import Text from './ui/Text';
 
 const AD_UNIT_ID = Platform.select({
   android: TestIds.BANNER,
   ios: TestIds.BANNER,
 });
 
+// Regla: un slot vacío no ocupa espacio (FIX_ROUND_1 § 1.2).
+// Devuelve null hasta que el anuncio cargue o falle definitivamente.
 function NativeAdCard() {
-  const [adError, setAdError] = useState(false);
+  const { colors } = useTheme();
+  const [loaded,  setLoaded]  = useState(false);
+  const [failed,  setFailed]  = useState(false);
 
-  const handleAdError = useCallback((error) => {
-    console.log('Ad failed to load:', error);
-    setAdError(true);
-  }, []);
+  const handleLoad  = useCallback(() => setLoaded(true),  []);
+  const handleError = useCallback(() => setFailed(true),  []);
 
-  if (adError) {
-    return (
-      <View style={styles.fallbackCard}>
-        <View style={styles.header}>
-          <Ionicons name="megaphone" size={14} color="#6c5ce7" />
-          <Text style={styles.sponsoredText}>Publicidad</Text>
-        </View>
-        <Text style={styles.fallbackTitle}>¡Descubre ofertas especiales!</Text>
-        <Text style={styles.fallbackText}>
-          Este espacio es para mostrar anuncios integrados en tu feed.
-        </Text>
-      </View>
-    );
-  }
+  // No cargó y falló → sin espacio
+  if (failed) return null;
 
   return (
-    <View style={styles.card}>
+    <View style={[
+      styles.card,
+      { backgroundColor: colors['bg.surface'] },
+      !loaded && styles.hidden,   // oculto hasta que el SDK confirme carga
+    ]}>
       <View style={styles.header}>
-        <Ionicons name="megaphone" size={14} color="#6c5ce7" />
-        <Text style={styles.sponsoredText}>Publicidad</Text>
+        <Text variant="caption" color="text.tertiary">Publicidad</Text>
       </View>
       <BannerAd
         unitId={AD_UNIT_ID}
         size={BannerAdSize.MEDIUM_RECTANGLE}
-        requestOptions={{
-          requestNonPersonalizedAdsOnly: true,
-        }}
-        onAdFailedToLoad={handleAdError}
+        requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        onAdLoaded={handleLoad}
+        onAdFailedToLoad={handleError}
       />
     </View>
   );
@@ -53,42 +47,13 @@ export default memo(NativeAdCard);
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginVertical: 10,
-    padding: 15,
+    borderRadius: radius.lg,
+    marginHorizontal: space[5],
+    marginVertical: space[3],
+    padding: space[4],
     alignItems: 'center',
     overflow: 'hidden',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginBottom: 10,
-    gap: 6,
-  },
-  sponsoredText: {
-    color: '#6c5ce7',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  fallbackCard: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginVertical: 10,
-    padding: 15,
-  },
-  fallbackTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  fallbackText: {
-    color: '#aaa',
-    fontSize: 14,
-  },
+  hidden: { opacity: 0, height: 0, marginVertical: 0, padding: 0 },
+  header: { alignSelf: 'flex-start', marginBottom: space[2] },
 });
