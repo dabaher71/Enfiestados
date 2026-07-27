@@ -1,11 +1,11 @@
 // ProfileScreen — "Mi mochila" (perfil propio)
-// LÓGICA INTACTA: eventos, posts, follows, admin/advertiser checks.
-// PRESENTACIÓN: design system v1.1 — tokens, EventRow, Avatar, UnderlineTabs.
+// FIX_ROUND_1 § 5: stats Voy/Guardados/Seguidores, sin banner publicidad,
+// nombre con @handle + ciudad, tabs Organizo/Publicaciones.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '../components/ui/Avatar';
@@ -26,37 +26,46 @@ import { radius, space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
 
 const TABS = [
-  { label: t.profile.tabs.events, value: 'eventos' },
-  { label: t.profile.tabs.posts,  value: 'publicaciones' },
+  { label: 'Organizo',       value: 'eventos' },
+  { label: 'Publicaciones',  value: 'publicaciones' },
 ];
 
 export default function ProfileScreen({ navigation }) {
   const { colors } = useTheme();
-  const [user,    setUser]    = useState(null);
-  const [events,  setEvents]  = useState([]);
-  const [posts,   setPosts]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [tab,     setTab]     = useState('eventos');
+  const [user,           setUser]           = useState(null);
+  const [events,         setEvents]         = useState([]);
+  const [posts,          setPosts]          = useState([]);
+  const [attendingCount, setAttendingCount] = useState(0);
+  const [loading,        setLoading]        = useState(true);
+  const [tab,            setTab]            = useState('eventos');
 
   const currentUser = auth.currentUser;
 
   useEffect(() => {
     loadUser();
-    const unsubEvents = subscribeToEvents((all) => {
+
+    // Eventos que organizó el usuario
+    const unsubEvents = subscribeToEvents(all => {
       setEvents(all.filter(e => e.organizerId === currentUser.uid));
     });
-    let unsubPosts;
-    try {
-      unsubPosts = subscribeToUserPosts(currentUser.uid, setPosts);
-    } catch {}
 
-    const focusUnsub = navigation.addListener('focus', () => {
-      setLoading(true);
-      loadUser();
-    });
+    // Posts del usuario
+    let unsubPosts;
+    try { unsubPosts = subscribeToUserPosts(currentUser.uid, setPosts); } catch {}
+
+    // Conteo de "Voy" en tiempo real
+    const unsubAttending = onSnapshot(
+      query(collection(db, 'events'), where('attendees', 'array-contains', currentUser.uid)),
+      snap => setAttendingCount(snap.size),
+      () => {}
+    );
+
+    const focusUnsub = navigation.addListener('focus', () => { setLoading(true); loadUser(); });
+
     return () => {
       unsubEvents?.();
       unsubPosts?.();
+      unsubAttending?.();
       focusUnsub?.();
     };
   }, []);
@@ -69,7 +78,7 @@ export default function ProfileScreen({ navigation }) {
     setLoading(false);
   };
 
-  const isExpired = (e) => {
+  const isExpired = e => {
     try {
       const [d, m, y] = e.date.split('/');
       const [h, min] = (e.time || '23:59').split(':');
@@ -113,12 +122,12 @@ export default function ProfileScreen({ navigation }) {
     try { await deletePost(postId, currentUser.uid); setPosts(prev => prev.filter(p => p.id !== postId)); } catch {}
   }, [currentUser.uid]);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-        <View style={styles.header}>
+        <View style={styles.topBar}>
           <Text variant="h2">Perfil</Text>
         </View>
         <SkeletonList count={4} />
@@ -126,116 +135,135 @@ export default function ProfileScreen({ navigation }) {
     );
   }
 
+  // Handle del usuario (primera parte del email o displayName como slug)
+  const handle = user?.handle
+    || (currentUser.displayName?.toLowerCase().replace(/\s+/g, '') )
+    || currentUser.email?.split('@')[0];
+
+  const followerCount = user?.followers?.length ?? 0;
+
+  const STATS = [
+    { label: 'Voy',       value: attendingCount, onPress: () => navigation.navigate('MyPlans') },
+    { label: 'Guardados', value: 0,              onPress: () => navigation.navigate('MyPlans') },
+    { label: 'Seguidores',value: followerCount,  onPress: () => {} },
+  ];
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
 
-        {/* Header */}
-        <View style={styles.header}>
+        {/* ── TOP BAR: título + settings ─────────────────────────────── */}
+        <View style={styles.topBar}>
           <Text variant="h2">Perfil</Text>
           <Pressable
             onPress={() => navigation.navigate('Settings')}
-            style={styles.headerIcon}
-            accessibilityLabel={t.settings.title}
+            style={styles.iconBtn}
+            accessibilityLabel="Configuración"
             accessibilityRole="button"
           >
             <Ionicons name="settings-outline" size={24} color={colors['text.primary']} />
           </Pressable>
         </View>
 
-        {/* Cover */}
+        {/* ── PORTADA 150px con overlay en la base ──────────────────── */}
         <View style={[styles.cover, { backgroundColor: colors['bg.surface'] }]}>
-          {user?.coverImage && (
+          {user?.coverImage ? (
             <Image source={{ uri: user.coverImage }} style={styles.coverImg} contentFit="cover" />
-          )}
+          ) : null}
+          {/* Overlay degradado hacia bg.base */}
+          <View style={[styles.coverOverlay, { backgroundColor: colors['bg.base'] }]} />
         </View>
 
-        {/* Avatar + info */}
+        {/* ── AVATAR superpuesto ────────────────────────────────────── */}
         <View style={styles.profileSection}>
-          <View style={[styles.avatarRing, { borderColor: colors['bg.base'] }]}>
+          <Pressable
+            onPress={() => navigation.navigate('UserProfile', { userId: currentUser.uid })}
+            style={[styles.avatarRing, { borderColor: colors['bg.base'] }]}
+            accessibilityRole="button"
+            accessibilityLabel="Ver perfil público"
+          >
             <Avatar uri={user?.avatar} name={user?.name || currentUser.displayName} size={88} />
+          </Pressable>
+
+          {/* Nombre en Bricolage h2 */}
+          <Text style={[styles.name, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
+            {user?.name || 'Usuario'}
+          </Text>
+
+          {/* @handle · Ciudad */}
+          <Text variant="caption" color="text.tertiary" style={styles.handle}>
+            @{handle}{user?.location ? ` · ${user.location}` : ''}
+          </Text>
+
+          {/* Bio: si no hay bio en perfil propio → enlace "Agregá una bio" */}
+          {user?.bio ? (
+            <Text variant="body" color="text.secondary" align="center" style={styles.bio}>{user.bio}</Text>
+          ) : (
+            <Pressable onPress={() => navigation.navigate('EditProfile', { user: null })} style={{ marginTop: space[2] }}>
+              <Text variant="caption" color="link">Agregá una bio</Text>
+            </Pressable>
+          )}
+
+          {/* Acciones: [Editar perfil] + [Compartir] */}
+          <View style={styles.actionsRow}>
+            <Button
+              variant="secondary"
+              size="sm"
+              label="Editar perfil"
+              onPress={() => navigation.navigate('EditProfile', { user: null })}
+              style={{ flex: 1 }}
+            />
+            <Pressable
+              style={[styles.shareBtn, { backgroundColor: colors['bg.surface'] }]}
+              onPress={() => Share.share({ message: `Seguime en Enfiestados: @${handle}` }).catch(() => {})}
+              accessibilityLabel="Compartir perfil"
+            >
+              <Ionicons name="share-outline" size={20} color={colors['text.primary']} />
+            </Pressable>
           </View>
 
-          <Text variant="h2" style={styles.name}>{user?.name || 'Usuario'}</Text>
-          {user?.bio && <Text variant="body" color="text.secondary" align="center" style={styles.bio}>{user.bio}</Text>}
-
-          {/* Botón editar perfil */}
-          <Button
-            variant="secondary"
-            size="sm"
-            label={t.profile.editProfile}
-            onPress={() => navigation.navigate('EditProfile')}
-            style={styles.editBtn}
-          />
-
-          {/* Accesos especiales */}
+          {/* Accesos admin/advertiser — compactos */}
           {(user?.isAdmin || user?.isAdvertiser) && (
             <View style={styles.specialRow}>
               {user?.isAdvertiser && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  label="Centro de Anuncios"
-                  leadingIcon={<Ionicons name="megaphone" size={16} color={colors['nav.selected']} />}
-                  onPress={() => navigation.navigate('AdCenter')}
-                />
+                <Button variant="secondary" size="sm" label="Anuncios" leadingIcon={<Ionicons name="megaphone" size={14} color={colors['nav.selected']} />} onPress={() => navigation.navigate('AdCenter')} />
               )}
               {user?.isAdmin && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  label="Panel Admin"
-                  leadingIcon={<Ionicons name="shield-checkmark" size={16} color={colors['text.onAction']} />}
-                  onPress={() => navigation.navigate('Admin')}
-                />
+                <Button variant="primary" size="sm" label="Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
               )}
             </View>
           )}
 
-          {/* Invitación a anunciarse */}
-          {!user?.isAdvertiser && !user?.isAdmin && (
-            <Pressable
-              style={[styles.advertiseBar, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
-              onPress={() => navigation.navigate('AdvertiserRequest')}
-            >
-              <Ionicons name="megaphone-outline" size={16} color={colors['nav.selected']} />
-              <Text variant="caption" color="nav.selected" style={{ flex: 1 }}>¿Querés publicitar en Enfiestados?</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors['nav.selected']} />
-            </Pressable>
-          )}
-
-          {/* Stats */}
+          {/* Stats: Voy · Guardados · Seguidores (tocables) */}
           <View style={[styles.statsRow, { borderTopColor: colors['border.subtle'], borderBottomColor: colors['border.subtle'] }]}>
-            {[
-              { label: 'Posts',      value: posts.length },
-              { label: 'Seguidores', value: user?.followers?.length ?? 0 },
-              { label: 'Siguiendo',  value: user?.following?.length  ?? 0 },
-            ].map((s, i) => (
-              <View key={i} style={styles.statItem}>
-                <Text variant="h3">{s.value > 999 ? `${(s.value/1000).toFixed(1)}k` : s.value}</Text>
+            {STATS.map((s, i) => (
+              <Pressable key={i} style={styles.statItem} onPress={s.onPress} accessibilityRole="button">
+                <Text style={{ fontSize: 22, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.primary'] }}>
+                  {s.value > 999 ? `${(s.value / 1000).toFixed(1)}k` : s.value}
+                </Text>
                 <Text variant="caption" color="text.tertiary">{s.label}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         </View>
 
-        {/* Tabs */}
+        {/* ── TABS: Organizo | Publicaciones ────────────────────────── */}
         <View style={styles.tabsWrap}>
           <UnderlineTabs options={TABS} selected={tab} onSelect={setTab} />
         </View>
 
-        {/* Contenido de tabs */}
+        {/* ── CONTENIDO ─────────────────────────────────────────────── */}
         {tab === 'eventos' ? (
           events.length === 0 ? (
             <EmptyState
               icon={<Ionicons name="calendar-outline" size={28} color={colors['text.tertiary']} />}
-              title="No has creado eventos aún"
+              title="No organizaste eventos aún"
               description="Creá tu primer evento y empezá a recibir asistentes."
               actionLabel="Crear evento"
               onAction={() => navigation.navigate('CreateEvent')}
             />
           ) : (
-            <View>
+            <>
               {active.length > 0 && (
                 <>
                   <View style={[styles.sectionHeader, { borderBottomColor: colors['border.subtle'] }]}>
@@ -243,7 +271,7 @@ export default function ProfileScreen({ navigation }) {
                     <Text variant="overline" color="text.tertiary">ACTIVOS · {active.length}</Text>
                   </View>
                   {active.map(ev => (
-                    <EventRow key={ev.id} event={ev} trailing="price" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
+                    <EventRow key={ev.id} event={ev} trailing="auto" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
                   ))}
                 </>
               )}
@@ -254,19 +282,21 @@ export default function ProfileScreen({ navigation }) {
                     <Text variant="overline" color="text.tertiary">PASADOS · {expired.length}</Text>
                   </View>
                   {expired.map(ev => (
-                    <View key={ev.id} style={{ opacity: 0.55 }}>
-                      <EventRow event={ev} trailing="price" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
+                    <View key={ev.id} style={{ opacity: 0.5 }}>
+                      <EventRow event={ev} trailing="auto" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
                     </View>
                   ))}
                 </>
               )}
-            </View>
+            </>
           )
         ) : (
+          /* ── PUBLICACIONES ──────────────────────────────────────── */
           <>
             <Pressable
               style={[styles.createPostBar, { backgroundColor: colors['bg.surface'], borderColor: colors['nav.selected'] }]}
               onPress={() => navigation.navigate('CreatePost')}
+              accessibilityRole="button"
             >
               <Ionicons name="add-circle-outline" size={22} color={colors['nav.selected']} />
               <Text variant="label" color="nav.selected">Crear publicación</Text>
@@ -286,7 +316,7 @@ export default function ProfileScreen({ navigation }) {
                   onLike={handlePostLike}
                   onComment={handlePostComment}
                   onDelete={handlePostDelete}
-                  onUserPress={(uid) => { if (uid !== currentUser.uid) navigation.navigate('UserProfile', { userId: uid }); }}
+                  onUserPress={uid => { if (uid !== currentUser.uid) navigation.navigate('UserProfile', { userId: uid }); }}
                 />
               ))
             )}
@@ -298,30 +328,56 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe:   { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[5], paddingVertical: space[4] },
-  headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  safe: { flex: 1 },
 
-  cover:    { height: 140 },
-  coverImg: { width: '100%', height: '100%' },
-
-  profileSection: { alignItems: 'center', paddingHorizontal: space[5], marginTop: -44 },
-  avatarRing: { borderWidth: 4, borderRadius: 999, marginBottom: space[3] },
-  name:      { marginTop: space[2] },
-  bio:       { marginTop: space[2], paddingHorizontal: space[4] },
-  editBtn:   { marginTop: space[3] },
-  specialRow: { flexDirection: 'row', gap: space[2], marginTop: space[3], flexWrap: 'wrap', justifyContent: 'center' },
-
-  advertiseBar: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: radius.md,
-    paddingHorizontal: space[3],
-    paddingVertical: space[2],
-    marginTop: space[3],
-    borderWidth: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: space[5],
+    paddingVertical: space[4],
+  },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+
+  // Portada
+  cover:        { height: 150, position: 'relative' },
+  coverImg:     { width: '100%', height: '100%' },
+  coverOverlay: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    height: 60,
+    opacity: 0.7,
+  },
+
+  // Perfil
+  profileSection: { alignItems: 'center', paddingHorizontal: space[5], marginTop: -44 },
+  avatarRing:     { borderWidth: 4, borderRadius: 999, marginBottom: space[3] },
+  name:           { fontSize: 26, lineHeight: 30, marginTop: space[2], textAlign: 'center' },
+  handle:         { marginTop: space[1] },
+  bio:            { marginTop: space[2], paddingHorizontal: space[4] },
+
+  actionsRow: {
+    flexDirection: 'row',
     gap: space[2],
+    marginTop: space[4],
     width: '100%',
+    alignItems: 'center',
+  },
+  shareBtn: {
+    width: 48,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  specialRow: {
+    flexDirection: 'row',
+    gap: space[2],
+    marginTop: space[3],
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
 
   statsRow: {
@@ -332,9 +388,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: space[4],
   },
-  statItem: { flex: 1, alignItems: 'center', gap: 4 },
+  statItem: { flex: 1, alignItems: 'center', gap: 3 },
 
-  tabsWrap: { paddingHorizontal: space[5], marginTop: space[2] },
+  tabsWrap: { paddingHorizontal: space[5], marginTop: space[3] },
 
   sectionHeader: {
     flexDirection: 'row',
