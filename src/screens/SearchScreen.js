@@ -100,10 +100,11 @@ function isInTimeRange(dateStr, filter) {
   return true;
 }
 
-// ─── Marcador de precio (píldora amarilla) ────────────────────────────────────
+// ─── Marcador de precio — § 3.4: oscuro para precio, verde para gratis ───────
 
 function PricePin({ event, selected, colors }) {
-  const label = event.isFree === true || event.price === 0
+  const isFree = event.isFree === true || event.price === 0;
+  const label  = isFree
     ? 'Gratis'
     : typeof event.price === 'number' ? `₡${event.price}` : '';
   if (!label) return null;
@@ -111,14 +112,16 @@ function PricePin({ event, selected, colors }) {
   return (
     <View style={[
       styles.pin,
-      selected
-        ? { backgroundColor: colors['text.primary'], borderColor: colors['bg.base'] }
-        : { backgroundColor: colors['action.primary'], borderColor: colors['bg.base'] },
+      selected && styles.pinSelected,
+      isFree
+        ? { backgroundColor: colors['status.free'] }
+        : { backgroundColor: '#1C1726' },         // oscuro para precio (§ 3.4)
+      selected && { borderWidth: 2, borderColor: colors['action.primary'] },
     ]}>
       <Text style={{
-        fontSize: 12,
-        fontFamily: 'PlusJakartaSans_700Bold',
-        color: selected ? colors['bg.base'] : colors['text.onAction'],
+        fontSize: 11.5,
+        fontFamily: 'PlusJakartaSans_800ExtraBold',
+        color: '#FDFBF7',
       }}>
         {label}
       </Text>
@@ -126,27 +129,48 @@ function PricePin({ event, selected, colors }) {
   );
 }
 
-// ─── Grilla de categorías (2 columnas, 74px de alto) ─────────────────────────
+// ─── Grilla de categorías — § 3.1: fila (icono + texto), 74px, 6 + "Ver las 12"
+// § 3.6: toLocaleUpperCase para MÚSICA, NATURALEZA con tildes
 
-function CategoryGrid({ onSelect, colors }) {
+function CategoryGrid({ onSelect, colors, showAll, onToggleAll }) {
   const cellW = (SW - space[5] * 2 - space[2]) / 2;
+  const displayed = showAll ? CATEGORIES : CATEGORIES.slice(0, 6);
   return (
-    <View style={styles.catGrid}>
-      {CATEGORIES.map(cat => (
-        <Pressable
-          key={cat.id}
-          onPress={() => onSelect(cat.id)}
-          style={[styles.catCell, { width: cellW, backgroundColor: `${cat.color}38`, borderColor: `${cat.color}48` }]}
-          accessibilityRole="button"
-          accessibilityLabel={cat.name}
-        >
-          <Ionicons name={cat.icon} size={21} color={cat.color} />
-          <Text style={{ fontSize: 15.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.primary'], marginTop: 4 }}>
-            {cat.name}
-          </Text>
+    <>
+      <View style={styles.catGrid}>
+        {displayed.map(cat => (
+          <Pressable
+            key={cat.id}
+            onPress={() => onSelect(cat.id)}
+            style={[
+              styles.catCell,
+              { width: cellW, backgroundColor: `${cat.color}24`, borderColor: `${cat.color}42` },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={cat.name}
+          >
+            {/* Fila: icono + texto (no apilados) — permite nombres largos sin cortar (§ 3.1) */}
+            <View style={[styles.catIconWrap, { backgroundColor: `${cat.color}18` }]}>
+              <Ionicons name={cat.icon} size={22} color={cat.color} />
+            </View>
+            <Text style={{
+              fontSize: 15.5,
+              fontFamily: 'PlusJakartaSans_700Bold',
+              color: colors['text.primary'],
+              flex: 1,
+              flexShrink: 1,
+            }} numberOfLines={1} ellipsizeMode="tail">
+              {cat.name}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {!showAll && CATEGORIES.length > 6 && (
+        <Pressable onPress={onToggleAll} style={styles.seeAllCats} accessibilityRole="button">
+          <Text variant="label" color="link">Ver las {CATEGORIES.length} categorías</Text>
         </Pressable>
-      ))}
-    </View>
+      )}
+    </>
   );
 }
 
@@ -375,12 +399,12 @@ export default function SearchScreen({ navigation }) {
               <View style={styles.sectionHeader}>
                 <Text variant="h3">Categorías</Text>
               </View>
-              <CategoryGrid onSelect={id => setCategory(id)} colors={colors} />
-              {!showAllCats && CATEGORIES.length > 8 && (
-                <Pressable onPress={() => setShowAllCats(true)} style={styles.seeAll}>
-                  <Text variant="label" color="link">Ver las {CATEGORIES.length} categorías</Text>
-                </Pressable>
-              )}
+              <CategoryGrid
+                onSelect={id => setCategory(id)}
+                colors={colors}
+                showAll={showAllCats}
+                onToggleAll={() => setShowAllCats(true)}
+              />
               {/* Sección "Cerca de vos" */}
               <View style={styles.sectionHeader}>
                 <Text variant="h3">Cerca de vos</Text>
@@ -453,7 +477,7 @@ export default function SearchScreen({ navigation }) {
               )}
             </View>
 
-            {/* Lista horizontal de eventos visibles */}
+            {/* Lista horizontal — § 3.3: paddingHorizontal + peek de la siguiente card */}
             {visibleEvents.length > 0 && (
               <FlatList
                 ref={listRef}
@@ -461,14 +485,21 @@ export default function SearchScreen({ navigation }) {
                 keyExtractor={item => item.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                snapToInterval={CARD_W + space[3]}
+                snapToAlignment="start"
+                decelerationRate="fast"
                 contentContainerStyle={{ paddingHorizontal: space[5], gap: space[3] }}
                 renderItem={({ item }) => (
                   <Pressable
                     onPress={() => handleCardPress(item)}
-                    style={[styles.mapCard, { backgroundColor: colors['bg.surface'], borderColor: selectedEvent?.id === item.id ? colors['action.primary'] : 'transparent' }]}
+                    style={[styles.mapCard, {
+                      backgroundColor: colors['bg.surface'],
+                      borderWidth: selectedEvent?.id === item.id ? 2 : 0,
+                      borderColor: colors['action.primary'],
+                    }]}
                   >
                     <Text variant="caption" color="text.tertiary" numberOfLines={1}>
-                      {item.category?.toUpperCase()}
+                      {item.category?.toLocaleUpperCase('es-CR')}
                     </Text>
                     <Text variant="title" numberOfLines={2} style={{ marginVertical: 4 }}>{item.title}</Text>
                     {item.location?.name && (
@@ -606,13 +637,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: space[5],
     gap: space[2],
   },
+  // § 3.1: fila (icono a la izquierda, texto a la derecha), 74px alto
   catCell: {
     height: 74,
     borderRadius: radius.md,
     borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    gap: space[3],
+  },
+  catIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    flexShrink: 0,
+  },
+  seeAllCats: {
+    alignSelf: 'center',
+    paddingVertical: space[3],
+    paddingHorizontal: space[5],
   },
   seeAll: {
     alignSelf: 'center',
@@ -620,17 +666,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: space[5],
   },
 
-  // Pines de mapa
+  // Pines de mapa — § 3.4: oscuro para precio, verde para gratis
   pin: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: radius.full,
-    borderWidth: 2,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 4,
+  },
+  // § 3.4: seleccionado escala 1.12 + borde action.primary
+  pinSelected: {
+    transform: [{ scale: 1.12 }],
   },
 
   // FAB

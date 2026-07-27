@@ -17,11 +17,13 @@ import { auth, db } from '../config/firebase';
 import { addComment, deleteComment } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
+import { useTheme } from '../theme/ThemeProvider';
 
 const MAX_COMMENT_LENGTH = 500;
 const COMMENT_COOLDOWN_MS = 5000;
 
 export default function CommentsSection({ eventId, comments: initialComments, organizerId, event, onUserPress }) {
+  const { colors } = useTheme();
   const [comments, setComments] = useState(initialComments || []);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -242,25 +244,30 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         />
       )}
 
-      <View style={styles.inputContainer}>
+      {/* § 5.1: bg.surface + botón enviar amarillo 52px (no flecha gris) */}
+      <View style={[styles.inputContainer, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}>
         <TextInput
-          style={styles.input}
-          placeholder="Escribe un comentario..."
-          placeholderTextColor="#888"
+          style={[styles.input, { color: colors['text.primary'], fontFamily: 'PlusJakartaSans_400Regular' }]}
+          placeholder="Comentá…"
+          placeholderTextColor={colors['text.tertiary']}
           value={newComment}
           onChangeText={(t) => setNewComment(t.slice(0, MAX_COMMENT_LENGTH))}
           multiline
           maxLength={MAX_COMMENT_LENGTH}
         />
         <TouchableOpacity
-          style={[styles.sendButton, (!newComment.trim() || loading) && styles.sendButtonDisabled]}
+          style={[
+            styles.sendButton,
+            { backgroundColor: newComment.trim() && !loading ? colors['action.primary'] : colors['bg.raised'] },
+          ]}
           onPress={handleSubmit}
           disabled={!newComment.trim() || loading}
+          accessibilityLabel="Enviar comentario"
         >
-          <Ionicons 
-            name="send" 
-            size={20} 
-            color={newComment.trim() && !loading ? '#6c5ce7' : '#888'} 
+          <Ionicons
+            name="send"
+            size={18}
+            color={newComment.trim() && !loading ? colors['text.onAction'] : colors['text.tertiary']}
           />
         </TouchableOpacity>
       </View>
@@ -342,27 +349,26 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2d2d44',
-    borderRadius: 25,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     marginTop: 15,
+    gap: 8,
   },
   input: {
     flex: 1,
-    color: '#fff',
     fontSize: 15,
     maxHeight: 80,
     paddingVertical: 8,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
+  sendButtonDisabled: { opacity: 0.5 },
 });
