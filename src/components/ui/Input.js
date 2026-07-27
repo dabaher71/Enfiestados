@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, TextInput, View } from 'react-native';
+import useReducedMotion from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import Text from './Text';
@@ -23,6 +25,21 @@ export default function Input({
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
   const inputRef = useRef(null);
+  const reduced  = useReducedMotion();
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // Shake + haptic cuando aparece un error
+  useEffect(() => {
+    if (!errorText) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    if (!reduced) {
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: 6,  duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -6, duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0,  duration: 60, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [errorText]);
 
   const borderColor = errorText
     ? colors['status.urgent']
@@ -31,7 +48,7 @@ export default function Input({
     : colors['border.strong'];
 
   return (
-    <View style={style}>
+    <Animated.View style={[style, { transform: [{ translateX: shakeAnim }] }]}>
       {label && (
         <Text variant="label" color="text.secondary" style={styles.label}>
           {label}
@@ -75,7 +92,7 @@ export default function Input({
       ) : helperText ? (
         <Text variant="caption" color="text.tertiary" style={styles.helper}>{helperText}</Text>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

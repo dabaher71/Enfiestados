@@ -1,7 +1,10 @@
 // EventCardHero — afiche 1:1, overlay, badges, CTA.
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { useRef } from 'react';
+import useReducedMotion from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import { formatEventDate, formatPrice } from '../../lib/format';
@@ -10,6 +13,19 @@ import Text from './Text';
 
 export default function EventCardHero({ event, onPress, onSave, saved = false }) {
   const { colors } = useTheme();
+  const reduced  = useReducedMotion();
+  const saveAnim = useRef(new Animated.Value(1)).current;
+
+  const handleSave = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (!reduced) {
+      Animated.sequence([
+        Animated.timing(saveAnim, { toValue: 1.15, duration: 160, useNativeDriver: true }),
+        Animated.timing(saveAnim, { toValue: 1,    duration: 160, useNativeDriver: true }),
+      ]).start();
+    }
+    onSave?.();
+  };
   const dateStr = formatEventDate(event.date, event.time);
 
   return (
@@ -42,16 +58,18 @@ export default function EventCardHero({ event, onPress, onSave, saved = false })
 
         {/* Guardar — arriba derecha */}
         <Pressable
-          onPress={onSave}
+          onPress={handleSave}
           style={styles.saveBtn}
           accessibilityLabel={saved ? 'Quitar de guardados' : 'Guardar evento'}
           hitSlop={8}
         >
-          <Ionicons
-            name={saved ? 'bookmark' : 'bookmark-outline'}
-            size={22}
-            color={saved ? colors['action.primary'] : colors['text.primary']}
-          />
+          <Animated.View style={{ transform: [{ scale: saveAnim }] }}>
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={22}
+              color={saved ? colors['action.primary'] : colors['text.primary']}
+            />
+          </Animated.View>
         </Pressable>
       </View>
 
