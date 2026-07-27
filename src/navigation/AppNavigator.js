@@ -25,6 +25,7 @@ import CreateAdScreen from '../screens/CreateAdScreen';
 import AdvertiserRequestScreen from '../screens/AdvertiserRequestScreen';
 import InterestsScreen from '../screens/InterestsScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
+import ExternalEventDetailScreen from '../screens/ExternalEventDetailScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import DevCatalogScreen from '../screens/DevCatalogScreen';
 
@@ -79,6 +80,11 @@ export default function AppNavigator() {
               <Stack.Screen name="MainApp" component={MainTabNavigator} />
               <Stack.Screen name="Interests" component={InterestsScreen} options={{ gestureEnabled: false }} />
               <Stack.Screen name="EventDetail" component={EventDetailScreen} />
+              <Stack.Screen
+                name="ExternalEventDetail"
+                component={ExternalEventDetailScreen}
+                options={{ presentation: 'modal', headerShown: false }}
+              />
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />
               <Stack.Screen name="Chats" component={ChatsScreen} />

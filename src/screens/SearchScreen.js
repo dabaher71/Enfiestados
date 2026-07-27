@@ -253,7 +253,7 @@ export default function SearchScreen({ navigation }) {
   }, [visibleEvents]);
 
   const handleCardPress = useCallback((event) => {
-    if (event._isExternal) safeOpenURL(event.eventUrl);
+    if (event._isExternal) navigation.navigate('ExternalEventDetail', { event });
     else navigation.navigate('EventDetail', { event });
   }, [navigation]);
 

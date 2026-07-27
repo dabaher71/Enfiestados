@@ -286,11 +286,14 @@ export default function HomeScreen({ navigation }) {
       return <InternalAdCard ad={item.ad} onEventPress={id => navigation.navigate('EventDetail', { eventId: id })} />;
     }
     if (item._isAd) return <NativeAdCard />;
+
+    // Eventos externos → sheet dedicado. Eventos nativos → detalle de la app.
+    const route = item._isExternal ? 'ExternalEventDetail' : 'EventDetail';
     return (
       <EventRow
         event={item}
         trailing="auto"
-        onPress={() => navigation.navigate('EventDetail', { event: item })}
+        onPress={() => navigation.navigate(route, { event: item })}
       />
     );
   }, [navigation]);

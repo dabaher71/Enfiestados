@@ -66,6 +66,25 @@ function formatTime12(raw) {
   return `${h}:${min} ${meridiem}`;
 }
 
+// "faltan 5 días" / "Hoy" / "Mañana" / null si ya pasó
+export function formatDaysUntil(dateISO) {
+  if (!dateISO) return null;
+  const d = new Date(dateISO);
+  if (isNaN(d)) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.ceil((d - today) / 86400000);
+  if (diff < 0)  return null;
+  if (diff === 0) return 'Hoy';
+  if (diff === 1) return 'Mañana';
+  return `faltan ${diff} días`;
+}
+
+// Extrae dominio legible de una URL: "smarticket.net"
+export function formatDomain(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch { return url ?? ''; }
+}
+
 // Fecha larga: "Lunes 26 de julio del 2026"
 export function formatDateLong(rawDate) {
   const d = parseEventDate(rawDate);
