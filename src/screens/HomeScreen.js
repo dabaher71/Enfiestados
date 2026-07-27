@@ -1,24 +1,25 @@
-// HomeScreen — feed "Para vos" / "Siguiendo" con agenda por día, scroll infinito.
-// FIX_ROUND_1: separadores correctos, header con chips, overline correcto, badges,
-//              fin de feed, sin hueco vacío en ads, SkeletonList desde frame 0.
+// HomeScreen — reconstrucción según FIX_ROUND_2 § 3
+// SectionList con sticky headers por día, fila de chips correcta, badge correcto.
+// Lógica de datos/hooks intacta.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import {
+  Pressable, RefreshControl, SectionList,
+  ScrollView, StyleSheet, View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import InternalAdCard from '../components/InternalAdCard';
 import NativeAdCard from '../components/NativeAdCard';
+import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
-import EventCardHero from '../components/ui/EventCardHero';
 import EventRow from '../components/ui/EventRow';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
-import Skeleton, { SkeletonEventRow, SkeletonList } from '../components/ui/Skeleton';
+import { SkeletonEventRow, SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
-import Button from '../components/ui/Button';
 
 import { auth, db, functions } from '../config/firebase';
 import useExternalEvents from '../hooks/useExternalEvents';
@@ -32,9 +33,9 @@ import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
 
-// ─── Helpers de fecha/timestamp ───────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const getEventTimestamp = (ev) => {
+function getTs(ev) {
   if (ev?._isExternal) {
     const ts = ev.dateISO ? new Date(ev.dateISO).getTime() : Infinity;
     return isNaN(ts) ? Infinity : ts;
@@ -50,105 +51,92 @@ const getEventTimestamp = (ev) => {
   }
   const p = Date.parse(d);
   return isNaN(p) ? Infinity : p;
-};
-
-const sortByDateAsc = (events = []) =>
-  events.slice().sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
-
-const getDateKey = (event) => {
-  const ts = getEventTimestamp(event);
-  if (ts === Infinity) return null;
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-};
-
-// Construye el array del feed con separadores de día y ads.
-// Devuelve también stickyHeaderIndices para que FlashList ancle los separadores.
-function buildFeedData(events, internalAds) {
-  const data = [];
-  const stickyIndices = [];
-  let lastKey = null;
-  let adSlot = 0;
-  let eventCount = 0;
-
-  // Agrupa eventos por día para el contador del separador
-  const countByKey = {};
-  events.forEach(ev => {
-    const k = getDateKey(ev);
-    if (k) countByKey[k] = (countByKey[k] || 0) + 1;
-  });
-
-  events.forEach((event) => {
-    const key = getDateKey(event);
-    if (key && key !== lastKey) {
-      stickyIndices.push(data.length);
-      data.push({
-        _isSeparator: true,
-        date: event.date ?? event.dateISO,
-        count: countByKey[key] ?? 0,
-        id: `sep_${key}`,
-      });
-      lastKey = key;
-    }
-    data.push(event);
-    eventCount++;
-
-    // Ad cada 6 eventos, nunca antes del 4º (ratio 1:6)
-    if (eventCount >= 4 && eventCount % 6 === 0) {
-      if (internalAds.length > 0) {
-        const ad = internalAds[adSlot % internalAds.length];
-        data.push({ _isInternalAd: true, ad, id: `iad_${adSlot}` });
-        adSlot++;
-      } else {
-        data.push({ _isAd: true, id: `ad_${eventCount}` });
-      }
-    }
-  });
-  return { data, stickyIndices };
 }
 
-// ─── Filtros de tiempo ────────────────────────────────────────────────────────
+function sortAsc(events) {
+  return events.slice().sort((a, b) => getTs(a) - getTs(b));
+}
 
-const TIME_FILTERS = [
-  { label: t.home.filters.today,   value: 'today' },
-  { label: t.home.filters.weekend, value: 'weekend' },
-  { label: t.home.filters.free,    value: 'free' },
-];
+function getDateKey(ev) {
+  const ts = getTs(ev);
+  if (ts === Infinity) return 'sin-fecha';
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Agrupa eventos por día para SectionList. Ads intercalados cada 6 eventos.
+function groupByDay(events, internalAds) {
+  const map = new Map();
+  const order = [];
+  let eventCount = 0;
+  let adSlot = 0;
+
+  events.forEach(ev => {
+    const key = getDateKey(ev);
+    if (!map.has(key)) {
+      const { label, isToday } = formatDaySeparator(ev.date ?? ev.dateISO);
+      map.set(key, { key, label, isToday, data: [] });
+      order.push(key);
+    }
+    map.get(key).data.push(ev);
+    eventCount++;
+
+    // Ad cada 6 eventos, nunca antes del 4º
+    if (eventCount >= 4 && eventCount % 6 === 0) {
+      const adItem = internalAds.length > 0
+        ? { _isInternalAd: true, ad: internalAds[adSlot++ % internalAds.length], id: `iad_${adSlot}` }
+        : { _isAd: true, id: `ad_${eventCount}` };
+      map.get(key).data.push(adItem);
+    }
+  });
+
+  return order.map(k => map.get(k));
+}
 
 function applyTimeFilter(events, filter) {
   if (!filter) return events;
-  const now = new Date();
-  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const friday = new Date(today); friday.setDate(today.getDate() + ((5 - today.getDay() + 7) % 7));
   const sunday = new Date(friday); sunday.setDate(friday.getDate() + 2); sunday.setHours(23, 59, 59);
 
   return events.filter(ev => {
     if (filter === 'free') return ev.isFree === true || ev.price === 0;
-    const ts = getEventTimestamp(ev);
+    const ts = getTs(ev);
     if (ts === Infinity) return false;
     const d = new Date(ts);
-    if (filter === 'today') return d >= today && d < new Date(today.getTime() + 86400000);
+    if (filter === 'today')   return d >= today && d < new Date(today.getTime() + 86400000);
     if (filter === 'weekend') return d >= friday && d <= sunday;
     return true;
   });
 }
 
-// ─── Separador de día (sticky) ────────────────────────────────────────────────
+const TABS = [
+  { label: t.home.tabs.forYou,    value: 'parati' },
+  { label: t.home.tabs.following, value: 'siguiendo' },
+];
 
-function DaySeparator({ date, count, colors }) {
-  const { label, isToday } = formatDaySeparator(date);
-  const labelColor = isToday ? colors['action.primary'] : colors['text.secondary'];
+const FILTERS = [
+  { label: t.home.filters.today,   value: 'today' },
+  { label: t.home.filters.weekend, value: 'weekend' },
+  { label: t.home.filters.free,    value: 'free' },
+];
+
+// ─── DaySeparator — sticky, fondo opaco ──────────────────────────────────────
+
+function DaySeparator({ section }) {
+  const { colors } = useTheme();
+  const count = section.data.filter(i => !i._isAd && !i._isInternalAd).length;
   return (
     <View style={[styles.daySep, { backgroundColor: colors['bg.base'] }]}>
-      <Text
-        style={[styles.daySepLabel, { color: labelColor, fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 12, letterSpacing: 1.2 }]}
-        numberOfLines={1}
-      >
-        {label}
+      <Text style={[
+        styles.daySepLabel,
+        { color: section.isToday ? colors['action.primary'] : colors['text.secondary'] },
+      ]}>
+        {section.label}
       </Text>
       <View style={[styles.daySepLine, { backgroundColor: colors['border.subtle'] }]} />
       {count > 0 && (
-        <Text variant="caption" color="text.tertiary" style={styles.daySepCount}>
+        <Text variant="caption" color="text.tertiary">
           {count} {count === 1 ? 'plan' : 'planes'}
         </Text>
       )}
@@ -160,29 +148,27 @@ function DaySeparator({ date, count, colors }) {
 
 export default function HomeScreen({ navigation }) {
   const { colors } = useTheme();
-  const [events,        setEvents]        = useState([]);
-  const [activeTab,     setActiveTab]     = useState('parati');
-  const [timeFilter,    setTimeFilter]    = useState(null);
-  const [following,     setFollowing]     = useState([]);
-  const [userLocation,  setUserLocation]  = useState('');
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(false);
-  const [refreshing,    setRefreshing]    = useState(false);
-  const [loadingMore,   setLoadingMore]   = useState(false);
-  const [lastDoc,       setLastDoc]       = useState(null);
-  const [hasMore,       setHasMore]       = useState(true);
-  const [interestVector,setInterestVector]= useState({});
-  const [userInterests, setUserInterests] = useState([]);
-  const [hiddenIds,     setHiddenIds]     = useState(new Set());
-  const [internalAds,   setInternalAds]   = useState([]);
-  const [unreadMessages,setUnreadMessages]= useState(0);
+  const [events,         setEvents]         = useState([]);
+  const [activeTab,      setActiveTab]      = useState('parati');
+  const [timeFilter,     setTimeFilter]     = useState(null);
+  const [following,      setFollowing]      = useState([]);
+  const [userLocation,   setUserLocation]   = useState('');
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(false);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [loadingMore,    setLoadingMore]    = useState(false);
+  const [lastDoc,        setLastDoc]        = useState(null);
+  const [hasMore,        setHasMore]        = useState(true);
+  const [interestVector, setInterestVector] = useState({});
+  const [userInterests,  setUserInterests]  = useState([]);
+  const [hiddenIds,      setHiddenIds]      = useState(new Set());
+  const [internalAds,    setInternalAds]    = useState([]);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
-  const visibleSinceRef  = useRef({});
+  const visibleSinceRef   = useRef({});
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
   const userId = auth.currentUser?.uid;
   const { data: externalEvents } = useExternalEvents();
-
-  // ── Carga ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     loadUserFollowing();
@@ -226,8 +212,6 @@ export default function HomeScreen({ navigation }) {
     } catch {}
   };
 
-  // ── Feed ───────────────────────────────────────────────────────────────────
-
   const isExpired = useCallback((ev) => {
     try {
       const [day, month, year] = ev.date.split('/');
@@ -241,7 +225,7 @@ export default function HomeScreen({ navigation }) {
     const native = events.filter(ev => !isExpired(ev));
     let base;
     if (activeTab === 'siguiendo') {
-      base = sortByDateAsc(native.filter(ev => following?.includes(ev.organizerId)));
+      base = sortAsc(native.filter(ev => following?.includes(ev.organizerId)));
     } else {
       const validExternal = externalEvents.filter(e => e.dateISO ? new Date(e.dateISO) >= today : true);
       base = scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
@@ -249,12 +233,10 @@ export default function HomeScreen({ navigation }) {
     return applyTimeFilter(base, timeFilter);
   }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired]);
 
-  const { data: feedData, stickyIndices } = useMemo(
-    () => buildFeedData(displayedEvents, internalAds),
+  const sections = useMemo(
+    () => groupByDay(displayedEvents, internalAds),
     [displayedEvents, internalAds]
   );
-
-  // ── Interacciones ──────────────────────────────────────────────────────────
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -285,7 +267,7 @@ export default function HomeScreen({ navigation }) {
     if (!userId) return;
     const now = Date.now();
     changed.forEach(({ item, isViewable }) => {
-      if (item._isAd || item._isInternalAd || item._isSeparator) return;
+      if (item._isAd || item._isInternalAd) return;
       if (isViewable) {
         visibleSinceRef.current[item.id] = now;
       } else {
@@ -299,32 +281,11 @@ export default function HomeScreen({ navigation }) {
     });
   }, [userId]);
 
-  // ── Renders ────────────────────────────────────────────────────────────────
-
-  // Primer evento nativo con imagen → hero. Resto → row.
-  const firstEventId = useMemo(() => {
-    const first = displayedEvents.find(e => !e._isExternal && e.imageUrl);
-    return first?.id ?? null;
-  }, [displayedEvents]);
-
   const renderItem = useCallback(({ item }) => {
-    if (item._isSeparator) {
-      return <DaySeparator date={item.date} count={item.count} colors={colors} />;
-    }
     if (item._isInternalAd) {
       return <InternalAdCard ad={item.ad} onEventPress={id => navigation.navigate('EventDetail', { eventId: id })} />;
     }
     if (item._isAd) return <NativeAdCard />;
-
-    if (item.id === firstEventId) {
-      return (
-        <EventCardHero
-          event={item}
-          onPress={() => navigation.navigate('EventDetail', { event: item })}
-          style={styles.heroCard}
-        />
-      );
-    }
     return (
       <EventRow
         event={item}
@@ -332,57 +293,50 @@ export default function HomeScreen({ navigation }) {
         onPress={() => navigation.navigate('EventDetail', { event: item })}
       />
     );
-  }, [navigation, colors, firstEventId]);
+  }, [navigation]);
 
-  const getItemType = useCallback((item) => {
-    if (item._isSeparator)  return 'separator';
-    if (item._isInternalAd) return 'internalAd';
-    if (item._isAd)         return 'ad';
-    return 'event';
-  }, []);
+  const renderSectionHeader = useCallback(({ section }) => (
+    <DaySeparator section={section} />
+  ), []);
 
-  // Footer: skeleton mientras carga más, mensaje de fin cuando no hay más
-  const ListFooter = useCallback(() => {
-    if (loadingMore) return <SkeletonList count={2} />;
+  const ListFooter = () => {
+    if (loadingMore) return <><SkeletonEventRow /><SkeletonEventRow /></>;
     if (!hasMore && displayedEvents.length > 0) {
       return (
         <View style={[styles.endOfFeed, { borderTopColor: colors['border.subtle'] }]}>
           <Text variant="caption" color="text.tertiary" align="center">
             No hay más eventos esta semana
           </Text>
-          <Button
-            variant="ghost"
-            size="sm"
-            label="Ver la próxima semana"
-            onPress={() => {/* TODO: ampliar rango */}}
-          />
+          <Button variant="ghost" size="sm" label="Ver la próxima semana" onPress={() => {}} />
         </View>
       );
     }
-    return null;
-  }, [loadingMore, hasMore, displayedEvents.length, colors]);
+    return <View style={{ height: space[12] }} />;
+  };
 
-  // ── Layout ─────────────────────────────────────────────────────────────────
+  // ── Loading skeleton ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-        <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} userLocation={userLocation} />
+        <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} />
         <HomeTabs activeTab={activeTab} onSelect={setActiveTab} />
-        <HomeTimeFilters active={timeFilter} onSelect={f => setTimeFilter(prev => prev === f ? null : f)} />
+        <HomeChips active={timeFilter} onSelect={() => {}} />
         <SkeletonList count={5} />
       </SafeAreaView>
     );
   }
 
+  // ── Error inline ──────────────────────────────────────────────────────────
+
   if (error) {
     return (
       <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-        <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} userLocation={userLocation} />
+        <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} />
         <EmptyState
           icon={<Ionicons name="cloud-offline-outline" size={28} color={colors['text.tertiary']} />}
-          title={t.home.error.title}
-          actionLabel={t.home.error.action}
+          title="No pudimos cargar el feed"
+          actionLabel="Reintentar"
           onAction={() => { setError(false); setLoading(true); loadUserProfile(); }}
         />
       </SafeAreaView>
@@ -391,10 +345,17 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-      <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} userLocation={userLocation} />
-      <HomeTabs activeTab={activeTab} onSelect={setActiveTab} />
-      <HomeTimeFilters active={timeFilter} onSelect={f => setTimeFilter(prev => prev === f ? null : f)} />
 
+      {/* 1 · HEADER — flexShrink 0 */}
+      <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} />
+
+      {/* 2 · SEGMENTED — flexShrink 0 */}
+      <HomeTabs activeTab={activeTab} onSelect={setActiveTab} />
+
+      {/* 3 · CHIPS — flexShrink 0, chips de 42px */}
+      <HomeChips active={timeFilter} onSelect={f => setTimeFilter(prev => prev === f ? null : f)} />
+
+      {/* 4 · FEED — único bloque que crece */}
       {displayedEvents.length === 0 ? (
         <EmptyState
           icon={<Ionicons name={activeTab === 'siguiendo' ? 'people-outline' : 'sparkles-outline'} size={28} color={colors['text.tertiary']} />}
@@ -404,20 +365,23 @@ export default function HomeScreen({ navigation }) {
           onAction={() => activeTab === 'siguiendo' ? navigation.navigate('Explore') : navigation.navigate('Interests')}
         />
       ) : (
-        <FlashList
-          data={feedData}
-          keyExtractor={item => item.id}
+        <SectionList
+          sections={sections}
+          keyExtractor={(item, index) => item.id ?? `item_${index}`}
           renderItem={renderItem}
-          estimatedItemSize={96}
-          getItemType={getItemType}
-          stickyHeaderIndices={stickyIndices}
-          contentContainerStyle={styles.list}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled
           showsVerticalScrollIndicator={false}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
+          ListFooterComponent={<ListFooter />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
-          ListFooterComponent={<ListFooter />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors['action.primary']}
+            />
+          }
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig.current}
         />
@@ -428,52 +392,51 @@ export default function HomeScreen({ navigation }) {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
-function HomeHeader({ colors, navigation, unread, userLocation }) {
+function HomeHeader({ colors, navigation, unread, location }) {
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { flexShrink: 0 }]}>
       <Image source={require('../../assets/images/logo.png')} style={styles.logo} contentFit="cover" />
-      <Text style={{ fontFamily: 'BricolageGrotesque_800ExtraBold', fontSize: 17, color: colors['text.primary'], flex: 1 }}>
-        Enfiestados
-      </Text>
 
-      {/* Chip de ubicación */}
-      {userLocation ? (
+      {/* Título + ubicación */}
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontFamily: 'BricolageGrotesque_700Bold', fontSize: 17, color: colors['text.primary'] }}>
+          Enfiestados
+        </Text>
         <Pressable
-          style={[styles.locationChip, { borderColor: colors['border.strong'] }]}
-          onPress={() => {/* TODO: cambiar ubicación */}}
+          onPress={() => {}}
           accessibilityRole="button"
-          accessibilityLabel={`Ubicación: ${userLocation}`}
+          accessibilityLabel="Cambiar ubicación"
         >
-          <Ionicons name="location-outline" size={14} color={colors['text.secondary']} />
-          <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.secondary'] }}>
-            {userLocation}
-          </Text>
-          <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
+            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
+              {location || 'Costa Rica'}
+            </Text>
+            <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />
+          </View>
         </Pressable>
-      ) : null}
+      </View>
 
-      {/* Mensajes */}
+      {/* Mensajes con badge */}
       <Pressable
         onPress={() => navigation.navigate('Messages')}
-        style={styles.headerIcon}
+        style={styles.iconBtn}
         accessibilityLabel="Mensajes"
-        accessibilityRole="button"
       >
         <Ionicons name="chatbubble-outline" size={22} color={colors['text.primary']} />
         {unread > 0 && (
-          <View style={[styles.headerBadge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]} />
+          <View style={[styles.badge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]} />
         )}
       </Pressable>
 
-      {/* Chip amarillo "Crear" */}
+      {/* Botón "Crear" — amarillo con texto */}
       <Pressable
         onPress={() => navigation.navigate('CreateEvent')}
         style={[styles.createChip, { backgroundColor: colors['action.primary'] }]}
         accessibilityLabel="Crear evento"
-        accessibilityRole="button"
       >
-        <Ionicons name="add" size={16} color={colors['text.onAction']} />
-        <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
+        <Ionicons name="add" size={15} color={colors['text.onAction']} />
+        <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
           Crear
         </Text>
       </Pressable>
@@ -484,46 +447,49 @@ function HomeHeader({ colors, navigation, unread, userLocation }) {
 function HomeTabs({ activeTab, onSelect }) {
   const { colors } = useTheme();
   return (
-    <View style={[styles.tabsRow, { borderBottomColor: colors['border.subtle'] }]}>
-      <SegmentedControl
-        options={[
-          { label: t.home.tabs.forYou,    value: 'parati' },
-          { label: t.home.tabs.following, value: 'siguiendo' },
-        ]}
-        selected={activeTab}
-        onSelect={onSelect}
-      />
+    <View style={[styles.tabsRow, { flexShrink: 0, borderBottomColor: colors['border.subtle'] }]}>
+      <SegmentedControl options={TABS} selected={activeTab} onSelect={onSelect} />
     </View>
   );
 }
 
-function HomeTimeFilters({ active, onSelect }) {
-  const { colors } = useTheme();
+function HomeChips({ active, onSelect }) {
+  // ── FIX_ROUND_2 § 2 ──
+  // ScrollView: style.flexGrow=0 y style.flexShrink=0 → la fila NO crece
+  // contentContainerStyle.alignItems='center' → los chips NO se estiran
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.chipsRow}
+      style={styles.chipsScroll}          // flexGrow:0 flexShrink:0
+      contentContainerStyle={styles.chipsContent}  // alignItems:'center'
     >
-      {TIME_FILTERS.map(f => (
-        <Pressable
-          key={f.value}
-          onPress={() => onSelect(f.value)}
-          style={[
-            styles.chip,
-            {
-              backgroundColor: active === f.value ? colors['action.primary'] : colors['bg.surface'],
-              borderColor:     active === f.value ? colors['action.primary'] : colors['border.strong'],
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === f.value }}
-        >
-          <Text variant="label" style={{ color: active === f.value ? colors['text.onAction'] : colors['text.secondary'] }}>
-            {f.label}
-          </Text>
-        </Pressable>
-      ))}
+      {FILTERS.map(f => {
+        const isSelected = f.value === active;
+        return (
+          <Pressable
+            key={f.value}
+            onPress={() => onSelect(f.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSelected }}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: isSelected ? '#FFC94A' : 'rgba(255,255,255,0.07)',
+                borderColor:     isSelected ? '#FFC94A' : 'rgba(255,255,255,0.16)',
+              },
+            ]}
+          >
+            <Text style={{
+              fontSize: 14,
+              fontFamily: 'PlusJakartaSans_700Bold',
+              color: isSelected ? '#17131F' : '#C6BFD6',
+            }}>
+              {f.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -532,68 +498,73 @@ function HomeTimeFilters({ active, onSelect }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  list: { paddingBottom: space[12] },
 
+  // Header: 1 fila, sin crecer
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space[5],
-    paddingVertical: space[3],
-    gap: space[2],
-    minHeight: 56,
+    paddingVertical: space[2],
+    gap: 11,
+    flexGrow: 0,
   },
-  logo: { width: 32, height: 32, borderRadius: 8 },
-  locationChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 38,
-    paddingHorizontal: space[3],
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    gap: space[1],
-  },
-  headerIcon: {
-    width: 44,
-    height: 44,
+  logo: { width: 36, height: 36, borderRadius: 11 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
+  iconBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
-  headerBadge: {
+  badge: {
     position: 'absolute',
-    right: 8,
-    top: 8,
-    width: 10,
-    height: 10,
+    right: 6,
+    top: 6,
+    width: 9,
+    height: 9,
     borderRadius: 5,
     borderWidth: 2,
   },
   createChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 38,
-    paddingHorizontal: space[3],
+    height: 36,
+    paddingHorizontal: 12,
     borderRadius: radius.full,
     gap: 4,
+    flexShrink: 0,
   },
 
+  // Tabs: no crece
   tabsRow: {
     paddingHorizontal: space[5],
     paddingVertical: space[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
+    flexGrow: 0,
   },
 
-  chipsRow: {
+  // Chips: fila horizontal de alto fijo
+  chipsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  chipsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',   // ← clave: chips no se estiran
+    gap: space[2],
     paddingHorizontal: space[5],
     paddingVertical: space[3],
-    gap: space[2],
-    flexDirection: 'row',
   },
-  chip: {
+  filterChip: {
+    height: 42,             // fijo, según § 2
+    alignSelf: 'center',
     paddingHorizontal: space[3],
-    paddingVertical: space[2],
     borderRadius: radius.md,
     borderWidth: 1.5,
+    justifyContent: 'center',
+    flexShrink: 0,
+    flexGrow: 0,
   },
 
   // Separador de día
@@ -602,15 +573,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: space[5],
     paddingTop: space[2],
-    paddingBottom: space[2] + 2,
+    paddingBottom: 10,
     gap: space[3],
+    flexGrow: 0,
+    flexShrink: 0,
   },
-  daySepLabel: { flexShrink: 0 },
-  daySepLine:  { flex: 1, height: 1 },
-  daySepCount: { flexShrink: 0 },
+  daySepLabel: {
+    fontFamily: 'PlusJakartaSans_800ExtraBold',
+    fontSize: 12,
+    letterSpacing: 1.2,
+    flexShrink: 0,
+  },
+  daySepLine: { flex: 1, height: 1 },
 
-  heroCard: { marginBottom: space[3] },
-
+  // Footer
   endOfFeed: {
     alignItems: 'center',
     paddingVertical: space[8],
