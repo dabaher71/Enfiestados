@@ -1,6 +1,6 @@
 # MIGRATION_STATUS.md — Enfiestados UX Redesign
 
-> Fase actual: **Fase 1 completada — tokens y tema**
+> Fase actual: **COMPLETADO — Fases 0–7 implementadas**
 > Fuente de verdad: `UX_DESIGN_SYSTEM.md` v1.1 · Julio 2026
 
 ---

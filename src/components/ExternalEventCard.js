@@ -48,7 +48,7 @@ export default function ExternalEventCard({ event, style }) {
         )}
         {!!event.locationText && (
           <Text style={styles.location} numberOfLines={1}>
-            📍 {event.locationText}
+            {event.locationText}
           </Text>
         )}
       </View>
