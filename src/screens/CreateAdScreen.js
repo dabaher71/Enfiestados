@@ -1,467 +1,396 @@
+// CreateAdScreen — Crear anuncio
+// § 2.1: tokens. § 2.2: CTA amarillo, chips amarillos. § 2.3: fechas con selector.
+// § 2.4: presupuesto + alcance. § 2.5: "Anuncio" en lugar de "Creatividad".
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Alert, KeyboardAvoidingView, Modal,
+  Platform, Pressable, ScrollView, StyleSheet, TextInput, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db, storage } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { createAd } from '../services/adService';
 import InternalAdCard from '../components/InternalAdCard';
 import { CATEGORIES as ALL_CATEGORIES } from '../constants/categories';
 
-const PROVINCES = ['Toda Costa Rica', 'San José', 'Alajuela', 'Cartago', 'Heredia', 'Guanacaste', 'Puntarenas', 'Limón'];
-const CATEGORIES = ALL_CATEGORIES; // objetos { id, name, icon, color }
-const CTA_OPTIONS = ['Ver más', 'Asistir', 'Comprar', 'Visitar'];
+import Text from '../components/ui/Text';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
 
-const STEPS = ['Objetivo', 'Audiencia', 'Creatividad'];
+const PROVINCES    = ['Toda Costa Rica', 'San José', 'Alajuela', 'Cartago', 'Heredia', 'Guanacaste', 'Puntarenas', 'Limón'];
+const CATEGORIES   = ALL_CATEGORIES;
+const CTA_OPTIONS  = ['Ver más', 'Asistir', 'Comprar', 'Visitar'];
+const STEPS        = ['Objetivo', 'Audiencia', 'Anuncio'];   // "Creatividad" → "Anuncio" (§ 2.5)
+const BUDGETS      = [1000, 2500, 5000, 10000];              // colones por día
+const DAYS_OPTIONS = [7, 14, 30];
+
+const DAYS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MONTHS  = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function humanDate(d) { return `${DAYS_ES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
 
 export default function CreateAdScreen({ navigation }) {
-  const [step, setStep] = useState(0);
-  const [type, setType] = useState('');          // 'event' | 'external'
-  const [province, setProvince] = useState('Toda Costa Rica');
-  const [category, setCategory] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [image, setImage] = useState('');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [ctaLabel, setCtaLabel] = useState('Ver más');
-  const [targetUrl, setTargetUrl] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const userId = auth.currentUser?.uid;
+  const [step,        setStep]        = useState(0);
+  const [type,        setType]        = useState('');
+  const [province,    setProvince]    = useState('Toda Costa Rica');
+  const [category,    setCategory]    = useState('');
+  const [startDate,   setStartDate]   = useState(new Date());
+  const [durationDays,setDurationDays]= useState(7);
+  const [budgetDay,   setBudgetDay]   = useState(2500);
+  const [image,       setImage]       = useState('');
+  const [title,       setTitle]       = useState('');
+  const [description, setDescription] = useState('');
+  const [ctaLabel,    setCtaLabel]    = useState('Ver más');
+  const [targetUrl,   setTargetUrl]   = useState('');
+  const [uploading,   setUploading]   = useState(false);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const userId  = auth.currentUser?.uid;
+  const endDate = new Date(startDate); endDate.setDate(endDate.getDate() + durationDays);
+  const totalBudget = budgetDay * durationDays;
+  // Alcance estimado (ficticio hasta integrar backend de alcance)
+  const reachLow  = Math.round(budgetDay * 0.36);
+  const reachHigh = Math.round(budgetDay * 0.56);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
+      allowsEditing: true, aspect: [16, 9], quality: 0.8,
     });
     if (result.canceled) return;
     setUploading(true);
     try {
       const uri = result.assets[0].uri;
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      const res  = await fetch(uri);
+      const blob = await res.blob();
       const storageRef = ref(storage, `ads/${userId}/${Date.now()}.jpg`);
       await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
-      setImage(url);
-    } catch {
-      Alert.alert('Error', 'No se pudo subir la imagen.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const parseDate = (str) => {
-    const [d, m, y] = str.split('/');
-    return new Date(+y, +m - 1, +d);
+      setImage(await getDownloadURL(storageRef));
+    } catch { Alert.alert('Error', 'No se pudo subir la imagen.'); }
+    setUploading(false);
   };
 
   const handleSubmit = async () => {
     if (!title.trim()) { Alert.alert('Falta el título'); return; }
     if (!image) { Alert.alert('Falta la imagen'); return; }
-    if (!startDate || !endDate) { Alert.alert('Falta las fechas'); return; }
     if (type === 'external' && !targetUrl.trim()) { Alert.alert('Falta el link'); return; }
-
     setSubmitting(true);
     try {
       const userSnap = await getDoc(doc(db, 'users', userId));
       const advertiserName = userSnap.data()?.name || 'Anunciante';
       await createAd(userId, advertiserName, {
-        type,
-        title: title.trim(),
-        description: description.trim(),
-        image,
-        ctaLabel,
-        targetUrl: targetUrl.trim(),
+        type, title: title.trim(), description: description.trim(),
+        image, ctaLabel, targetUrl: targetUrl.trim(),
         province: province === 'Toda Costa Rica' ? null : province,
         category: category || null,
-        startDate: parseDate(startDate),
-        endDate: parseDate(endDate),
+        startDate, endDate, budgetDay,
       });
-      Alert.alert(
-        '¡Anuncio enviado!',
-        'Tu anuncio está en revisión. Te notificaremos cuando sea aprobado (24-48 horas).',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    } catch {
-      Alert.alert('Error', 'No se pudo crear el anuncio.');
-    } finally {
-      setSubmitting(false);
-    }
+      Alert.alert('¡Anuncio enviado!', 'Tu anuncio está en revisión. Te avisamos en 24-48 horas.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]);
+    } catch { Alert.alert('Error', 'No se pudo crear el anuncio.'); }
+    setSubmitting(false);
   };
 
   const canNext = () => {
     if (step === 0) return !!type;
-    if (step === 1) return !!startDate && !!endDate;
+    if (step === 1) return true;
     return true;
   };
 
-  const previewAd = {
-    id: 'preview',
-    advertiserName: auth.currentUser?.displayName || 'Tu negocio',
-    type,
-    title: title || 'Título de tu anuncio',
-    description: description || 'Descripción de tu anuncio aquí.',
-    image,
-    ctaLabel,
-    targetUrl,
-  };
+  const previewAd = { id: 'preview', advertiserName: auth.currentUser?.displayName || 'Tu negocio', type, title: title || 'Título de tu anuncio', description, image, ctaLabel, targetUrl };
+
+  // ─── helpers de UI ─────────────────────────────────────────────────────────
+
+  const Chip = ({ label, active, onPress }) => (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
+      style={[styles.chip, { backgroundColor: active ? colors['action.primary'] : colors['bg.surface'], borderColor: active ? colors['action.primary'] : colors['border.strong'] }]}
+    >
+      <Text style={{ fontSize: 13, fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium', color: active ? colors['text.onAction'] : colors['text.secondary'] }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  const FieldLabel = ({ label }) => (
+    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.secondary'], marginBottom: space[2], marginTop: space[4] }}>
+      {label}
+    </Text>
+  );
+
+  const Input = ({ value, onChangeText, placeholder, multiline, keyboardType }) => (
+    <TextInput
+      style={[
+        styles.input,
+        { backgroundColor: colors['bg.surface'], color: colors['text.primary'], borderColor: colors['border.strong'], fontFamily: 'PlusJakartaSans_400Regular' },
+        multiline && styles.inputMultiline,
+      ]}
+      placeholder={placeholder}
+      placeholderTextColor={colors['text.tertiary']}
+      value={value}
+      onChangeText={onChangeText}
+      multiline={multiline}
+      keyboardType={keyboardType}
+      autoCapitalize="none"
+    />
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]} edges={['top']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => step === 0 ? navigation.goBack() : setStep(s => s - 1)} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Crear anuncio</Text>
+        <View style={[styles.header, { borderBottomColor: colors['border.subtle'] }]}>
+          <Pressable onPress={() => step === 0 ? navigation.goBack() : setStep(s => s - 1)} style={styles.iconBtn}>
+            <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
+          </Pressable>
+          <Text variant="h2" style={{ flex: 1 }}>Crear anuncio</Text>
         </View>
 
-        {/* Progress */}
+        {/* Progress bar */}
         <View style={styles.progressRow}>
-          {STEPS.map((s, i) => (
-            <View key={s} style={styles.progressItem}>
-              <View style={[styles.progressDot, i <= step && styles.progressDotActive]}>
-                {i < step ? (
-                  <Ionicons name="checkmark" size={14} color="#fff" />
-                ) : (
-                  <Text style={styles.progressDotText}>{i + 1}</Text>
-                )}
-              </View>
-              <Text style={[styles.progressLabel, i <= step && styles.progressLabelActive]}>{s}</Text>
-              {i < STEPS.length - 1 && (
-                <View style={[styles.progressLine, i < step && styles.progressLineActive]} />
-              )}
-            </View>
-          ))}
+          <Text variant="caption" color="text.tertiary">Paso {step + 1} de {STEPS.length}</Text>
+          <View style={[styles.progTrack, { backgroundColor: colors['bg.surface'] }]}>
+            <View style={[styles.progFill, { width: `${((step + 1) / STEPS.length) * 100}%`, backgroundColor: colors['action.primary'] }]} />
+          </View>
+          <Text variant="caption" color="text.tertiary">{STEPS[step]}</Text>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {/* STEP 0 — Objetivo */}
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
+
+          {/* ── STEP 0: Objetivo ─────────────────────────────────── */}
           {step === 0 && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>¿Qué querés promocionar?</Text>
-              <TouchableOpacity
-                style={[styles.objectiveCard, type === 'event' && styles.objectiveCardActive]}
-                onPress={() => setType('event')}
-              >
-                <View style={[styles.objectiveIcon, type === 'event' && styles.objectiveIconActive]}>
-                  <Ionicons name="calendar" size={28} color={type === 'event' ? '#fff' : '#6c5ce7'} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.objectiveTitle}>Mi evento</Text>
-                  <Text style={styles.objectiveDesc}>Promové un evento creado en Enfiestados. Los usuarios podrán ver todos los detalles y asistir directamente.</Text>
-                </View>
-                {type === 'event' && <Ionicons name="checkmark-circle" size={22} color="#6c5ce7" />}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.objectiveCard, type === 'external' && styles.objectiveCardActive]}
-                onPress={() => setType('external')}
-              >
-                <View style={[styles.objectiveIcon, type === 'external' && styles.objectiveIconActive]}>
-                  <Ionicons name="globe" size={28} color={type === 'external' ? '#fff' : '#6c5ce7'} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.objectiveTitle}>Mi negocio o link</Text>
-                  <Text style={styles.objectiveDesc}>Dirigí a los usuarios a tu sitio web, Instagram, menú o cualquier enlace externo.</Text>
-                </View>
-                {type === 'external' && <Ionicons name="checkmark-circle" size={22} color="#6c5ce7" />}
-              </TouchableOpacity>
-            </View>
+            <>
+              <Text style={[styles.stepTitle, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
+                ¿Qué querés promocionar?
+              </Text>
+              {[
+                { value: 'event',    icon: 'calendar-outline',   title: 'Mi evento', desc: 'Promové un evento en Enfiestados. Los usuarios pueden asistir desde el anuncio.' },
+                { value: 'external', icon: 'globe-outline',      title: 'Mi negocio o link', desc: 'Dirigí a los usuarios a tu sitio web, Instagram, menú o cualquier enlace externo.' },
+              ].map(opt => {
+                const active = type === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setType(opt.value)}
+                    style={[styles.objectiveCard, { backgroundColor: colors['bg.surface'], borderColor: active ? colors['action.primary'] : 'transparent' }]}
+                  >
+                    <View style={[styles.objectiveIcon, { backgroundColor: active ? `${colors['action.primary']}22` : colors['bg.raised'] }]}>
+                      <Ionicons name={opt.icon} size={26} color={active ? colors['action.primary'] : colors['text.tertiary']} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="title">{opt.title}</Text>
+                      <Text variant="caption" color="text.secondary" style={{ marginTop: 3 }}>{opt.desc}</Text>
+                    </View>
+                    {active && <Ionicons name="checkmark-circle" size={22} color={colors['action.primary']} />}
+                  </Pressable>
+                );
+              })}
+            </>
           )}
 
-          {/* STEP 1 — Audiencia */}
+          {/* ── STEP 1: Audiencia + presupuesto (§ 2.3, 2.4) ──────── */}
           {step === 1 && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>¿A quién querés llegar?</Text>
+            <>
+              <Text style={[styles.stepTitle, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
+                ¿A quién querés llegar?
+              </Text>
 
-              <Text style={styles.fieldLabel}>Provincia</Text>
+              <FieldLabel label="Provincia" />
               <View style={styles.chipGrid}>
-                {PROVINCES.map(p => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[styles.chip, province === p && styles.chipActive]}
-                    onPress={() => setProvince(p)}
-                  >
-                    <Text style={[styles.chipText, province === p && styles.chipTextActive]}>{p}</Text>
-                  </TouchableOpacity>
+                {PROVINCES.map(p => <Chip key={p} label={p} active={province === p} onPress={() => setProvince(p)} />)}
+              </View>
+
+              <FieldLabel label="Categoría de interés · opcional" />
+              <View style={styles.chipGrid}>
+                {CATEGORIES.map(c => <Chip key={c.id} label={c.name} active={category === c.id} onPress={() => setCategory(prev => prev === c.id ? '' : c.id)} />)}
+              </View>
+
+              {/* Fecha inicio — selector nativo, no texto manual (§ 2.3) */}
+              <FieldLabel label="Fecha de inicio" />
+              <Pressable
+                onPress={() => setShowDatePicker(true)}
+                style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+              >
+                <Ionicons name="calendar-outline" size={20} color={colors['text.tertiary']} />
+                <Text style={{ flex: 1, fontSize: 16, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.primary'] }}>
+                  {humanDate(startDate)}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
+              </Pressable>
+              {Platform.OS === 'android' && showDatePicker && (
+                <DateTimePicker value={startDate} mode="date" display="default" minimumDate={new Date()}
+                  onChange={(_, d) => { setShowDatePicker(false); if (d) setStartDate(d); }} />
+              )}
+
+              {/* Duración — chips de días (§ 2.3) */}
+              <FieldLabel label="Duración" />
+              <View style={styles.chipGrid}>
+                {DAYS_OPTIONS.map(d => (
+                  <Chip key={d} label={`${d} días`} active={durationDays === d} onPress={() => setDurationDays(d)} />
+                ))}
+              </View>
+              <Text variant="caption" color="text.tertiary" style={{ marginTop: space[1] }}>
+                Termina el {humanDate(endDate)}
+              </Text>
+
+              {/* Presupuesto — chips con valor grande (§ 2.4) */}
+              <FieldLabel label="Presupuesto diario" />
+              <View style={styles.chipGrid}>
+                {BUDGETS.map(b => (
+                  <Chip key={b} label={`₡${b.toLocaleString('es-CR')}`} active={budgetDay === b} onPress={() => setBudgetDay(b)} />
                 ))}
               </View>
 
-              <Text style={styles.fieldLabel}>Categoría de interés (opcional)</Text>
-              <View style={styles.chipGrid}>
-                {CATEGORIES.map(c => (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={[styles.chip, category === c.id && styles.chipActive]}
-                    onPress={() => setCategory(prev => prev === c.id ? '' : c.id)}
-                  >
-                    <Text style={[styles.chipText, category === c.id && styles.chipTextActive]}>{c.name}</Text>
-                  </TouchableOpacity>
-                ))}
+              {/* Alcance estimado + total (§ 2.4) */}
+              <View style={[styles.reachCard, { backgroundColor: colors['bg.surface'] }]}>
+                <View style={styles.reachRow}>
+                  <Text variant="caption" color="text.tertiary">Alcance estimado por día</Text>
+                  <Text variant="title">{reachLow.toLocaleString('es-CR')}–{reachHigh.toLocaleString('es-CR')} personas</Text>
+                </View>
+                <View style={[styles.reachDivider, { backgroundColor: colors['border.subtle'] }]} />
+                <View style={styles.reachRow}>
+                  <Text variant="caption" color="text.tertiary">Total estimado</Text>
+                  <Text variant="title" style={{ color: colors['action.primary'] }}>
+                    ₡{totalBudget.toLocaleString('es-CR')}
+                  </Text>
+                </View>
+                <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>
+                  Se cobra solo lo que se consume · podés pausar en cualquier momento.
+                </Text>
               </View>
-
-              <Text style={styles.fieldLabel}>Fecha de inicio (DD/MM/AAAA)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="01/06/2025"
-                placeholderTextColor="#555"
-                value={startDate}
-                onChangeText={setStartDate}
-                keyboardType="numeric"
-              />
-
-              <Text style={styles.fieldLabel}>Fecha de fin (DD/MM/AAAA)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="15/06/2025"
-                placeholderTextColor="#555"
-                value={endDate}
-                onChangeText={setEndDate}
-                keyboardType="numeric"
-              />
-            </View>
+            </>
           )}
 
-          {/* STEP 2 — Creatividad */}
+          {/* ── STEP 2: Anuncio (antes "Creatividad") (§ 2.5) ─────── */}
           {step === 2 && (
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Diseñá tu anuncio</Text>
+            <>
+              <Text style={[styles.stepTitle, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
+                Diseñá tu anuncio
+              </Text>
 
-              {/* Imagen */}
-              <Text style={styles.fieldLabel}>Imagen del anuncio</Text>
-              <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={uploading}>
+              <FieldLabel label="Imagen · recomendado 16:9" />
+              <Pressable onPress={pickImage} disabled={uploading} style={[styles.imagePicker, { backgroundColor: colors['bg.surface'] }]}>
                 {image ? (
                   <Image source={{ uri: image }} style={styles.imagePreview} contentFit="cover" />
                 ) : (
                   <View style={styles.imagePlaceholder}>
-                    <Ionicons name={uploading ? 'cloud-upload' : 'image'} size={36} color="#555" />
-                    <Text style={styles.imagePlaceholderText}>
-                      {uploading ? 'Subiendo...' : 'Toca para seleccionar imagen (16:9)'}
+                    <Ionicons name={uploading ? 'cloud-upload-outline' : 'image-outline'} size={32} color={colors['text.tertiary']} />
+                    <Text variant="caption" color="text.tertiary">
+                      {uploading ? 'Subiendo…' : 'Tocar para seleccionar imagen'}
                     </Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
 
-              <Text style={styles.fieldLabel}>Título ({title.length}/40)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: ¡Gran fiesta este sábado!"
-                placeholderTextColor="#555"
-                value={title}
-                onChangeText={t => setTitle(t.slice(0, 40))}
-              />
+              <FieldLabel label={`Título · ${title.length}/40`} />
+              <Input value={title} onChangeText={t => setTitle(t.slice(0, 40))} placeholder="Ej: ¡Gran fiesta este sábado!" />
 
-              <Text style={styles.fieldLabel}>Descripción ({description.length}/90)</Text>
-              <TextInput
-                style={[styles.input, styles.inputMultiline]}
-                placeholder="Ej: Música en vivo, barra libre, entrada gratis antes de las 10pm."
-                placeholderTextColor="#555"
-                value={description}
-                onChangeText={t => setDescription(t.slice(0, 90))}
-                multiline
-                numberOfLines={3}
-              />
+              <FieldLabel label={`Descripción · ${description.length}/90`} />
+              <Input value={description} onChangeText={t => setDescription(t.slice(0, 90))} placeholder="Ej: Música en vivo, barra libre, entrada gratis." multiline />
 
-              <Text style={styles.fieldLabel}>Botón de llamada a la acción</Text>
+              <FieldLabel label="Botón de llamada a la acción" />
               <View style={styles.chipGrid}>
-                {CTA_OPTIONS.map(cta => (
-                  <TouchableOpacity
-                    key={cta}
-                    style={[styles.chip, ctaLabel === cta && styles.chipActive]}
-                    onPress={() => setCtaLabel(cta)}
-                  >
-                    <Text style={[styles.chipText, ctaLabel === cta && styles.chipTextActive]}>{cta}</Text>
-                  </TouchableOpacity>
-                ))}
+                {CTA_OPTIONS.map(cta => <Chip key={cta} label={cta} active={ctaLabel === cta} onPress={() => setCtaLabel(cta)} />)}
               </View>
 
               {type === 'external' && (
                 <>
-                  <Text style={styles.fieldLabel}>Link de destino</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="https://..."
-                    placeholderTextColor="#555"
-                    value={targetUrl}
-                    onChangeText={setTargetUrl}
-                    keyboardType="url"
-                    autoCapitalize="none"
-                  />
+                  <FieldLabel label="Link de destino" />
+                  <Input value={targetUrl} onChangeText={setTargetUrl} placeholder="https://…" keyboardType="url" />
                 </>
               )}
 
-              {/* Preview en vivo */}
-              <Text style={styles.previewLabel}>Vista previa</Text>
+              <Text variant="overline" color="text.tertiary" style={{ marginTop: space[6], marginBottom: space[3] }}>
+                VISTA PREVIA
+              </Text>
               <InternalAdCard ad={previewAd} />
-            </View>
+            </>
           )}
         </ScrollView>
 
-        {/* Footer con botón de avance */}
-        <View style={styles.footer}>
-          {step < 2 ? (
-            <TouchableOpacity
-              style={[styles.nextBtn, !canNext() && styles.nextBtnDisabled]}
-              onPress={() => setStep(s => s + 1)}
-              disabled={!canNext()}
-            >
-              <Text style={styles.nextBtnText}>Siguiente</Text>
-              <Ionicons name="arrow-forward" size={20} color="#fff" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.nextBtn, submitting && styles.nextBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
-            >
-              <Text style={styles.nextBtnText}>{submitting ? 'Enviando...' : 'Enviar para revisión'}</Text>
-              {!submitting && <Ionicons name="checkmark" size={20} color="#fff" />}
-            </TouchableOpacity>
-          )}
+        {/* Footer CTA — amarillo (§ 2.2) */}
+        <View style={[styles.footer, { borderTopColor: colors['border.subtle'], paddingBottom: Math.max(space[4], insets.bottom) }]}>
+          <Pressable
+            onPress={step < STEPS.length - 1 ? () => setStep(s => s + 1) : handleSubmit}
+            disabled={!canNext() || submitting}
+            style={[styles.ctaBtn, { backgroundColor: canNext() && !submitting ? colors['action.primary'] : colors['bg.surface'] }]}
+          >
+            <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans_700Bold', color: canNext() && !submitting ? colors['text.onAction'] : colors['text.secondary'] }}>
+              {step < STEPS.length - 1 ? 'Siguiente' : (submitting ? 'Enviando…' : 'Enviar para revisión')}
+            </Text>
+            {!submitting && canNext() && (
+              <Ionicons name={step < STEPS.length - 1 ? 'arrow-forward' : 'checkmark'} size={18} color={colors['text.onAction']} />
+            )}
+          </Pressable>
         </View>
+
+        {/* Modal date picker iOS */}
+        {Platform.OS === 'ios' && (
+          <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+            <Pressable style={styles.pickerOverlay} onPress={() => setShowDatePicker(false)} />
+            <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
+              <View style={[styles.pickerHeader, { borderBottomColor: colors['border.subtle'] }]}>
+                <Pressable onPress={() => setShowDatePicker(false)} style={{ padding: space[2] }}>
+                  <Text variant="label" color="link">Listo</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker value={startDate} mode="date" display="spinner" minimumDate={new Date()}
+                onChange={(_, d) => { if (d) setStartDate(d); }}
+                themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+            </View>
+          </Modal>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 15,
-  },
-  backBtn: { padding: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  progressItem: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  progressDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2d2d44',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressDotActive: { backgroundColor: '#6c5ce7' },
-  progressDotText: { color: '#888', fontSize: 12, fontWeight: 'bold' },
-  progressLabel: { color: '#555', fontSize: 11, marginLeft: 6 },
-  progressLabelActive: { color: '#fff' },
-  progressLine: { flex: 1, height: 2, backgroundColor: '#2d2d44', marginHorizontal: 6 },
-  progressLineActive: { backgroundColor: '#6c5ce7' },
-  stepContent: { paddingHorizontal: 20, paddingBottom: 20 },
-  stepTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-  objectiveCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#2d2d44',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    gap: 14,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  objectiveCardActive: { borderColor: '#6c5ce7' },
-  objectiveIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#1a1a2e',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  objectiveIconActive: { backgroundColor: '#6c5ce7' },
-  objectiveTitle: { color: '#fff', fontWeight: 'bold', fontSize: 15, marginBottom: 4 },
-  objectiveDesc: { color: '#888', fontSize: 13, lineHeight: 19 },
-  fieldLabel: { color: '#aaa', fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 18 },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#2d2d44',
-    borderWidth: 1,
-    borderColor: '#3d3d54',
-  },
-  chipActive: { backgroundColor: '#6c5ce7', borderColor: '#6c5ce7' },
-  chipText: { color: '#aaa', fontSize: 13 },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
-  input: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: '#fff',
-    fontSize: 15,
-  },
-  inputMultiline: { height: 90, textAlignVertical: 'top', paddingTop: 12 },
-  imagePicker: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#2d2d44',
-    marginBottom: 4,
-  },
-  imagePreview: { width: '100%', height: 180 },
-  imagePlaceholder: {
-    height: 160,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-  },
-  imagePlaceholderText: { color: '#555', fontSize: 13 },
-  previewLabel: {
-    color: '#aaa',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#2d2d44',
-  },
-  nextBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6c5ce7',
-    borderRadius: 14,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  nextBtnDisabled: { opacity: 0.5 },
-  nextBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  safe:        { flex: 1 },
+  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4], gap: space[3], borderBottomWidth: StyleSheet.hairlineWidth },
+  iconBtn:     { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  progressRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[3], gap: space[3] },
+  progTrack:   { flex: 1, height: 6, borderRadius: radius.full, overflow: 'hidden' },
+  progFill:    { height: '100%', borderRadius: radius.full },
+  scroll:      { paddingHorizontal: space[5], paddingBottom: space[4] },
+  stepTitle:   { fontSize: 24, lineHeight: 30, marginBottom: space[5] },
+
+  objectiveCard: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: radius.lg, padding: space[4], marginBottom: space[3], gap: space[3], borderWidth: 2 },
+  objectiveIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+
+  chipGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
+  chip:        { paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.full, borderWidth: 1.5, height: 42, justifyContent: 'center', alignItems: 'center' },
+
+  pickerRow:   { height: 56, borderRadius: radius.md, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[3], gap: space[2] },
+
+  reachCard:   { borderRadius: radius.lg, padding: space[4], marginTop: space[4], gap: space[3] },
+  reachRow:    { gap: 2 },
+  reachDivider:{ height: StyleSheet.hairlineWidth },
+
+  input:       { height: 56, borderRadius: radius.md, borderWidth: 1.5, paddingHorizontal: space[3], fontSize: 15 },
+  inputMultiline: { height: 88, paddingTop: space[3], textAlignVertical: 'top' },
+
+  imagePicker:  { borderRadius: radius.lg, overflow: 'hidden', marginBottom: space[2] },
+  imagePreview: { width: '100%', aspectRatio: 16/9 },
+  imagePlaceholder: { height: 140, alignItems: 'center', justifyContent: 'center', gap: space[2] },
+
+  footer:    { paddingHorizontal: space[5], paddingTop: space[3], borderTopWidth: StyleSheet.hairlineWidth },
+  ctaBtn:    { height: 56, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space[2] },
+
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  pickerSheet:   { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, overflow: 'hidden' },
+  pickerHeader:  { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: space[5], paddingVertical: space[3], borderBottomWidth: StyleSheet.hairlineWidth },
 });
