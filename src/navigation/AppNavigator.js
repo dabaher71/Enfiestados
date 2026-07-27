@@ -24,6 +24,9 @@ import AdCenterScreen from '../screens/AdCenterScreen';
 import CreateAdScreen from '../screens/CreateAdScreen';
 import AdvertiserRequestScreen from '../screens/AdvertiserRequestScreen';
 import InterestsScreen from '../screens/InterestsScreen';
+import CreateEventScreen from '../screens/CreateEventScreen';
+import MessagesScreen from '../screens/MessagesScreen';
+import DevCatalogScreen from '../screens/DevCatalogScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -87,6 +90,14 @@ export default function AppNavigator() {
               <Stack.Screen name="AdCenter" component={AdCenterScreen} />
               <Stack.Screen name="CreateAd" component={CreateAdScreen} />
               <Stack.Screen name="AdvertiserRequest" component={AdvertiserRequestScreen} />
+              <Stack.Screen name="Messages" component={MessagesScreen} />
+              {__DEV__ && <Stack.Screen name="DevCatalog" component={DevCatalogScreen} />}
+              {/* CreateEvent como modal — oculta la barra de tabs */}
+              <Stack.Screen
+                name="CreateEvent"
+                component={CreateEventScreen}
+                options={{ presentation: 'modal', gestureEnabled: true }}
+              />
             </>
           ) : (
             <>

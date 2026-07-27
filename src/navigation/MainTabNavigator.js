@@ -2,248 +2,127 @@ import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
+import { useTheme } from '../theme/ThemeProvider';
 
-import CreateEventScreen from '../screens/CreateEventScreen';
 import HomeScreen from '../screens/HomeScreen';
+import MyPlansScreen from '../screens/MyPlansScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SearchScreen from '../screens/SearchScreen';
 
 const Tab = createBottomTabNavigator();
 
-const PURPLE = '#6c5ce7';
-const DARK_BG = '#1a1a2e';
-const BORDER = '#2d2d44';
-const INACTIVE = '#666';
-
-// Badge de notificaciones no leídas
-function NotificationIcon({ focused, color, size, count }) {
-  const iconName = focused ? 'notifications' : 'notifications-outline';
+// Badge contador de no leídos (notificaciones + chats)
+function UnreadBadge({ count, bgColor, borderColor }) {
+  if (count <= 0) return null;
   return (
-    <View>
-      <Ionicons name={iconName} size={size} color={color} />
-      {count > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-// Icono central "Crear" con fondo destacado
-function CreateIcon({ focused, size }) {
-  return (
-    <View style={[styles.createButton, focused && styles.createButtonActive]}>
-      <Ionicons
-        name="add"
-        size={size + 2}
-        color={focused ? '#fff' : PURPLE}
-      />
+    <View style={[styles.badge, { backgroundColor: bgColor, borderColor }]}>
+      <View style={styles.badgeInner}>
+        {/* Usamos Text de RN acá porque este componente vive fuera del ThemeProvider render tree */}
+        <Ionicons name="ellipse" size={0} />
+      </View>
     </View>
   );
 }
 
 export default function MainTabNavigator() {
-  const insets = useSafeAreaInsets();
+  const insets   = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [unreadNotifs, setUnreadNotifs] = useState(0);
-  const [unreadChats, setUnreadChats] = useState(0);
+  const [unreadChats,  setUnreadChats]  = useState(0);
   const userId = auth.currentUser?.uid;
 
-  // Suscripción en tiempo real a notificaciones no leídas
   useEffect(() => {
     if (!userId) return;
-    const q = query(
-      collection(db, 'notifications'),
-      where('toUserId', '==', userId),
-      where('read', '==', false)
-    );
+    const q = query(collection(db, 'notifications'), where('toUserId', '==', userId), where('read', '==', false));
     const unsub = onSnapshot(q, snap => setUnreadNotifs(snap.docs.length));
     return () => unsub();
   }, [userId]);
 
-  // Suscripción en tiempo real a chats con mensajes no leídos
-  // Firestore no permite dos array-contains en un mismo query, así que filtramos unreadFor en cliente
   useEffect(() => {
     if (!userId) return;
-    const q = query(
-      collection(db, 'chats'),
-      where('participants', 'array-contains', userId)
-    );
+    const q = query(collection(db, 'chats'), where('participants', 'array-contains', userId));
     const unsub = onSnapshot(q, snap => {
-      const unread = snap.docs.filter(d => d.data().unreadFor?.includes(userId));
-      setUnreadChats(unread.length);
+      setUnreadChats(snap.docs.filter(d => d.data().unreadFor?.includes(userId)).length);
     });
     return () => unsub();
   }, [userId]);
 
   const totalUnread = useMemo(() => unreadNotifs + unreadChats, [unreadNotifs, unreadChats]);
 
-  // Altura dinámica: respeta el home indicator (iOS) y el notch inferior (Android)
-  const tabBarHeight = Platform.select({
-    android: 60 + insets.bottom,
-    ios: 50 + insets.bottom,
-  });
-
-  const tabBarPaddingBottom = Platform.select({
-    android: insets.bottom > 0 ? insets.bottom : 8,
-    ios: insets.bottom > 0 ? insets.bottom : 10,
-  });
+  const tabBarHeight = 60 + Math.max(insets.bottom, 0);
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-
-        // Estilos base de la barra
         tabBarStyle: {
-          backgroundColor: DARK_BG,
-          borderTopColor: BORDER,
+          backgroundColor: colors['bg.base'],
+          borderTopColor: colors['border.subtle'],
           borderTopWidth: StyleSheet.hairlineWidth,
           height: tabBarHeight,
-          paddingBottom: tabBarPaddingBottom,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
           elevation: 12,
-          shadowColor: '#000',
+          shadowColor: colors['bg.overlay'],
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.35,
           shadowRadius: 6,
         },
-
-        tabBarActiveTintColor: PURPLE,
-        tabBarInactiveTintColor: INACTIVE,
-
+        tabBarActiveTintColor:   colors['action.primary'],
+        tabBarInactiveTintColor: colors['text.tertiary'],
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
+          fontSize: 11.5,
+          fontFamily: 'PlusJakartaSans_600SemiBold',
           marginTop: 2,
         },
-
-        // Fondo de item activo sutil
-        tabBarItemStyle: {
-          borderRadius: 12,
-          marginHorizontal: 2,
-        },
-
+        tabBarItemStyle: { borderRadius: 12, marginHorizontal: 2 },
         tabBarIcon: ({ focused, color, size }) => {
-          switch (route.name) {
-            case 'Home':
-              return (
-                <Ionicons
-                  name={focused ? 'home' : 'home-outline'}
-                  size={size}
-                  color={color}
-                />
-              );
-            case 'Search':
-              return (
-                <Ionicons
-                  name={focused ? 'search' : 'search-outline'}
-                  size={size}
-                  color={color}
-                />
-              );
-            case 'Create':
-              return <CreateIcon focused={focused} size={size} />;
-            case 'Notifications':
-              return (
-                <NotificationIcon
-                  focused={focused}
-                  color={color}
-                  size={size}
-                  count={totalUnread}
-                />
-              );
-            case 'Profile':
-              return (
-                <Ionicons
-                  name={focused ? 'person' : 'person-outline'}
-                  size={size}
-                  color={color}
-                />
-              );
-            default:
-              return null;
+          const icons = {
+            Home:          focused ? 'home'          : 'home-outline',
+            Explore:       focused ? 'search'        : 'search-outline',
+            MyPlans:       focused ? 'bookmark'      : 'bookmark-outline',
+            Notifications: focused ? 'notifications' : 'notifications-outline',
+            Profile:       focused ? 'person'        : 'person-outline',
+          };
+          const name = icons[route.name];
+          if (route.name === 'Notifications') {
+            return (
+              <View>
+                <Ionicons name={name} size={size} color={color} />
+                {unreadNotifs > 0 && (
+                  <View style={[styles.badge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]}>
+                    <Ionicons name="ellipse" size={0} />
+                  </View>
+                )}
+              </View>
+            );
           }
+          return <Ionicons name={name} size={26} color={color} />;
         },
       })}
     >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ tabBarLabel: 'Inicio' }}
-      />
-      <Tab.Screen
-        name="Search"
-        component={SearchScreen}
-        options={{ tabBarLabel: 'Buscar' }}
-      />
-      <Tab.Screen
-        name="Create"
-        component={CreateEventScreen}
-        options={{
-          tabBarLabel: () => null,
-          tabBarShowLabel: false,
-        }}
-      />
-      <Tab.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={{ tabBarLabel: 'Alertas' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ tabBarLabel: 'Perfil' }}
-      />
+      <Tab.Screen name="Home"          component={HomeScreen}          options={{ tabBarLabel: 'Inicio' }} />
+      <Tab.Screen name="Explore"       component={SearchScreen}        options={{ tabBarLabel: 'Explorar' }} />
+      <Tab.Screen name="MyPlans"       component={MyPlansScreen}       options={{ tabBarLabel: 'Mis planes' }} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarLabel: 'Alertas' }} />
+      <Tab.Screen name="Profile"       component={ProfileScreen}       options={{ tabBarLabel: 'Perfil' }} />
     </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
-  // Badge de notificaciones
   badge: {
     position: 'absolute',
-    right: -8,
-    top: -4,
-    backgroundColor: '#e74c3c',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 1.5,
-    borderColor: DARK_BG,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-    lineHeight: 12,
-  },
-
-  // Botón "Crear" destacado
-  createButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'transparent',
+    right: -5,
+    top: -3,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     borderWidth: 2,
-    borderColor: PURPLE,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  createButtonActive: {
-    backgroundColor: PURPLE,
-    borderColor: PURPLE,
-    shadowColor: PURPLE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+  badgeInner: { flex: 1 },
 });

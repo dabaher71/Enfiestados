@@ -1,9 +1,24 @@
 import Constants from 'expo-constants';
+import {
+  BricolageGrotesque_600SemiBold,
+  BricolageGrotesque_700Bold,
+  BricolageGrotesque_800ExtraBold,
+} from '@expo-google-fonts/bricolage-grotesque';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import { useFonts } from 'expo-font';
 import * as Updates from 'expo-updates';
 import { useEffect, useRef } from 'react';
 import { AppState, Platform, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
+import { SnackbarProvider } from './src/components/ui/Snackbar';
+import { ThemeProvider } from './src/theme/ThemeProvider';
 import { sanitizeError } from './src/utils/security';
 
 // Override global: evita que objetos Firebase completos (con tokens, configs)
@@ -28,6 +43,17 @@ if (!__DEV__) {
 // });
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    BricolageGrotesque_600SemiBold,
+    BricolageGrotesque_700Bold,
+    BricolageGrotesque_800ExtraBold,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
   const notificationListener = useRef();
   const responseListener = useRef();
 
@@ -127,10 +153,17 @@ export default function App() {
     };
   }, []);
 
+  // Esperar fuentes antes de renderizar (evita flash con fuente del sistema)
+  if (!fontsLoaded) return null;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
-      <AppNavigator />
+      <ThemeProvider>
+        <SnackbarProvider>
+          <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
+          <AppNavigator />
+        </SnackbarProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
