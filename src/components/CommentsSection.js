@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
-import UserAvatar from './UserAvatar';
+import Avatar from './ui/Avatar';
 import {
   Alert,
   FlatList,
@@ -201,7 +201,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
           onPress={() => commentUserId && onUserPress?.(commentUserId)}
           activeOpacity={0.8}
         >
-          <UserAvatar uri={item.userAvatar} size={36} style={styles.commentAvatar} />
+          <Avatar uri={item.userAvatar} name={item.userName} size={36} style={styles.commentAvatar} />
         </TouchableOpacity>
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
