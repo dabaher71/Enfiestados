@@ -1,55 +1,35 @@
-// SearchScreen (Explorar) — lista + mapa con filtros.
-// LÓGICA INTACTA: mapa, marcadores, filtros, eventos externos, ads.
-// PRESENTACIÓN: design system v1.1 — tokens, EventRow, EmptyState, Sheet.
+// SearchScreen (Explorar) — reconstrucción según FIX_ROUND_2 § 5
+// Abre en lista. Encabezado editorial. SegmentedControl con texto.
+// Grilla de categorías. Mapa oscuro con pines amarillos + sheet peek.
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Dimensions, FlatList, Pressable, ScrollView, StyleSheet, View,
+  Animated, Dimensions, FlatList, Platform, Pressable,
+  ScrollView, StyleSheet, TextInput, View,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 
 import NativeAdCard from '../components/NativeAdCard';
+import Button from '../components/ui/Button';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
 import EventRow from '../components/ui/EventRow';
-import { SearchField } from '../components/ui/Input';
-import Sheet from '../components/ui/Sheet';
 import { SkeletonList } from '../components/ui/Skeleton';
-import StatusBadge from '../components/ui/StatusBadge';
 import Text from '../components/ui/Text';
-import Button from '../components/ui/Button';
+import Sheet from '../components/ui/Sheet';
 
-import { formatEventDate, formatPrice } from '../lib/format';
-import { safeOpenURL } from '../utils/security';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { subscribeToEvents } from '../services/eventService';
-import { CATEGORIES as BASE_CATEGORIES, getCategoryColor } from '../constants/categories';
+import { CATEGORIES } from '../constants/categories';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
-import t from '../i18n/es-CR.json';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const { width } = Dimensions.get('window');
-const CARD_W = width * 0.75;
-const CARD_H = 190;
-
+const { width: SW, height: SH } = Dimensions.get('window');
 const COSTA_RICA = { latitude: 9.9281, longitude: -84.0907, latitudeDelta: 0.5, longitudeDelta: 0.5 };
-
-const CATEGORIES = [
-  { id: 'all', label: 'Todos', icon: 'apps' },
-  ...BASE_CATEGORIES.map(c => ({ id: c.id, label: c.name, icon: c.icon })),
-];
-
-const TIME_OPTS = [
-  { id: 'all',      label: 'Cualquier fecha' },
-  { id: 'today',    label: 'Hoy' },
-  { id: 'tomorrow', label: 'Mañana' },
-  { id: 'week',     label: 'Esta semana' },
-  { id: 'month',    label: 'Este mes' },
-];
+const CARD_W = SW * 0.75;
 
 const PROVINCES = [
   { id: 'all',         label: 'Todas',       lat: 9.9281,  lng: -84.0907 },
@@ -62,9 +42,30 @@ const PROVINCES = [
   { id: 'Limón',      label: 'Limón',       lat: 9.9907,  lng: -83.0359 },
 ];
 
-// ─── Helpers de filtrado (fuera del componente — sin recreación) ──────────────
+const TIME_OPTS = [
+  { id: 'all',      label: 'Cualquier fecha' },
+  { id: 'today',    label: 'Hoy' },
+  { id: 'tomorrow', label: 'Mañana' },
+  { id: 'week',     label: 'Esta semana' },
+  { id: 'month',    label: 'Este mes' },
+];
 
-function getEventTs(ev) {
+// Estilo oscuro para MapView
+const DARK_MAP_STYLE = [
+  { elementType: 'geometry',           stylers: [{ color: '#17131F' }] },
+  { elementType: 'labels.text.fill',   stylers: [{ color: '#9A91AD' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#17131F' }] },
+  { featureType: 'road',               elementType: 'geometry',       stylers: [{ color: '#2C2639' }] },
+  { featureType: 'road',               elementType: 'geometry.stroke',stylers: [{ color: '#17131F' }] },
+  { featureType: 'road.highway',       elementType: 'geometry',       stylers: [{ color: '#3D3650' }] },
+  { featureType: 'water',              elementType: 'geometry',       stylers: [{ color: '#0F0C18' }] },
+  { featureType: 'poi',                stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit',            stylers: [{ visibility: 'off' }] },
+];
+
+// ─── Helpers de filtrado ──────────────────────────────────────────────────────
+
+function getTs(ev) {
   if (ev?._isExternal) {
     const ts = ev.dateISO ? new Date(ev.dateISO).getTime() : Infinity;
     return isNaN(ts) ? Infinity : ts;
@@ -99,23 +100,52 @@ function isInTimeRange(dateStr, filter) {
   return true;
 }
 
-// ─── Marcador del mapa ────────────────────────────────────────────────────────
+// ─── Marcador de precio (píldora amarilla) ────────────────────────────────────
 
-function MapMarkerBubble({ event, isSelected, colors }) {
+function PricePin({ event, selected, colors }) {
+  const label = event.isFree === true || event.price === 0
+    ? 'Gratis'
+    : typeof event.price === 'number' ? `₡${event.price}` : '';
+  if (!label) return null;
+
   return (
     <View style={[
-      styles.markerBubble,
-      {
-        backgroundColor: isSelected ? colors['action.primary'] : colors['bg.raised'],
-        borderColor: isSelected ? colors['action.primary'] : colors['border.strong'],
-      },
+      styles.pin,
+      selected
+        ? { backgroundColor: colors['text.primary'], borderColor: colors['bg.base'] }
+        : { backgroundColor: colors['action.primary'], borderColor: colors['bg.base'] },
     ]}>
-      <Text
-        variant="caption"
-        style={{ color: isSelected ? colors['text.onAction'] : colors['text.primary'], fontFamily: 'PlusJakartaSans_700Bold' }}
-      >
-        {event.isFree ? 'Gratis' : `₡${event.price}`}
+      <Text style={{
+        fontSize: 12,
+        fontFamily: 'PlusJakartaSans_700Bold',
+        color: selected ? colors['bg.base'] : colors['text.onAction'],
+      }}>
+        {label}
       </Text>
+    </View>
+  );
+}
+
+// ─── Grilla de categorías (2 columnas, 74px de alto) ─────────────────────────
+
+function CategoryGrid({ onSelect, colors }) {
+  const cellW = (SW - space[5] * 2 - space[2]) / 2;
+  return (
+    <View style={styles.catGrid}>
+      {CATEGORIES.map(cat => (
+        <Pressable
+          key={cat.id}
+          onPress={() => onSelect(cat.id)}
+          style={[styles.catCell, { width: cellW, backgroundColor: `${cat.color}38`, borderColor: `${cat.color}48` }]}
+          accessibilityRole="button"
+          accessibilityLabel={cat.name}
+        >
+          <Ionicons name={cat.icon} size={21} color={cat.color} />
+          <Text style={{ fontSize: 15.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.primary'], marginTop: 4 }}>
+            {cat.name}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -126,34 +156,28 @@ export default function SearchScreen({ navigation }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [events,          setEvents]          = useState([]);
-  const [visibleEvents,   setVisibleEvents]   = useState([]);
-  const [query,           setQuery]           = useState('');
-  const [category,        setCategory]        = useState('all');
-  const [timeFilter,      setTimeFilter]      = useState('all');
-  const [province,        setProvince]        = useState('all');
-  const [viewMode,        setViewMode]        = useState('map');
-  const [selectedEvent,   setSelectedEvent]   = useState(null);
-  const [mapRegion,       setMapRegion]       = useState(COSTA_RICA);
-  const [showFilters,     setShowFilters]     = useState(false);
-  const [loading,         setLoading]         = useState(true);
-  const [error,           setError]           = useState(false);
+  const [events,        setEvents]        = useState([]);
+  const [visibleEvents, setVisibleEvents] = useState([]);
+  const [query,         setQuery]         = useState('');
+  const [viewMode,      setViewMode]      = useState('list');  // ← lista por defecto
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [mapRegion,     setMapRegion]     = useState(COSTA_RICA);
+  const [loading,       setLoading]       = useState(true);
+  const [showFilters,   setShowFilters]   = useState(false);
+  const [category,      setCategory]      = useState('all');
+  const [timeFilter,    setTimeFilter]    = useState('all');
+  const [province,      setProvince]      = useState('all');
+  const [showAllCats,   setShowAllCats]   = useState(false);
 
-  const mapRef      = useRef(null);
-  const listRef     = useRef(null);
+  const mapRef  = useRef(null);
+  const listRef = useRef(null);
   const { data: externalEvents } = useExternalEvents();
 
-  // ── Carga ──────────────────────────────────────────────────────────────────
-
   useEffect(() => {
-    const unsub = subscribeToEvents(
-      (newEvents) => {
-        setEvents(newEvents.filter(e => e.location?.lat && e.location?.lng && !e.isVirtual));
-        setLoading(false);
-        setError(false);
-      },
-      () => { setLoading(false); setError(true); }
-    );
+    const unsub = subscribeToEvents(newEvents => {
+      setEvents(newEvents.filter(e => e.location?.lat && e.location?.lng && !e.isVirtual));
+      setLoading(false);
+    });
     return () => unsub();
   }, []);
 
@@ -165,12 +189,7 @@ export default function SearchScreen({ navigation }) {
     let f = events.filter(e => { const d = parseDate(e.date); return !d || d >= today; });
     if (query.trim()) {
       const q = query.toLowerCase();
-      f = f.filter(e =>
-        e.title?.toLowerCase().includes(q) ||
-        e.description?.toLowerCase().includes(q) ||
-        e.location?.name?.toLowerCase().includes(q) ||
-        e.organizerName?.toLowerCase().includes(q)
-      );
+      f = f.filter(e => e.title?.toLowerCase().includes(q) || e.location?.name?.toLowerCase().includes(q));
     }
     if (category !== 'all') f = f.filter(e => e.category === category);
     if (timeFilter !== 'all') f = f.filter(e => isInTimeRange(e.date, timeFilter));
@@ -188,29 +207,18 @@ export default function SearchScreen({ navigation }) {
     let f = externalEvents.filter(e => e.dateISO ? new Date(e.dateISO) >= today : true);
     if (query.trim()) {
       const q = query.toLowerCase();
-      f = f.filter(e =>
-        e.title?.toLowerCase().includes(q) ||
-        e.locationText?.toLowerCase().includes(q) ||
-        e.source?.toLowerCase().includes(q)
-      );
+      f = f.filter(e => e.title?.toLowerCase().includes(q) || e.locationText?.toLowerCase().includes(q));
     }
     return f;
   }, [externalEvents, query, today]);
 
   useEffect(() => { setVisibleEvents(filteredNative); }, [filteredNative]);
 
-  const listData = useMemo(() => {
-    const all = [...filteredNative, ...filteredExternal]
-      .slice().sort((a, b) => getEventTs(a) - getEventTs(b));
-    const result = [];
-    all.forEach((ev, i) => {
-      result.push(ev);
-      if ((i + 1) % 6 === 0 && i >= 3) result.push({ _isAd: true, id: `ad_${i}` });
-    });
-    return result;
-  }, [filteredNative, filteredExternal]);
+  const allEvents = useMemo(() =>
+    [...filteredNative, ...filteredExternal].sort((a, b) => getTs(a) - getTs(b)),
+  [filteredNative, filteredExternal]);
 
-  const activeFiltersCount = useMemo(() => {
+  const activeFilterCount = useMemo(() => {
     let n = 0;
     if (category !== 'all') n++;
     if (timeFilter !== 'all') n++;
@@ -220,15 +228,13 @@ export default function SearchScreen({ navigation }) {
 
   // ── Interacciones de mapa ──────────────────────────────────────────────────
 
-  const handleMarkerPress = useCallback((event, index) => {
-    setSelectedEvent(event);
+  const handleMarkerPress = useCallback((ev) => {
+    setSelectedEvent(ev);
     mapRef.current?.animateToRegion({
-      latitude: event.location.lat, longitude: event.location.lng,
+      latitude: ev.location.lat, longitude: ev.location.lng,
       latitudeDelta: 0.02, longitudeDelta: 0.02,
     }, 300);
-    const vi = visibleEvents.findIndex(e => e.id === event.id);
-    if (vi >= 0) listRef.current?.scrollToIndex({ index: vi, animated: true });
-  }, [visibleEvents]);
+  }, []);
 
   const onRegionChangeComplete = useCallback((region) => {
     setMapRegion(region);
@@ -240,239 +246,243 @@ export default function SearchScreen({ navigation }) {
     ));
   }, [filteredNative]);
 
-  const onCarouselScroll = useCallback((e) => {
-    const i = Math.round(e.nativeEvent.contentOffset.x / (CARD_W + space[3]));
-    const ev = visibleEvents[i];
-    if (ev) {
-      setSelectedEvent(ev);
-      mapRef.current?.animateToRegion({
-        latitude: ev.location.lat, longitude: ev.location.lng,
-        latitudeDelta: 0.02, longitudeDelta: 0.02,
-      }, 300);
-    }
-  }, [visibleEvents]);
-
   const handleCardPress = useCallback((event) => {
     if (event._isExternal) navigation.navigate('ExternalEventDetail', { event });
     else navigation.navigate('EventDetail', { event });
   }, [navigation]);
 
-  const clearFilters = useCallback(() => {
-    setCategory('all'); setTimeFilter('all'); setProvince('all');
-    setShowFilters(false);
-  }, []);
-
-  // ── Renders ────────────────────────────────────────────────────────────────
-
-  const mapMarkers = useMemo(() =>
-    filteredNative.map((ev, i) => (
-      <Marker
-        key={ev.id}
-        coordinate={{ latitude: ev.location.lat, longitude: ev.location.lng }}
-        onPress={() => handleMarkerPress(ev, i)}
-      >
-        <MapMarkerBubble event={ev} isSelected={selectedEvent?.id === ev.id} colors={colors} />
-      </Marker>
-    )),
-  [filteredNative, selectedEvent, handleMarkerPress, colors]);
-
-  const renderCarouselCard = useCallback(({ item }) => (
-    <Pressable
-      style={[
-        styles.mapCard,
-        {
-          backgroundColor: colors['bg.raised'],
-          borderColor: selectedEvent?.id === item.id ? colors['action.primary'] : 'transparent',
-          borderWidth: selectedEvent?.id === item.id ? 2 : 0,
-        },
-      ]}
-      onPress={() => handleCardPress(item)}
-    >
-      {(item.imageUrl || item.image) && (
-        <View style={styles.mapCardImg}>
-          <Animated.Image
-            source={{ uri: item.imageUrl || item.image }}
-            style={styles.mapCardImg}
-            resizeMode="cover"
-          />
-        </View>
-      )}
-      <View style={styles.mapCardBody}>
-        <Text variant="overline" color="text.tertiary" numberOfLines={1}>
-          {item.category?.toUpperCase()} · {formatEventDate(item.date, item.time)}
-        </Text>
-        <Text variant="title" numberOfLines={2} style={{ marginTop: space[1] }}>{item.title}</Text>
-        <View style={[styles.mapCardFooter, { marginTop: space[2] }]}>
-          {item.location?.name && (
-            <Text variant="caption" color="text.tertiary" numberOfLines={1} style={{ flex: 1 }}>
-              {item.location.name}
-            </Text>
-          )}
-          <StatusBadge
-            label={formatPrice(item.price, item.isFree)}
-            variant={item.isFree ? 'free' : 'neutral'}
-          />
-        </View>
-      </View>
-    </Pressable>
-  ), [selectedEvent, handleCardPress, colors]);
+  // ── Renders de lista ───────────────────────────────────────────────────────
 
   const renderListItem = useCallback(({ item }) => {
     if (item._isAd) return <NativeAdCard />;
-    return (
-      <EventRow
-        event={item}
-        trailing="price"
-        onPress={() => handleCardPress(item)}
-      />
-    );
+    return <EventRow event={item} trailing="auto" onPress={() => handleCardPress(item)} />;
   }, [handleCardPress]);
 
-  // ── Layout ─────────────────────────────────────────────────────────────────
+  const listDataWithAds = useMemo(() => {
+    const result = [];
+    allEvents.forEach((ev, i) => {
+      result.push(ev);
+      if ((i + 1) % 6 === 0 && i >= 3) result.push({ _isAd: true, id: `ad_${i}` });
+    });
+    return result;
+  }, [allEvents]);
 
-  const totalCount = viewMode === 'map' ? visibleEvents.length : listData.filter(i => !i._isAd).length;
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const displayedCats = showAllCats ? CATEGORIES : CATEGORIES.slice(0, 8);
+  const isSearching = query.trim().length > 0 || category !== 'all' || timeFilter !== 'all' || province !== 'all';
 
   return (
-    <View style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+    <View style={[styles.screen, { backgroundColor: colors['bg.base'], paddingTop: insets.top }]}>
 
-      {/* Header — búsqueda + acciones */}
-      <View style={[styles.header, { paddingTop: insets.top + space[2] }]}>
-        <SearchField
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t.explore.searchPlaceholder}
-          style={styles.searchField}
-        />
+      {/* ── ENCABEZADO EDITORIAL (solo en lista sin búsqueda activa) ─────── */}
+      {viewMode === 'list' && !isSearching && (
+        <Text style={[styles.editorial, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
+          {'Explorá lo que\npasa en Costa Rica'}
+        </Text>
+      )}
+
+      {/* ── FILA DE BÚSQUEDA: campo + filtros (solo 2 elementos) ────────── */}
+      <View style={styles.searchRow}>
+        <View style={[styles.searchField, { backgroundColor: colors['bg.surface'], borderColor: colors['border.subtle'] }]}>
+          <Ionicons name="search-outline" size={18} color={colors['text.tertiary']} />
+          <TextInput
+            style={[styles.searchInput, { color: colors['text.primary'], fontFamily: 'PlusJakartaSans_400Regular' }]}
+            placeholder="Buscar eventos, lugares…"
+            placeholderTextColor={colors['text.tertiary']}
+            value={query}
+            onChangeText={setQuery}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery('')} accessibilityLabel="Limpiar búsqueda">
+              <Ionicons name="close-circle" size={18} color={colors['text.tertiary']} />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Botón filtros — badge si hay filtros activos */}
         <Pressable
           onPress={() => setShowFilters(true)}
-          style={[styles.iconBtn, { backgroundColor: activeFiltersCount > 0 ? colors['action.primary'] : colors['bg.surface'] }]}
-          accessibilityLabel={t.explore.filters}
+          style={[
+            styles.filterBtn,
+            { backgroundColor: activeFilterCount > 0 ? colors['action.primary'] : colors['bg.surface'] },
+          ]}
+          accessibilityLabel="Filtros"
           accessibilityRole="button"
         >
-          <Ionicons name="options-outline" size={20} color={activeFiltersCount > 0 ? colors['text.onAction'] : colors['text.primary']} />
-          {activeFiltersCount > 0 && (
+          <Ionicons
+            name="options-outline"
+            size={20}
+            color={activeFilterCount > 0 ? colors['text.onAction'] : colors['text.secondary']}
+          />
+          {activeFilterCount > 0 && (
             <View style={[styles.filterBadge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]}>
-              <Text style={{ fontSize: 9, color: '#fff', fontFamily: 'PlusJakartaSans_700Bold' }}>{activeFiltersCount}</Text>
+              <Text style={{ fontSize: 9, fontFamily: 'PlusJakartaSans_700Bold', color: '#fff' }}>
+                {activeFilterCount}
+              </Text>
             </View>
           )}
         </Pressable>
-        <View style={[styles.viewToggle, { backgroundColor: colors['bg.surface'] }]}>
-          {['map', 'list'].map(mode => (
+      </View>
+
+      {/* ── SEGMENTED CON TEXTO "Lista | Mapa" ──────────────────────────── */}
+      <View style={[styles.segRow, { flexShrink: 0 }]}>
+        {[
+          { value: 'list', icon: 'list-outline',    label: 'Lista' },
+          { value: 'map',  icon: 'map-outline',     label: 'Mapa'  },
+        ].map(opt => {
+          const active = viewMode === opt.value;
+          return (
             <Pressable
-              key={mode}
-              onPress={() => setViewMode(mode)}
-              style={[styles.toggleBtn, viewMode === mode && { backgroundColor: colors['nav.selected'] }]}
-              accessibilityRole="button"
-              accessibilityLabel={mode === 'map' ? t.explore.viewMap : t.explore.viewList}
+              key={opt.value}
+              onPress={() => setViewMode(opt.value)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              style={[
+                styles.segItem,
+                { backgroundColor: active ? colors['bg.raised'] : 'transparent' },
+              ]}
             >
-              <Ionicons name={mode === 'map' ? 'map-outline' : 'list-outline'} size={18} color={viewMode === mode ? '#fff' : colors['text.tertiary']} />
+              <Ionicons name={opt.icon} size={16} color={active ? colors['text.primary'] : colors['text.tertiary']} />
+              <Text style={{
+                fontSize: 14,
+                fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium',
+                color: active ? colors['text.primary'] : colors['text.tertiary'],
+              }}>
+                {opt.label}
+              </Text>
             </Pressable>
-          ))}
-        </View>
+          );
+        })}
       </View>
 
-      {/* Categorías */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {CATEGORIES.map(cat => (
-          <Chip
-            key={cat.id}
-            label={cat.label}
-            selected={category === cat.id}
-            onPress={() => setCategory(cat.id)}
-          />
-        ))}
-      </ScrollView>
-
-      {/* Contador de resultados */}
-      <View style={[styles.resultsRow, { borderBottomColor: colors['border.subtle'] }]}>
-        <Text variant="caption" color="text.tertiary">
-          {totalCount} {totalCount === 1 ? 'evento' : 'eventos'}
-          {province !== 'all' ? ` en ${province}` : ''}
-        </Text>
-      </View>
-
-      {/* Contenido principal */}
+      {/* ── CONTENIDO ─────────────────────────────────────────────────────── */}
       {loading ? (
-        <SkeletonList count={6} />
-      ) : error ? (
-        <EmptyState
-          icon={<Ionicons name="cloud-offline-outline" size={28} color={colors['text.tertiary']} />}
-          title={t.explore.error.title}
-          actionLabel={t.explore.error.action}
-          onAction={() => { setError(false); setLoading(true); }}
-        />
+        <SkeletonList count={5} />
       ) : viewMode === 'list' ? (
-        filteredNative.length === 0 && filteredExternal.length === 0 ? (
-          <EmptyState
-            icon={<Ionicons name="search-outline" size={28} color={colors['text.tertiary']} />}
-            title={t.explore.empty.title}
-            description={t.explore.empty.desc}
-            actionLabel={t.explore.empty.action}
-            onAction={() => { setProvince('all'); setCategory('all'); setTimeFilter('all'); }}
-          />
-        ) : (
-          <FlashList
-            data={listData}
-            keyExtractor={item => item.id}
-            renderItem={renderListItem}
-            estimatedItemSize={96}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: space[12] }}
-          />
-        )
+
+        /* ── VISTA LISTA ───────────────────────────────────────────────── */
+        <FlatList
+          data={isSearching ? listDataWithAds : allEvents.slice(0, 10)}
+          keyExtractor={(item, i) => item.id ?? `i_${i}`}
+          renderItem={renderListItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + space[12] }}
+          ListHeaderComponent={!isSearching ? (
+            <View>
+              {/* Grilla de categorías */}
+              <View style={styles.sectionHeader}>
+                <Text variant="h3">Categorías</Text>
+              </View>
+              <CategoryGrid onSelect={id => setCategory(id)} colors={colors} />
+              {!showAllCats && CATEGORIES.length > 8 && (
+                <Pressable onPress={() => setShowAllCats(true)} style={styles.seeAll}>
+                  <Text variant="label" color="link">Ver las {CATEGORIES.length} categorías</Text>
+                </Pressable>
+              )}
+              {/* Sección "Cerca de vos" */}
+              <View style={styles.sectionHeader}>
+                <Text variant="h3">Cerca de vos</Text>
+                <Pressable onPress={() => {}} accessibilityRole="button">
+                  <Text variant="label" color="link">Ver todo</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          ListEmptyComponent={
+            <EmptyState
+              icon={<Ionicons name="search-outline" size={28} color={colors['text.tertiary']} />}
+              title="Sin resultados"
+              description={query ? `No hay eventos para "${query}"` : 'Probá con otros filtros'}
+              actionLabel="Limpiar filtros"
+              onAction={() => { setQuery(''); setCategory('all'); setTimeFilter('all'); setProvince('all'); }}
+            />
+          }
+        />
+
       ) : (
-        /* Vista mapa */
-        <View style={styles.mapContainer}>
+
+        /* ── VISTA MAPA ────────────────────────────────────────────────── */
+        <View style={{ flex: 1 }}>
           <MapView
             ref={mapRef}
-            style={styles.map}
+            style={StyleSheet.absoluteFill}
             initialRegion={mapRegion}
             onRegionChangeComplete={onRegionChangeComplete}
+            customMapStyle={DARK_MAP_STYLE}
             showsUserLocation
             showsMyLocationButton={false}
           >
-            {mapMarkers}
+            {filteredNative.map(ev => (
+              <Marker
+                key={ev.id}
+                coordinate={{ latitude: ev.location.lat, longitude: ev.location.lng }}
+                onPress={() => handleMarkerPress(ev)}
+              >
+                <PricePin event={ev} selected={selectedEvent?.id === ev.id} colors={colors} />
+              </Marker>
+            ))}
           </MapView>
 
-          {/* FAB — centrar ubicación */}
+          {/* FAB — centrar */}
           <Pressable
-            style={[styles.fab, { backgroundColor: colors['bg.raised'] }]}
-            onPress={() => mapRef.current?.animateToRegion(COSTA_RICA, 500)}
+            style={[styles.fab, { backgroundColor: colors['bg.raised'], top: space[3] + insets.top }]}
+            onPress={() => { mapRef.current?.animateToRegion(COSTA_RICA, 500); setSelectedEvent(null); }}
             accessibilityLabel="Centrar mapa"
           >
             <Ionicons name="locate-outline" size={22} color={colors['nav.selected']} />
           </Pressable>
 
-          {/* Carrusel de cards */}
-          {visibleEvents.length > 0 && (
-            <Animated.FlatList
-              ref={listRef}
-              data={visibleEvents}
-              keyExtractor={item => item.id}
-              renderItem={renderCarouselCard}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={CARD_W + space[3]}
-              snapToAlignment="start"
-              decelerationRate="fast"
-              contentContainerStyle={styles.carousel}
-              onMomentumScrollEnd={onCarouselScroll}
-              getItemLayout={(_, i) => ({ length: CARD_W + space[3], offset: (CARD_W + space[3]) * i, index: i })}
-            />
-          )}
+          {/* Bottom sheet peek — resultados sobre el mapa */}
+          <View style={[styles.mapSheet, { backgroundColor: colors['bg.raised'], paddingBottom: insets.bottom + space[3] }]}>
+            {/* Handle */}
+            <View style={[styles.mapSheetHandle, { backgroundColor: colors['border.strong'] }]} />
 
-          {visibleEvents.length === 0 && (
-            <View style={[styles.mapEmptyBanner, { backgroundColor: colors['bg.raised'] }]}>
-              <Text variant="caption" color="text.secondary">No hay eventos en esta zona</Text>
-              <Pressable onPress={() => mapRef.current?.animateToRegion(COSTA_RICA, 500)}>
-                <Text variant="label" color="nav.selected">Ampliar</Text>
-              </Pressable>
+            {/* Contador */}
+            <View style={styles.mapSheetHeader}>
+              <Text variant="title">
+                {visibleEvents.length === 0
+                  ? 'Sin eventos en esta zona'
+                  : `${visibleEvents.length} ${visibleEvents.length === 1 ? 'evento' : 'eventos'} en esta zona`}
+              </Text>
+              {visibleEvents.length === 0 && (
+                <Pressable onPress={() => mapRef.current?.animateToRegion(COSTA_RICA, 500)}>
+                  <Text variant="label" color="link">Ampliar</Text>
+                </Pressable>
+              )}
             </View>
-          )}
+
+            {/* Lista horizontal de eventos visibles */}
+            {visibleEvents.length > 0 && (
+              <FlatList
+                ref={listRef}
+                data={visibleEvents.slice(0, 15)}
+                keyExtractor={item => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: space[5], gap: space[3] }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => handleCardPress(item)}
+                    style={[styles.mapCard, { backgroundColor: colors['bg.surface'], borderColor: selectedEvent?.id === item.id ? colors['action.primary'] : 'transparent' }]}
+                  >
+                    <Text variant="caption" color="text.tertiary" numberOfLines={1}>
+                      {item.category?.toUpperCase()}
+                    </Text>
+                    <Text variant="title" numberOfLines={2} style={{ marginVertical: 4 }}>{item.title}</Text>
+                    {item.location?.name && (
+                      <Text variant="caption" color="text.tertiary" numberOfLines={1}>{item.location.name}</Text>
+                    )}
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
         </View>
       )}
 
-      {/* Sheet de filtros avanzados */}
+      {/* ── SHEET DE FILTROS ─────────────────────────────────────────────── */}
       <Sheet visible={showFilters} onClose={() => setShowFilters(false)} height="half" title="Filtros">
         <ScrollView contentContainerStyle={styles.filtersContent}>
           <Text variant="overline" color="text.tertiary" style={{ marginBottom: space[3] }}>FECHA</Text>
@@ -487,7 +497,7 @@ export default function SearchScreen({ navigation }) {
             {PROVINCES.map(p => (
               <Chip key={p.id} label={p.label} selected={province === p.id} onPress={() => {
                 setProvince(p.id);
-                if (p.id !== 'all') {
+                if (p.id !== 'all' && viewMode === 'map') {
                   mapRef.current?.animateToRegion({ latitude: p.lat, longitude: p.lng, latitudeDelta: 0.3, longitudeDelta: 0.3 }, 500);
                 }
               }} />
@@ -495,8 +505,8 @@ export default function SearchScreen({ navigation }) {
           </View>
 
           <View style={styles.filterActions}>
-            <Button variant="ghost" size="sm" label="Limpiar" onPress={clearFilters} />
-            <Button variant="primary" size="md" label={`Aplicar${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}`} onPress={() => setShowFilters(false)} style={{ flex: 1 }} />
+            <Button variant="ghost" size="sm" label="Limpiar" onPress={() => { setTimeFilter('all'); setProvince('all'); setCategory('all'); setShowFilters(false); }} />
+            <Button variant="primary" size="md" label={`Aplicar${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`} onPress={() => setShowFilters(false)} style={{ flex: 1 }} />
           </View>
         </ScrollView>
       </Sheet>
@@ -507,23 +517,46 @@ export default function SearchScreen({ navigation }) {
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  screen: { flex: 1 },
 
-  header: {
+  editorial: {
+    fontSize: 28,
+    lineHeight: 34,
+    paddingHorizontal: space[5],
+    paddingTop: space[2],
+    paddingBottom: space[3],
+  },
+
+  searchRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: space[5],
     paddingBottom: space[3],
     gap: space[2],
+    flexShrink: 0,
   },
-  searchField: { flex: 1 },
-  iconBtn: {
-    width: 48,
-    height: 48,
+  searchField: {
+    flex: 1,
+    height: 52,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    gap: space[2],
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    height: '100%',
+  },
+  filterBtn: {
+    width: 52,
+    height: 52,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    flexShrink: 0,
   },
   filterBadge: {
     position: 'absolute',
@@ -536,39 +569,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  viewToggle: {
+
+  // SegmentedControl con texto
+  segRow: {
     flexDirection: 'row',
+    marginHorizontal: space[5],
+    marginBottom: space[3],
     borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.07)',
     padding: 3,
     gap: 2,
+    flexGrow: 0,
   },
-  toggleBtn: {
-    width: 36,
-    height: 36,
+  segItem: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    height: 40,
     borderRadius: radius.sm,
+    gap: space[1],
   },
 
-  chips: {
+  // Categorías
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: space[5],
+    paddingTop: space[4],
     paddingBottom: space[3],
+  },
+  catGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: space[5],
     gap: space[2],
   },
-
-  resultsRow: {
+  catCell: {
+    height: 74,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  seeAll: {
+    alignSelf: 'center',
+    paddingVertical: space[3],
     paddingHorizontal: space[5],
-    paddingBottom: space[2],
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 
-  mapContainer: { flex: 1 },
-  map: { flex: 1 },
+  // Pines de mapa
+  pin: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
 
+  // FAB
   fab: {
     position: 'absolute',
-    top: space[3],
-    right: space[3],
+    right: space[4],
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -576,58 +644,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
   },
 
-  carousel: {
+  // Bottom sheet del mapa
+  mapSheet: {
     position: 'absolute',
-    bottom: space[4],
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  mapSheetHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginTop: space[3],
+    marginBottom: space[2],
+  },
+  mapSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: space[5],
-    gap: space[3],
+    paddingBottom: space[3],
   },
   mapCard: {
-    width: CARD_W,
-    height: CARD_H,
+    width: CARD_W * 0.65,
+    padding: space[3],
     borderRadius: radius.lg,
-    overflow: 'hidden',
-    marginRight: space[3],
-  },
-  mapCardImg: { width: '100%', height: 90 },
-  mapCardBody: { padding: space[3], flex: 1, justifyContent: 'space-between' },
-  mapCardFooter: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
-
-  mapEmptyBanner: {
-    position: 'absolute',
-    bottom: space[8],
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: space[4],
-    paddingVertical: space[3],
-    borderRadius: radius.full,
-    gap: space[3],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    borderWidth: 2,
+    marginBottom: space[3],
   },
 
-  markerBubble: {
-    paddingHorizontal: space[3],
-    paddingVertical: 5,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-
+  // Filtros sheet
   filtersContent: { padding: space[5], gap: space[2] },
-  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
-  filterActions: { flexDirection: 'row', gap: space[3], marginTop: space[6] },
+  filterChips:    { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
+  filterActions:  { flexDirection: 'row', gap: space[3], marginTop: space[6] },
 });
