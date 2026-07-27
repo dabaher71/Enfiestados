@@ -16,6 +16,7 @@ import * as Updates from 'expo-updates';
 import { useEffect, useRef } from 'react';
 import { AppState, Platform, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SnackbarProvider } from './src/components/ui/Snackbar';
 import { ThemeProvider } from './src/theme/ThemeProvider';
@@ -158,12 +159,14 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <ThemeProvider>
         <SnackbarProvider>
           <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
           <AppNavigator />
         </SnackbarProvider>
       </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
