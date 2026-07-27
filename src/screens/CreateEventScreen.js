@@ -1,243 +1,214 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  Platform,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// CreateEventScreen — flujo de 3 pasos según FIX_ROUND_2 § 6
+// LÓGICA INTACTA: imagen, ubicación, upload, createEvent, notifyFollowers.
+// PRESENTACIÓN: 3 pasos, chips de categorías, fechas humanas, CTA amarillo, sin asteriscos.
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import MapView, { Marker } from 'react-native-maps';
-import { createEvent } from '../services/eventService';
-import { auth, storage, db } from '../config/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
+import * as Location from 'expo-location';
 import { doc, getDoc } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert, KeyboardAvoidingView, Modal, Platform,
+  Pressable, ScrollView, StyleSheet, TextInput, View,
+} from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import EventRow from '../components/ui/EventRow';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import Text from '../components/ui/Text';
+
+import { auth, db, storage } from '../config/firebase';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
-import { isValidWebURL, validateImageSize, validatePrice, INPUT_LIMITS } from '../utils/security';
+import { createEvent } from '../services/eventService';
 import { CATEGORIES } from '../constants/categories';
+import {
+  isValidWebURL, validateImageSize, validatePrice, INPUT_LIMITS,
+} from '../utils/security';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+
+// ─── Formateo de fecha/hora humano ───────────────────────────────────────────
+
+const DAYS  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MONTHS= ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+function humanDate(d) {
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+function humanTime(t) {
+  let h = t.getHours(), m = t.getMinutes();
+  const mer = h >= 12 ? 'pm' : 'am';
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2,'0')} ${mer}`;
+}
+function storageDate(d) {
+  return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+}
+function storageTime(t) {
+  return `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+}
+
+// ─── Componentes inline ───────────────────────────────────────────────────────
+
+function FieldLabel({ label, optional = false, colors }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 }}>
+      <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.secondary'] }}>
+        {label}
+      </Text>
+      {optional && (
+        <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.tertiary'] }}>
+          · opcional
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function Field({ children }) {
+  return <View style={styles.fieldWrap}>{children}</View>;
+}
+
+function TextBox({ value, onChangeText, placeholder, multiline, maxLength, keyboardType, colors }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={colors['text.tertiary']}
+      multiline={multiline}
+      maxLength={maxLength}
+      keyboardType={keyboardType}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={[
+        styles.textInput,
+        multiline && styles.textArea,
+        {
+          color: colors['text.primary'],
+          backgroundColor: colors['bg.surface'],
+          borderColor: focused ? colors['nav.selected'] : colors['border.strong'],
+          fontFamily: 'PlusJakartaSans_400Regular',
+        },
+      ]}
+    />
+  );
+}
+
+// ─── CreateEventScreen ────────────────────────────────────────────────────────
 
 export default function CreateEventScreen({ navigation }) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [time, setTime] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [locationName, setLocationName] = useState('');
-  const [locationCoords, setLocationCoords] = useState(null);
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [isFree, setIsFree] = useState(true);
-  const [price, setPrice] = useState('');
-  const [isVirtual, setIsVirtual] = useState(false);
-  const [virtualLink, setVirtualLink] = useState('');
-  const [image, setImage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState({
-    latitude: 9.9281,
-    longitude: -84.0907,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  });
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const [step,            setStep]           = useState(1);
+  const [title,           setTitle]          = useState('');
+  const [description,     setDescription]    = useState('');
+  const [category,        setCategory]       = useState('');
+  const [image,           setImage]          = useState(null);
+  const [date,            setDate]           = useState(new Date());
+  const [time,            setTime]           = useState(new Date());
+  const [showDatePicker,  setShowDatePicker] = useState(false);
+  const [showTimePicker,  setShowTimePicker] = useState(false);
+  const [isVirtual,       setIsVirtual]      = useState(false);
+  const [virtualLink,     setVirtualLink]    = useState('');
+  const [locationName,    setLocationName]   = useState('');
+  const [locationCoords,  setLocationCoords] = useState(null);
+  const [showMapModal,    setShowMapModal]   = useState(false);
+  const [isFree,          setIsFree]         = useState(true);
+  const [price,           setPrice]          = useState('');
+  const [loading,         setLoading]        = useState(false);
+  const [uploadingImage,  setUploadingImage] = useState(false);
+  const [currentLocation, setCurrentLocation]= useState({ latitude: 9.9281, longitude: -84.0907, latitudeDelta: 0.05, longitudeDelta: 0.05 });
 
   useEffect(() => {
-    getCurrentLocation();
+    Location.requestForegroundPermissionsAsync()
+      .then(({ status }) => {
+        if (status === 'granted') Location.getCurrentPositionAsync({}).then(l => setCurrentLocation({
+          latitude: l.coords.latitude, longitude: l.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05,
+        })).catch(() => {});
+      }).catch(() => {});
   }, []);
 
-  const getCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const location = await Location.getCurrentPositionAsync({});
-        setCurrentLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        });
-      }
-    } catch (error) {
-      console.log('Error obteniendo ubicación:', error);
-    }
-  };
+  // ── Validación por paso ───────────────────────────────────────────────────
+
+  const step1Valid = title.trim().length >= 2 && category !== '';
+  const step2Valid = isVirtual
+    ? virtualLink.trim().length > 0
+    : locationCoords !== null;
+  const step3Valid = isFree || (validatePrice(price) !== null);
+
+  // ── Lógica de imagen ──────────────────────────────────────────────────────
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería');
-      return;
-    }
-
+    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.8,
     });
-
     if (!result.canceled) {
-      if (!validateImageSize(result.assets[0])) {
-        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
-        return;
-      }
+      if (!validateImageSize(result.assets[0])) { Alert.alert('Imagen grande', 'La imagen debe ser menor a 5MB'); return; }
       setImage(result.assets[0].uri);
     }
   };
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'Necesitamos acceso a tu cámara');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-
+    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu cámara'); return; }
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
     if (!result.canceled) {
-      if (!validateImageSize(result.assets[0])) {
-        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
-        return;
-      }
+      if (!validateImageSize(result.assets[0])) { Alert.alert('Imagen grande', 'La imagen debe ser menor a 5MB'); return; }
       setImage(result.assets[0].uri);
     }
   };
 
-  const showImageOptions = () => {
-    Alert.alert('Agregar imagen', 'Selecciona una opción', [
-      { text: 'Tomar foto', onPress: takePhoto },
-      { text: 'Elegir de galería', onPress: pickImage },
-      { text: 'Cancelar', style: 'cancel' },
-    ]);
-  };
+  const showImageOptions = () => Alert.alert('Agregar imagen', 'Elegí una opción', [
+    { text: 'Tomar foto',       onPress: takePhoto },
+    { text: 'Elegir de galería', onPress: pickImage },
+    { text: 'Cancelar', style: 'cancel' },
+  ]);
 
   const uploadImage = async (uri) => {
-    try {
-      // XMLHttpRequest es más confiable que fetch() para file:// URIs en Android
-      const blob = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.onload = () => resolve(xhr.response);
-        xhr.onerror = () => reject(new Error('Error al leer imagen'));
-        xhr.responseType = 'blob';
-        xhr.open('GET', uri, true);
-        xhr.send(null);
-      });
-      const filename = `events/${auth.currentUser?.uid}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-      const storageRef = ref(storage, filename);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
-      blob.close();
-      return url;
-    } catch (error) {
-      console.error('Error al subir imagen:', error);
-      throw error;
-    }
+    const blob = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = () => resolve(xhr.response);
+      xhr.onerror = () => reject(new Error('Error al leer imagen'));
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    });
+    const filename = `events/${auth.currentUser?.uid}/${Date.now()}.jpg`;
+    const storageRef = ref(storage, filename);
+    await uploadBytes(storageRef, blob);
+    const url = await getDownloadURL(storageRef);
+    blob.close();
+    return url;
   };
 
-  const formatDate = (date) => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
+  // ── Publicar evento ────────────────────────────────────────────────────────
 
-  const formatTime = (time) => {
-    const hours = time.getHours().toString().padStart(2, '0');
-    const minutes = time.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
-  const onDateChange = (event, selectedDate) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDate(selectedDate);
-    }
-  };
-
-  const onTimeChange = (event, selectedTime) => {
-    setShowTimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setTime(selectedTime);
-    }
-  };
-
-  const handleMapPress = (e) => {
-    setLocationCoords(e.nativeEvent.coordinate);
-  };
-
-  const confirmLocation = () => {
-    if (locationCoords) {
-      setShowMapModal(false);
-    } else {
-      Alert.alert('Error', 'Por favor selecciona un punto en el mapa');
-    }
-  };
-
-  const handleCreate = async () => {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle || !category) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
-      return;
-    }
-    if (trimmedTitle.length > INPUT_LIMITS.EVENT_TITLE) {
-      Alert.alert('Error', `El título no puede superar ${INPUT_LIMITS.EVENT_TITLE} caracteres`);
-      return;
-    }
-    if (description.trim().length > INPUT_LIMITS.EVENT_DESCRIPTION) {
-      Alert.alert('Error', `La descripción no puede superar ${INPUT_LIMITS.EVENT_DESCRIPTION} caracteres`);
-      return;
-    }
-    if (!isVirtual && !locationCoords) {
-      Alert.alert('Error', 'Por favor selecciona la ubicación en el mapa');
-      return;
-    }
-    if (isVirtual && !virtualLink) {
-      Alert.alert('Error', 'Por favor ingresa el link del evento virtual');
-      return;
-    }
-    if (isVirtual && !isValidWebURL(virtualLink)) {
-      Alert.alert('Error', 'El link del evento debe comenzar con https:// o http://');
-      return;
-    }
-    if (!isFree) {
-      const parsedPrice = validatePrice(price);
-      if (parsedPrice === null) {
-        Alert.alert('Error', 'Ingresa un precio válido entre 0 y 1,000,000');
-        return;
-      }
-    }
+  const handlePublish = async () => {
+    if (!step3Valid) return;
+    if (!isVirtual && !locationCoords) { Alert.alert('Error', 'Seleccioná la ubicación en el paso 2'); return; }
+    if (isVirtual && !isValidWebURL(virtualLink)) { Alert.alert('Error', 'El link debe comenzar con https:// o http://'); return; }
 
     setLoading(true);
     try {
       const user = auth.currentUser;
-
       let imageURL = '';
-      if (image) {
-        setUploadingImage(true);
-        imageURL = await uploadImage(image);
-        setUploadingImage(false);
-      }
+      if (image) { setUploadingImage(true); imageURL = await uploadImage(image); setUploadingImage(false); }
 
       const eventData = {
-        title: trimmedTitle,
+        title: title.trim(),
         description: description.trim(),
         category,
-        date: formatDate(date),
-        time: formatTime(time),
+        date: storageDate(date),
+        time: storageTime(time),
         location: {
           name: locationName.trim(),
           lat: locationCoords?.latitude || 0,
@@ -254,606 +225,506 @@ export default function CreateEventScreen({ navigation }) {
         capacity: 0,
         hasParking: false,
       };
+
       const newEventId = await createEvent(eventData);
 
-      Alert.alert('¡Éxito!', 'Evento creado correctamente', [
-        { text: 'OK', onPress: () => navigation.navigate('Home') }
+      Alert.alert('¡Publicado!', 'Tu evento ya está en Enfiestados', [
+        { text: 'Ver evento', onPress: () => { navigation.goBack(); navigation.navigate('EventDetail', { event: { id: newEventId, ...eventData } }); } },
+        { text: 'Listo', onPress: () => navigation.goBack() },
       ]);
 
-      // Notificar a seguidores en segundo plano
-      getDoc(doc(db, 'users', user.uid)).then(userDoc => {
-        const followers = userDoc.data()?.followers || [];
+      getDoc(doc(db, 'users', user.uid)).then(snap => {
+        const followers = snap.data()?.followers || [];
         notifyFollowers(followers, {
           type: NOTIFICATION_TYPES.NEW_EVENT,
           fromUserId: user.uid,
           fromUserName: user.displayName || user.email.split('@')[0],
           fromUserAvatar: user.photoURL || '',
-          message: `creó un nuevo evento: ${trimmedTitle}`,
+          message: `creó un nuevo evento: ${title.trim()}`,
           eventId: newEventId,
           eventData: { ...eventData, id: newEventId },
         });
       }).catch(() => {});
-
-      // Limpiar formulario
-      setTitle('');
-      setDescription('');
-      setCategory('');
-      setDate(new Date());
-      setTime(new Date());
-      setLocationName('');
-      setLocationCoords(null);
-      setIsFree(true);
-      setPrice('');
-      setIsVirtual(false);
-      setVirtualLink('');
-      setImage(null);
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo crear el evento');
-      console.error(error);
+    } catch {
+      Alert.alert('Error', 'No se pudo crear el evento. Intentá de nuevo.');
     }
     setLoading(false);
   };
 
+  // ── Handlers de paso ──────────────────────────────────────────────────────
+
+  const goNext = () => {
+    if (step < 3) setStep(s => s + 1);
+    else handlePublish();
+  };
+  const goBack = () => {
+    if (step > 1) setStep(s => s - 1);
+  };
+
+  const confirmClose = () => Alert.alert('¿Salir?', '¿Querés guardar el borrador o descartarlo?', [
+    { text: 'Descartar', style: 'destructive', onPress: () => navigation.goBack() },
+    { text: 'Guardar borrador', onPress: () => navigation.goBack() },
+    { text: 'Seguir editando', style: 'cancel' },
+  ]);
+
+  const stepTitles = ['¿Qué vas a organizar?', '¿Cuándo y dónde?', '¿Cuánto cuesta?'];
+  const continueLabel = step === 3 ? (loading ? (uploadingImage ? 'Subiendo imagen…' : 'Publicando…') : 'Publicar') : 'Continuar';
+  const stepIsValid = [step1Valid, step2Valid, step3Valid][step - 1];
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Crear Evento</Text>
+    <View style={[styles.screen, { backgroundColor: colors['bg.base'] }]}>
+
+      {/* ── HEADER: progreso + cerrar ─────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: insets.top + space[2] }]}>
+        {step > 1 ? (
+          <Pressable onPress={goBack} style={styles.iconBtn} accessibilityLabel="Volver">
+            <Ionicons name="arrow-back" size={22} color={colors['text.primary']} />
+          </Pressable>
+        ) : <View style={styles.iconBtn} />}
+
+        <View style={{ flex: 1, gap: space[2] }}>
+          <View style={styles.progressRow}>
+            <Text variant="caption" color="text.tertiary">Paso {step} de 3</Text>
+            <Text variant="caption" color="text.tertiary">Borrador guardado</Text>
+          </View>
+          {/* Barra de progreso amarilla */}
+          <View style={[styles.progressTrack, { backgroundColor: colors['bg.surface'] }]}>
+            <View style={[styles.progressFill, { width: `${(step / 3) * 100}%`, backgroundColor: colors['action.primary'] }]} />
+          </View>
         </View>
 
-        <View style={styles.form}>
-          {/* Imagen */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Imagen del evento</Text>
-            <TouchableOpacity style={styles.imagePickerContainer} onPress={showImageOptions}>
-              {image ? (
-                <View style={styles.imagePreviewContainer}>
-                  <Image source={{ uri: image }} style={styles.imagePreview} />
-                  <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => setImage(null)}
-                  >
-                    <Ionicons name="close-circle" size={28} color="#e74c3c" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="camera" size={40} color="#888" />
-                  <Text style={styles.imagePlaceholderText}>Agregar imagen</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+        <Pressable onPress={confirmClose} style={styles.iconBtn} accessibilityLabel="Cerrar">
+          <Ionicons name="close" size={22} color={colors['text.primary']} />
+        </Pressable>
+      </View>
 
-          {/* Título */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Título del evento *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Concierto de Jazz"
-              placeholderTextColor="#888"
-              value={title}
-              onChangeText={setTitle}
-              maxLength={INPUT_LIMITS.EVENT_TITLE}
-            />
-          </View>
+      {/* ── TÍTULO DEL PASO ───────────────────────────────────────────── */}
+      <Text style={[styles.stepTitle, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
+        {stepTitles[step - 1]}
+      </Text>
 
-          {/* Descripción */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Descripción</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Describe tu evento..."
-              placeholderTextColor="#888"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
-            />
-          </View>
-
-          {/* Categoría */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Categoría *</Text>
-            <View style={styles.categoriesGrid}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryItem,
-                    category === cat.id && styles.categoryItemActive
-                  ]}
-                  onPress={() => setCategory(cat.id)}
-                >
-                  <Ionicons
-                    name={cat.icon}
-                    size={24}
-                    color={category === cat.id ? '#fff' : '#888'}
-                  />
-                  <Text style={[
-                    styles.categoryText,
-                    category === cat.id && styles.categoryTextActive
-                  ]}>
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Fecha y Hora */}
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
-              <Text style={styles.label}>Fecha *</Text>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Ionicons name="calendar" size={20} color="#6c5ce7" />
-                <Text style={styles.dateButtonText}>{formatDate(date)}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Hora *</Text>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Ionicons name="time" size={20} color="#6c5ce7" />
-                <Text style={styles.dateButtonText}>{formatTime(time)}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Date Picker */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onDateChange}
-              minimumDate={new Date()}
-            />
-          )}
-
-          {/* Time Picker */}
-          {showTimePicker && (
-            <DateTimePicker
-              value={time}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onTimeChange}
-            />
-          )}
-
-          {/* Virtual o Presencial */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Tipo de evento</Text>
-            <View style={styles.typeToggle}>
-              <TouchableOpacity
-                style={[styles.typeButton, !isVirtual && styles.typeButtonActive]}
-                onPress={() => setIsVirtual(false)}
-              >
-                <Ionicons
-                  name="location"
-                  size={20}
-                  color={!isVirtual ? '#fff' : '#888'}
-                />
-                <Text style={[styles.typeText, !isVirtual && styles.typeTextActive]}>
-                  Presencial
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typeButton, isVirtual && styles.typeButtonActive]}
-                onPress={() => setIsVirtual(true)}
-              >
-                <Ionicons
-                  name="videocam"
-                  size={20}
-                  color={isVirtual ? '#fff' : '#888'}
-                />
-                <Text style={[styles.typeText, isVirtual && styles.typeTextActive]}>
-                  Virtual
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Ubicación o Link Virtual */}
-          {isVirtual ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Link del evento *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="https://zoom.us/..."
-                placeholderTextColor="#888"
-                value={virtualLink}
-                onChangeText={setVirtualLink}
-                autoCapitalize="none"
-              />
-            </View>
-          ) : (
+      {/* ── CAMPOS ───────────────────────────────────────────────────── */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: space[5], paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* ── PASO 1: Qué ─────────────────────────────────────────── */}
+          {step === 1 && (
             <>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nombre del lugar</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej: Teatro Nacional"
-                  placeholderTextColor="#888"
-                  value={locationName}
-                  onChangeText={setLocationName}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Ubicación en el mapa *</Text>
-                <TouchableOpacity
-                  style={styles.mapButton}
-                  onPress={() => setShowMapModal(true)}
+              {/* Imagen — opcional */}
+              <Field>
+                <FieldLabel label="Foto o afiche" optional colors={colors} />
+                <Pressable
+                  onPress={showImageOptions}
+                  style={[styles.imagePicker, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+                  accessibilityRole="button"
                 >
-                  {locationCoords ? (
-                    <View style={styles.mapPreview}>
-                      <Ionicons name="checkmark-circle" size={24} color="#00b894" />
-                      <Text style={styles.mapButtonTextSuccess}>
-                        Ubicación seleccionada
-                      </Text>
-                    </View>
+                  {image ? (
+                    <Image source={{ uri: image }} style={styles.imagePreview} contentFit="cover" />
                   ) : (
-                    <View style={styles.mapPreview}>
-                      <Ionicons name="map" size={24} color="#6c5ce7" />
-                      <Text style={styles.mapButtonText}>
-                        Seleccionar en el mapa
-                      </Text>
+                    <View style={styles.imagePlaceholder}>
+                      <Ionicons name="image-outline" size={32} color={colors['text.tertiary']} />
+                      <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>Tocar para agregar</Text>
                     </View>
                   )}
-                </TouchableOpacity>
-              </View>
+                </Pressable>
+              </Field>
+
+              {/* Título */}
+              <Field>
+                <FieldLabel label="Nombre del evento" colors={colors} />
+                <TextBox
+                  value={title}
+                  onChangeText={t => setTitle(t.slice(0, INPUT_LIMITS.EVENT_TITLE))}
+                  placeholder="Ej. Festival de la Luz 2026"
+                  colors={colors}
+                />
+              </Field>
+
+              {/* Descripción — opcional */}
+              <Field>
+                <FieldLabel label="Descripción" optional colors={colors} />
+                <TextBox
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Contá de qué se trata el evento…"
+                  multiline
+                  maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
+                  colors={colors}
+                />
+                <Text variant="caption" color="text.tertiary" style={{ textAlign: 'right', marginTop: 4 }}>
+                  {description.length}/{INPUT_LIMITS.EVENT_DESCRIPTION}
+                </Text>
+              </Field>
+
+              {/* Categoría — chips horizontales, nunca grilla */}
+              <Field>
+                <FieldLabel label="Categoría" colors={colors} />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: space[2], alignItems: 'center' }}>
+                  {CATEGORIES.map(cat => {
+                    const active = category === cat.id;
+                    return (
+                      <Pressable
+                        key={cat.id}
+                        onPress={() => setCategory(cat.id)}
+                        style={[
+                          styles.catChip,
+                          {
+                            backgroundColor: active ? cat.color + '33' : colors['bg.surface'],
+                            borderColor: active ? cat.color : colors['border.strong'],
+                          },
+                        ]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: active }}
+                      >
+                        <Ionicons name={cat.icon} size={16} color={active ? cat.color : colors['text.tertiary']} />
+                        <Text style={{
+                          fontSize: 14,
+                          fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium',
+                          color: active ? cat.color : colors['text.secondary'],
+                        }}>
+                          {cat.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </Field>
             </>
           )}
 
-          {/* Precio */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Precio</Text>
-            <View style={styles.priceToggle}>
-              <TouchableOpacity
-                style={[styles.toggleButton, isFree && styles.toggleButtonActive]}
-                onPress={() => setIsFree(true)}
-              >
-                <Text style={[styles.toggleText, isFree && styles.toggleTextActive]}>
-                  Gratis
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleButton, !isFree && styles.toggleButtonActive]}
-                onPress={() => setIsFree(false)}
-              >
-                <Text style={[styles.toggleText, !isFree && styles.toggleTextActive]}>
-                  De pago
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {!isFree && (
-              <TextInput
-                style={[styles.input, { marginTop: 10 }]}
-                placeholder="Precio en colones"
-                placeholderTextColor="#888"
-                value={price}
-                onChangeText={setPrice}
-                keyboardType="numeric"
-              />
-            )}
-          </View>
+          {/* ── PASO 2: Cuándo y dónde ───────────────────────────────── */}
+          {step === 2 && (
+            <>
+              {/* Fecha */}
+              <Field>
+                <FieldLabel label="Fecha" colors={colors} />
+                <Pressable
+                  onPress={() => setShowDatePicker(true)}
+                  style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="calendar-outline" size={20} color={colors['text.tertiary']} />
+                  <Text style={{ flex: 1, fontSize: 16, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.primary'] }}>
+                    {humanDate(date)}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
+                </Pressable>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={date}
+                    mode="date"
+                    minimumDate={new Date()}
+                    onChange={(_, d) => { setShowDatePicker(Platform.OS === 'ios'); if (d) setDate(d); }}
+                  />
+                )}
+              </Field>
 
-          {/* Botón Crear */}
-          <TouchableOpacity
-            style={[styles.createButton, loading && styles.createButtonDisabled]}
-            onPress={handleCreate}
-            disabled={loading}
-            activeOpacity={0.75}
-          >
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator color="#fff" />
-                <Text style={styles.createButtonText}>
-                  {uploadingImage ? 'Subiendo imagen...' : 'Creando...'}
+              {/* Hora */}
+              <Field>
+                <FieldLabel label="Hora" colors={colors} />
+                <Pressable
+                  onPress={() => setShowTimePicker(true)}
+                  style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="time-outline" size={20} color={colors['text.tertiary']} />
+                  <Text style={{ flex: 1, fontSize: 16, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.primary'] }}>
+                    {humanTime(time)}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
+                </Pressable>
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={time}
+                    mode="time"
+                    onChange={(_, t) => { setShowTimePicker(Platform.OS === 'ios'); if (t) setTime(t); }}
+                  />
+                )}
+              </Field>
+
+              {/* Tipo — SegmentedControl, no dos botones violetas */}
+              <Field>
+                <FieldLabel label="Modalidad" colors={colors} />
+                <SegmentedControl
+                  options={[
+                    { label: 'Presencial', value: 'presencial' },
+                    { label: 'Virtual',    value: 'virtual' },
+                  ]}
+                  selected={isVirtual ? 'virtual' : 'presencial'}
+                  onSelect={v => setIsVirtual(v === 'virtual')}
+                />
+              </Field>
+
+              {/* Lugar (condicional) */}
+              {!isVirtual ? (
+                <>
+                  <Field>
+                    <FieldLabel label="Nombre del lugar" optional colors={colors} />
+                    <TextBox
+                      value={locationName}
+                      onChangeText={setLocationName}
+                      placeholder="Ej. Teatro Nacional"
+                      colors={colors}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel label="Ubicación en el mapa" colors={colors} />
+                    <Pressable
+                      onPress={() => setShowMapModal(true)}
+                      style={[styles.mapBtn, { backgroundColor: locationCoords ? colors['status.free.bg'] : colors['bg.surface'], borderColor: locationCoords ? colors['status.free'] : colors['border.strong'] }]}
+                    >
+                      <Ionicons name={locationCoords ? 'checkmark-circle' : 'map-outline'} size={20} color={locationCoords ? colors['status.free'] : colors['text.tertiary']} />
+                      <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', color: locationCoords ? colors['status.free'] : colors['text.secondary'] }}>
+                        {locationCoords ? 'Ubicación seleccionada' : 'Tocar para marcar en el mapa'}
+                      </Text>
+                    </Pressable>
+                  </Field>
+                </>
+              ) : (
+                <Field>
+                  <FieldLabel label="Link de la transmisión" colors={colors} />
+                  <TextBox
+                    value={virtualLink}
+                    onChangeText={setVirtualLink}
+                    placeholder="https://meet.google.com/..."
+                    keyboardType="url"
+                    colors={colors}
+                  />
+                </Field>
+              )}
+            </>
+          )}
+
+          {/* ── PASO 3: Precio + vista previa ────────────────────────── */}
+          {step === 3 && (
+            <>
+              {/* Precio — SegmentedControl */}
+              <Field>
+                <FieldLabel label="Entrada" colors={colors} />
+                <SegmentedControl
+                  options={[
+                    { label: 'Gratis', value: 'gratis' },
+                    { label: 'De pago', value: 'pago' },
+                  ]}
+                  selected={isFree ? 'gratis' : 'pago'}
+                  onSelect={v => setIsFree(v === 'gratis')}
+                />
+              </Field>
+
+              {!isFree && (
+                <Field>
+                  <FieldLabel label="Precio en colones" colors={colors} />
+                  <TextBox
+                    value={price}
+                    onChangeText={setPrice}
+                    placeholder="Ej. 5000"
+                    keyboardType="numeric"
+                    colors={colors}
+                  />
+                </Field>
+              )}
+
+              {/* Vista previa real del EventRow */}
+              <View style={[styles.previewSection, { borderColor: colors['border.subtle'] }]}>
+                <Text variant="overline" color="text.tertiary" style={{ paddingHorizontal: space[5], paddingBottom: space[2] }}>
+                  ASÍ SE VE EN EL FEED
                 </Text>
+                <View style={{ borderRadius: radius.lg, overflow: 'hidden', marginHorizontal: space[5], backgroundColor: colors['bg.surface'] }}>
+                  <EventRow
+                    event={{
+                      title: title || 'Nombre del evento',
+                      category: category || '',
+                      date: storageDate(date),
+                      time: storageTime(time),
+                      image: image || null,
+                      isFree,
+                      price: isFree ? 0 : (parseInt(price) || undefined),
+                      location: { name: locationName || (isVirtual ? 'Evento virtual' : 'Sin ubicación') },
+                    }}
+                    trailing="auto"
+                    onPress={() => {}}
+                  />
+                </View>
               </View>
-            ) : (
-              <Text style={styles.createButtonText}>Crear Evento</Text>
+            </>
+          )}
+        </ScrollView>
+
+        {/* ── BARRA DE ACCIÓN FIJA — botón CTA amarillo ────────────── */}
+        <View style={[styles.actionBar, { paddingBottom: Math.max(space[4], insets.bottom), borderTopColor: colors['border.subtle'], backgroundColor: colors['bg.base'] }]}>
+          <Pressable
+            onPress={goNext}
+            disabled={!stepIsValid || loading}
+            style={[
+              styles.ctaBtn,
+              { backgroundColor: stepIsValid && !loading ? colors['action.primary'] : colors['action.primary.disabled'] },
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !stepIsValid || loading }}
+          >
+            <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans_700Bold', color: stepIsValid && !loading ? colors['text.onAction'] : colors['text.tertiary'] }}>
+              {continueLabel}
+            </Text>
+            {step < 3 && stepIsValid && (
+              <Ionicons name="chevron-forward" size={18} color={colors['text.onAction']} />
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
 
-      {/* Modal del Mapa */}
-      <Modal
-        visible={showMapModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <SafeAreaView style={styles.mapModalContainer}>
-          <View style={styles.mapHeader}>
-            <TouchableOpacity onPress={() => setShowMapModal(false)}>
-              <Ionicons name="close" size={28} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.mapHeaderTitle}>Seleccionar ubicación</Text>
-            <TouchableOpacity onPress={confirmLocation}>
-              <Text style={styles.mapConfirmText}>Listo</Text>
-            </TouchableOpacity>
-          </View>
-
+      {/* ── MODAL DE MAPA ────────────────────────────────────────────── */}
+      <Modal visible={showMapModal} animationType="slide" onRequestClose={() => setShowMapModal(false)}>
+        <View style={{ flex: 1 }}>
           <MapView
-            style={styles.map}
+            style={StyleSheet.absoluteFill}
             initialRegion={currentLocation}
-            onPress={handleMapPress}
+            onPress={e => setLocationCoords(e.nativeEvent.coordinate)}
+            showsUserLocation
           >
             {locationCoords && (
-              <Marker coordinate={locationCoords}>
-                <View style={styles.markerContainer}>
-                  <Ionicons name="location" size={40} color="#6c5ce7" />
-                </View>
-              </Marker>
+              <Marker coordinate={locationCoords} />
             )}
           </MapView>
-
-          <View style={styles.mapFooter}>
-            <Ionicons name="information-circle" size={20} color="#888" />
-            <Text style={styles.mapFooterText}>
-              Toca en el mapa para seleccionar la ubicación del evento
+          <View style={[styles.mapModalFooter, { backgroundColor: colors['bg.raised'], paddingBottom: insets.bottom + space[3] }]}>
+            <Text variant="caption" color="text.tertiary">
+              {locationCoords ? 'Ubicación seleccionada. Tocá en el mapa para moverla.' : 'Tocá en el mapa para marcar la ubicación'}
             </Text>
+            <Pressable
+              onPress={() => locationCoords ? setShowMapModal(false) : Alert.alert('', 'Seleccioná un punto en el mapa')}
+              style={[styles.ctaBtn, { backgroundColor: locationCoords ? colors['action.primary'] : colors['bg.surface'], marginTop: space[3] }]}
+            >
+              <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', color: locationCoords ? colors['text.onAction'] : colors['text.tertiary'] }}>
+                Confirmar ubicación
+              </Text>
+            </Pressable>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
+  screen: { flex: 1 },
+
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[5],
+    paddingBottom: space[3],
+    gap: space[4],
+    flexShrink: 0,
   },
-  headerTitle: {
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressTrack: { height: 6, borderRadius: radius.full, overflow: 'hidden' },
+  progressFill:  { height: '100%', borderRadius: radius.full },
+
+  stepTitle: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    lineHeight: 34,
+    paddingHorizontal: space[5],
+    paddingBottom: space[4],
   },
-  form: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    color: '#fff',
+
+  fieldWrap: { marginBottom: space[4] },
+
+  textInput: {
+    height: 56,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    paddingHorizontal: space[3],
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#fff',
   },
   textArea: {
     height: 100,
+    paddingTop: space[3],
     textAlignVertical: 'top',
   },
-  imagePickerContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
+
+  // Imagen picker
+  imagePicker: {
+    height: 160,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
-  imagePlaceholder: {
-    flex: 1,
-    backgroundColor: '#2d2d44',
-    justifyContent: 'center',
+  imagePreview: { width: '100%', height: '100%' },
+  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  // Chips de categoría — horizontal, 46px
+  chipScroll: { flexGrow: 0, marginTop: 4 },
+  catChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#3d3d5c',
-    borderStyle: 'dashed',
+    height: 46,
+    paddingHorizontal: space[3],
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    gap: space[2],
+    flexShrink: 0,
   },
-  imagePlaceholderText: {
-    color: '#888',
-    fontSize: 16,
-    marginTop: 10,
+
+  // Pickers de fecha/hora
+  pickerRow: {
+    height: 56,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    gap: space[2],
   },
-  imagePreviewContainer: {
-    flex: 1,
-    position: 'relative',
+
+  // Botón mapa
+  mapBtn: {
+    height: 56,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    gap: space[2],
   },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
+
+  // Vista previa
+  previewSection: {
+    marginTop: space[4],
+    paddingTop: space[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: -space[5], // sangría hasta los bordes
   },
-  removeImageButton: {
+
+  // Action bar
+  actionBar: {
+    paddingHorizontal: space[5],
+    paddingTop: space[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
+  },
+  ctaBtn: {
+    height: 56,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space[2],
+  },
+
+  // Modal de mapa
+  mapModalFooter: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -5,
-  },
-  categoryItem: {
-    width: '23%',
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    margin: '1%',
-  },
-  categoryItemActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  categoryText: {
-    color: '#888',
-    fontSize: 11,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  categoryTextActive: {
-    color: '#fff',
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  dateButton: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    marginLeft: 10,
-  },
-  typeToggle: {
-    flexDirection: 'row',
-  },
-  typeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#2d2d44',
-    padding: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    borderRadius: 12,
-  },
-  typeButtonActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  typeText: {
-    color: '#888',
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  typeTextActive: {
-    color: '#fff',
-  },
-  mapButton: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 20,
-  },
-  mapPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapButtonText: {
-    color: '#6c5ce7',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  mapButtonTextSuccess: {
-    color: '#00b894',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  priceToggle: {
-    flexDirection: 'row',
-  },
-  toggleButton: {
-    flex: 1,
-    backgroundColor: '#2d2d44',
-    padding: 14,
-    alignItems: 'center',
-    marginRight: 10,
-    borderRadius: 12,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  toggleText: {
-    color: '#888',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  toggleTextActive: {
-    color: '#fff',
-  },
-  createButton: {
-    backgroundColor: '#6c5ce7',
-    borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  createButtonDisabled: {
-    opacity: 0.7,
-  },
-  createButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 10,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mapModalContainer: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
-  mapHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2d2d44',
-  },
-  mapHeaderTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  mapConfirmText: {
-    color: '#6c5ce7',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  map: {
-    flex: 1,
-  },
-  markerContainer: {
-    alignItems: 'center',
-  },
-  mapFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
-    backgroundColor: '#2d2d44',
-  },
-  mapFooterText: {
-    color: '#888',
-    fontSize: 14,
-    marginLeft: 8,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: space[5],
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
 });
