@@ -45,6 +45,12 @@ export default function AppNavigator() {
     unsubscribeRef.current = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser ?? null);
       if (currentUser) {
+        // Usuarios anónimos ("Ver eventos sin registrarse") van directo a MainApp
+        if (currentUser.isAnonymous) {
+          setHasInterests(true);
+          return;
+        }
+
         updateDoc(doc(db, 'users', currentUser.uid), {
           lastActive: serverTimestamp(),
         }).catch(() => {});

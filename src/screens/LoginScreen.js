@@ -3,7 +3,7 @@
 // PRESENTACIÓN: design system v1.1 — Input, Button, tokens.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInAnonymously, signInWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -45,6 +45,12 @@ export default function LoginScreen({ navigation }) {
       }
     }
     setLoading(false);
+  };
+
+  // "Ver eventos" — acceso anónimo sin registro (§ 8a UX_DESIGN_SYSTEM)
+  const handleBrowse = async () => {
+    try { await signInAnonymously(auth); }
+    catch { Alert.alert('Error', 'No se pudo conectar. Verificá tu conexión.'); }
   };
 
   const handleGoogle = async () => {
@@ -161,6 +167,18 @@ export default function LoginScreen({ navigation }) {
               <Text variant="bodyStrong" style={{ color: colors['link'] }}>Registrate</Text>
             </Text>
           </Pressable>
+
+          {/* ── Sin muro de registro (§ 8a) ── */}
+          <Pressable
+            onPress={handleBrowse}
+            style={styles.browseLink}
+            accessibilityRole="link"
+            accessibilityLabel="Ver eventos sin registrarte"
+          >
+            <Text variant="caption" color="text.tertiary" align="center">
+              {t.onboarding.welcome.skip}
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -195,4 +213,5 @@ const styles = StyleSheet.create({
   googleLabel: {},
 
   registerLink: { marginTop: space[5], alignSelf: 'center' },
+  browseLink:   { marginTop: space[4], alignSelf: 'center', paddingVertical: space[2] },
 });
