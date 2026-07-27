@@ -7,9 +7,9 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Button from '../components/ui/Button';
 import Dialog from '../components/ui/Dialog';
-import { SwitchRow } from '../components/ui/Controls';
 import Text from '../components/ui/Text';
 
 import { auth } from '../config/firebase';
@@ -18,10 +18,22 @@ import { space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
 import Constants from 'expo-constants';
 
+const NOTIF_KEY = '@enfiestados/notif_prefs';
+
 export default function SettingsScreen({ navigation }) {
   const { colors, mode, setThemeMode } = useTheme();
-  const [notifs, setNotifs]       = useState(true);
+  const [notifCount,  setNotifCount]  = useState(3);  // "3 de 3" por defecto
   const [showLogout, setShowLogout] = useState(false);
+
+  // Leer preferencias para mostrar el valor actual en la fila
+  useState(() => {
+    AsyncStorage.getItem(NOTIF_KEY).then(raw => {
+      if (raw) {
+        const prefs = JSON.parse(raw);
+        setNotifCount(Object.values(prefs).filter(Boolean).length);
+      }
+    }).catch(() => {});
+  });
 
   const handleLogout = async () => {
     try { await signOut(auth); } catch { Alert.alert('Error', 'No se pudo cerrar sesión'); }
@@ -132,14 +144,15 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Notificaciones */}
+        {/* Notificaciones — navega a subpantalla con 3 tipos (§ 7.4) */}
         <SectionTitle label="NOTIFICACIONES" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <SwitchRow
+          <Row
+            icon="notifications-outline"
             label="Notificaciones push"
-            description="Alertas de actividad e interacciones"
-            value={notifs}
-            onValueChange={setNotifs}
+            subtitle="Alertas de actividad e interacciones"
+            value={`${notifCount} de 3`}
+            onPress={() => navigation.navigate('NotificationsSettings')}
           />
         </View>
 
