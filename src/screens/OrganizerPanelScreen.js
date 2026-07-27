@@ -147,21 +147,29 @@ export default function OrganizerPanelScreen({ navigation }) {
                     trailing="auto"
                     onPress={() => navigation.navigate('EventDetail', { event: ev })}
                   />
-                  {/* Mini-stats del evento */}
-                  <View style={[styles.eventStats, { borderBottomColor: colors['border.subtle'] }]}>
-                    <View style={styles.miniStat}>
-                      <Ionicons name="people-outline" size={14} color={colors['status.free']} />
-                      <Text variant="caption" color="text.tertiary">{ev.attendees?.length ?? 0} van</Text>
+                  {/* Mini-stats — § 7.3: solo si > 0, todos en text.tertiary outline */}
+                  {((ev.attendees?.length ?? 0) > 0 || (ev.likes?.length ?? 0) > 0 || (ev.comments?.length ?? 0) > 0) && (
+                    <View style={[styles.eventStats, { borderBottomColor: colors['border.subtle'] }]}>
+                      {(ev.attendees?.length ?? 0) > 0 && (
+                        <View style={styles.miniStat}>
+                          <Ionicons name="people-outline" size={14} color={colors['text.tertiary']} />
+                          <Text variant="caption" color="text.tertiary">{ev.attendees.length} van</Text>
+                        </View>
+                      )}
+                      {(ev.likes?.length ?? 0) > 0 && (
+                        <View style={styles.miniStat}>
+                          <Ionicons name="heart-outline" size={14} color={colors['text.tertiary']} />
+                          <Text variant="caption" color="text.tertiary">{ev.likes.length}</Text>
+                        </View>
+                      )}
+                      {(ev.comments?.length ?? 0) > 0 && (
+                        <View style={styles.miniStat}>
+                          <Ionicons name="chatbubble-outline" size={14} color={colors['text.tertiary']} />
+                          <Text variant="caption" color="text.tertiary">{ev.comments.length}</Text>
+                        </View>
+                      )}
                     </View>
-                    <View style={styles.miniStat}>
-                      <Ionicons name="heart-outline" size={14} color={colors['status.urgent']} />
-                      <Text variant="caption" color="text.tertiary">{ev.likes?.length ?? 0}</Text>
-                    </View>
-                    <View style={styles.miniStat}>
-                      <Ionicons name="chatbubble-outline" size={14} color={colors['text.tertiary']} />
-                      <Text variant="caption" color="text.tertiary">{ev.comments?.length ?? 0}</Text>
-                    </View>
-                  </View>
+                  )}
                 </View>
               ))}
             </>

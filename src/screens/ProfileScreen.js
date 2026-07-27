@@ -14,7 +14,7 @@ import EmptyState from '../components/ui/EmptyState';
 import EventRow from '../components/ui/EventRow';
 import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
-import { UnderlineTabs } from '../components/ui/SegmentedControl';
+import { SegmentedControl } from '../components/ui/SegmentedControl';  // § 4.3: reemplaza UnderlineTabs
 import PostCard from '../components/PostCard';
 
 import { auth, db } from '../config/firebase';
@@ -28,6 +28,7 @@ import t from '../i18n/es-CR.json';
 const TABS = [
   { label: 'Organizo',       value: 'eventos' },
   { label: 'Publicaciones',  value: 'publicaciones' },
+  { label: 'Guardados',      value: 'guardados' },   // § 4.3: tercera pestaña
 ];
 
 export default function ProfileScreen({ navigation }) {
@@ -150,7 +151,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] + 80 }}>
 
         {/* ── TOP BAR: título + settings ─────────────────────────────── */}
         <View style={styles.topBar}>
@@ -165,13 +166,13 @@ export default function ProfileScreen({ navigation }) {
           </Pressable>
         </View>
 
-        {/* ── PORTADA 150px con overlay en la base ──────────────────── */}
+        {/* ── PORTADA 150px — § 4.1: sin banda sólida, solo foto */}
         <View style={[styles.cover, { backgroundColor: colors['bg.surface'] }]}>
           {user?.coverImage ? (
             <Image source={{ uri: user.coverImage }} style={styles.coverImg} contentFit="cover" />
           ) : null}
-          {/* Overlay degradado hacia bg.base */}
-          <View style={[styles.coverOverlay, { backgroundColor: colors['bg.base'] }]} />
+          {/* Overlay semitransparente suave en la base (no banda sólida) */}
+          <View style={styles.coverOverlay} />
         </View>
 
         {/* ── AVATAR superpuesto ────────────────────────────────────── */}
@@ -204,13 +205,20 @@ export default function ProfileScreen({ navigation }) {
             </Pressable>
           )}
 
-          {/* Acciones: [Editar perfil] + [Compartir] */}
+          {/* Acciones en UNA sola fila (§ 4.2): [Editar flex:1] [Herramientas flex:1] [⤴ 50×50] */}
           <View style={styles.actionsRow}>
             <Button
               variant="secondary"
               size="sm"
               label="Editar perfil"
               onPress={() => navigation.navigate('EditProfile', { user: null })}
+              style={{ flex: 1 }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              label="Herramientas"
+              onPress={() => navigation.navigate('OrganizerPanel')}
               style={{ flex: 1 }}
             />
             <Pressable
@@ -222,20 +230,12 @@ export default function ProfileScreen({ navigation }) {
             </Pressable>
           </View>
 
-          {/* Accesos especiales — compactos */}
-          <View style={styles.specialRow}>
-            {/* Panel de organizador — para todos los usuarios */}
-            <Button
-              variant="secondary"
-              size="sm"
-              label="Herramientas"
-              leadingIcon={<Ionicons name="bar-chart-outline" size={14} color={colors['nav.selected']} />}
-              onPress={() => navigation.navigate('OrganizerPanel')}
-            />
-            {user?.isAdmin && (
-              <Button variant="primary" size="sm" label="Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
-            )}
-          </View>
+          {/* Accesos especiales solo para admin */}
+          {user?.isAdmin && (
+            <View style={styles.specialRow}>
+              <Button variant="primary" size="sm" label="Panel Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
+            </View>
+          )}
 
           {/* Stats: Voy · Guardados · Seguidores (tocables) */}
           <View style={[styles.statsRow, { borderTopColor: colors['border.subtle'], borderBottomColor: colors['border.subtle'] }]}>
@@ -250,9 +250,9 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ── TABS: Organizo | Publicaciones ────────────────────────── */}
+        {/* ── TABS: SegmentedControl (§ 4.3): Organizo | Publicaciones | Guardados */}
         <View style={styles.tabsWrap}>
-          <UnderlineTabs options={TABS} selected={tab} onSelect={setTab} />
+          <SegmentedControl options={TABS} selected={tab} onSelect={setTab} />
         </View>
 
         {/* ── CONTENIDO ─────────────────────────────────────────────── */}
@@ -293,7 +293,7 @@ export default function ProfileScreen({ navigation }) {
               )}
             </>
           )
-        ) : (
+        ) : tab === 'publicaciones' ? (
           /* ── PUBLICACIONES ──────────────────────────────────────── */
           <>
             <Pressable
@@ -324,6 +324,15 @@ export default function ProfileScreen({ navigation }) {
               ))
             )}
           </>
+        ) : (
+          /* ── GUARDADOS (§ 4.3) ─────────────────────────────────── */
+          <EmptyState
+            icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
+            title="Sin guardados todavía"
+            description="Guardá los planes que te gusten y aparecen acá con recordatorio."
+            actionLabel="Explorar eventos"
+            onAction={() => navigation.navigate('Explore')}
+          />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -342,14 +351,14 @@ const styles = StyleSheet.create({
   },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
-  // Portada
+  // Portada — § 4.1: overlay semitransparente, NO banda sólida
   cover:        { height: 150, position: 'relative' },
   coverImg:     { width: '100%', height: '100%' },
   coverOverlay: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
-    height: 60,
-    opacity: 0.7,
+    height: 80,
+    backgroundColor: 'rgba(0,0,0,0.08)',  // muy suave, no banda
   },
 
   // Perfil
