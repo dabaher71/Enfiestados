@@ -222,17 +222,20 @@ export default function ProfileScreen({ navigation }) {
             </Pressable>
           </View>
 
-          {/* Accesos admin/advertiser — compactos */}
-          {(user?.isAdmin || user?.isAdvertiser) && (
-            <View style={styles.specialRow}>
-              {user?.isAdvertiser && (
-                <Button variant="secondary" size="sm" label="Anuncios" leadingIcon={<Ionicons name="megaphone" size={14} color={colors['nav.selected']} />} onPress={() => navigation.navigate('AdCenter')} />
-              )}
-              {user?.isAdmin && (
-                <Button variant="primary" size="sm" label="Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
-              )}
-            </View>
-          )}
+          {/* Accesos especiales — compactos */}
+          <View style={styles.specialRow}>
+            {/* Panel de organizador — para todos los usuarios */}
+            <Button
+              variant="secondary"
+              size="sm"
+              label="Herramientas"
+              leadingIcon={<Ionicons name="bar-chart-outline" size={14} color={colors['nav.selected']} />}
+              onPress={() => navigation.navigate('OrganizerPanel')}
+            />
+            {user?.isAdmin && (
+              <Button variant="primary" size="sm" label="Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
+            )}
+          </View>
 
           {/* Stats: Voy · Guardados · Seguidores (tocables) */}
           <View style={[styles.statsRow, { borderTopColor: colors['border.subtle'], borderBottomColor: colors['border.subtle'] }]}>
