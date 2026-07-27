@@ -1,0 +1,200 @@
+{
+  "home": {
+    "title": "Enfiestados",
+    "tabs": {
+      "forYou": "Para vos",
+      "following": "Siguiendo"
+    },
+    "filters": {
+      "today": "Hoy",
+      "weekend": "Este finde",
+      "free": "Gratis"
+    },
+    "empty": {
+      "forYou": {
+        "title": "Todo tranquilo por acá",
+        "desc": "Seguí a organizadores o ajustá tus gustos para ver planes que te interesen.",
+        "action": "Ajustar gustos"
+      },
+      "following": {
+        "title": "Sin planes de tus seguidos",
+        "desc": "Seguí a organizadores para ver sus eventos acá.",
+        "action": "Explorar"
+      }
+    },
+    "error": {
+      "title": "No pudimos cargar el feed",
+      "action": "Reintentar"
+    },
+    "endOfFeed": "No hay más eventos esta semana",
+    "endAction": "Ver la próxima semana",
+    "messages": "Mensajes",
+    "createEvent": "Crear evento"
+  },
+  "explore": {
+    "title": "Explorar",
+    "searchPlaceholder": "Buscar eventos…",
+    "filters": "Filtros",
+    "viewMap": "Mapa",
+    "viewList": "Lista",
+    "empty": {
+      "title": "No hay eventos acá",
+      "desc": "Intentá ampliar el radio de búsqueda.",
+      "action": "Ampliar a 30 km"
+    },
+    "error": {
+      "title": "No pudimos cargar los eventos",
+      "action": "Reintentar"
+    }
+  },
+  "myPlans": {
+    "title": "Mis planes",
+    "tabs": {
+      "going": "Voy",
+      "saved": "Guardados",
+      "tickets": "Entradas"
+    },
+    "empty": {
+      "going": {
+        "title": "Todavía no vas a nada",
+        "desc": "Guardá los planes que te gusten y aparecen acá con recordatorio.",
+        "action": "Explorar este finde"
+      },
+      "saved": {
+        "title": "Sin guardados todavía",
+        "desc": "Tocá el marcador en cualquier evento para guardarlo acá.",
+        "action": "Explorar eventos"
+      },
+      "tickets": {
+        "title": "Sin entradas",
+        "desc": "Tus entradas compradas aparecen acá con el código QR.",
+        "action": "Explorar eventos"
+      }
+    }
+  },
+  "alerts": {
+    "title": "Alertas",
+    "tabs": {
+      "notifications": "Notificaciones",
+      "requests": "Solicitudes"
+    },
+    "empty": {
+      "title": "Todavía no hay nada",
+      "desc": "Seguí a un organizador o guardá un evento y acá te avisamos de todo lo que pase.",
+      "action": "Explorar eventos"
+    },
+    "markAll": "Marcar todo como leído"
+  },
+  "profile": {
+    "tabs": {
+      "events": "Eventos",
+      "posts": "Publicaciones"
+    },
+    "tools": "Herramientas de organizador",
+    "settings": "Configuración",
+    "editProfile": "Editar perfil"
+  },
+  "messages": {
+    "title": "Mensajes",
+    "empty": {
+      "title": "Sin conversaciones",
+      "desc": "Cuando compartás un evento con alguien, la charla aparece acá."
+    }
+  },
+  "event": {
+    "attend": "¡Voy!",
+    "attending": "Vas a ir",
+    "save": "Guardar",
+    "saved": "Guardado",
+    "share": "Compartir",
+    "report": "Reportar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "cta": {
+      "buyTickets": "Comprar entradas",
+      "externalNote": "Se abre en el sitio del organizador · guardamos el evento"
+    },
+    "confirmDelete": {
+      "title": "¿Eliminar evento?",
+      "message": "Esta acción no se puede deshacer. Los asistentes recibirán una notificación.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar"
+    },
+    "reminder": "Te recordamos {{date}} a las {{time}}"
+  },
+  "createEvent": {
+    "title": "Crear evento",
+    "steps": {
+      "1": "Detalles básicos",
+      "2": "Lugar y fecha",
+      "3": "Entradas y precio"
+    },
+    "saveDraft": "¿Guardar borrador?",
+    "saveDraftDesc": "Podés retomar el evento desde tu perfil.",
+    "save": "Guardar",
+    "discard": "Descartar"
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "El mejor plan está acá",
+      "subtitle": "Descubrí eventos en Costa Rica adaptados a lo que te gusta.",
+      "cta": "Empezar",
+      "skip": "Ver eventos sin registrarme"
+    },
+    "tastes": {
+      "title": "¿Qué te gusta?",
+      "subtitle": "Elegí al menos 3 categorías para personalizar tu feed.",
+      "cta": "Continuar"
+    },
+    "location": {
+      "title": "¿Dónde estás?",
+      "subtitle": "Elegí tu provincia para ver eventos cerca.",
+      "cta": "Continuar"
+    },
+    "permissions": {
+      "title": "Un último paso",
+      "notifications": {
+        "label": "Notificaciones",
+        "desc": "Para avisarte cuando hay algo nuevo que te puede interesar."
+      },
+      "location": {
+        "label": "Ubicación",
+        "desc": "Para mostrarte eventos cerca de donde estás."
+      },
+      "cta": "Listo, mostrá los eventos"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "theme": {
+      "label": "Tema",
+      "system": "Sistema",
+      "dark": "Oscuro",
+      "light": "Claro"
+    },
+    "notifications": "Notificaciones",
+    "privacy": "Privacidad",
+    "account": "Cuenta",
+    "logout": "Cerrar sesión",
+    "deleteAccount": "Eliminar cuenta",
+    "version": "Versión"
+  },
+  "common": {
+    "loading": "Cargando…",
+    "retry": "Reintentar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "share": "Compartir",
+    "report": "Reportar",
+    "close": "Cerrar",
+    "back": "Volver",
+    "free": "Gratis",
+    "sponsored": "Patrocinado",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "tomorrow": "Mañana"
+  }
+}
