@@ -1,164 +1,191 @@
+// SettingsScreen — Configuración
+// LÓGICA INTACTA: logout, navegación a subpantallas.
+// PRESENTACIÓN: design system v1.1 — MetaRow, SwitchRow, Dialog, tokens.
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import Button from '../components/ui/Button';
+import Dialog from '../components/ui/Dialog';
+import MetaRow from '../components/ui/MetaRow';
+import { SwitchRow } from '../components/ui/Controls';
+import Text from '../components/ui/Text';
+
 import { auth } from '../config/firebase';
+import { useTheme } from '../theme/ThemeProvider';
+import { space } from '../theme/tokens';
+import t from '../i18n/es-CR.json';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen({ navigation }) {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const { colors, mode, setThemeMode } = useTheme();
+  const [notifs, setNotifs]       = useState(true);
+  const [showLogout, setShowLogout] = useState(false);
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Cerrar sesion',
-      'Estas seguro que deseas cerrar sesion?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Cerrar sesion', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut(auth);
-            } catch (error) {
-              console.error('Error al cerrar sesion:', error);
-            }
-          }
-        },
-      ]
-    );
+  const handleLogout = async () => {
+    try { await signOut(auth); } catch { Alert.alert('Error', 'No se pudo cerrar sesión'); }
+    setShowLogout(false);
   };
 
-  const SettingItem = ({ icon, iconColor, title, subtitle, onPress, rightComponent, danger }) => (
-    <TouchableOpacity 
-      style={styles.settingItem} 
-      onPress={onPress}
-      disabled={!onPress}
-    >
-      <View style={[styles.settingIcon, { backgroundColor: iconColor || '#2d2d44' }]}>
-        <Ionicons name={icon} size={22} color="#fff" />
-      </View>
-      <View style={styles.settingContent}>
-        <Text style={[styles.settingTitle, danger && styles.dangerText]}>{title}</Text>
-        {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
-      </View>
-      {rightComponent || (onPress && <Ionicons name="chevron-forward" size={20} color="#888" />)}
-    </TouchableOpacity>
+  const SectionTitle = ({ label }) => (
+    <Text variant="overline" color="text.tertiary" style={styles.sectionTitle}>{label}</Text>
   );
 
-  const SectionHeader = ({ title }) => (
-    <Text style={styles.sectionHeader}>{title}</Text>
+  const Row = ({ icon, iconColor, label, subtitle, onPress, right }) => (
+    <MetaRow
+      icon={<Ionicons name={icon} size={20} color={iconColor ?? colors['text.secondary']} />}
+      label={label}
+      value={subtitle ?? ''}
+      onPress={onPress}
+    />
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Configuracion</Text>
-        <View style={styles.placeholder} />
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+          <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
+        </Pressable>
+        <Text variant="h2">{t.settings.title}</Text>
+        <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <SectionHeader title="Cuenta" />
-        <View style={styles.section}>
-          <SettingItem
-            icon="person-outline"
-            iconColor="#6c5ce7"
-            title="Editar perfil"
-            subtitle="Foto, nombre, biografia"
-            onPress={() => navigation.navigate('EditProfile', { user: null })}
-          />
-          <SettingItem
-            icon="lock-closed-outline"
-            iconColor="#0984e3"
-            title="Privacidad"
-            subtitle="Permisos, bloqueos"
-            onPress={() => Alert.alert('Privacidad', 'Proximamente...')}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
+
+        {/* Cuenta */}
+        <SectionTitle label="CUENTA" />
+        <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
+          <Row icon="person-outline" iconColor={colors['nav.selected']} label={t.settings.account} subtitle="Foto, nombre, biografía" onPress={() => navigation.navigate('EditProfile', { user: null })} />
+          <Row icon="lock-closed-outline" iconColor={colors['status.info']} label={t.settings.privacy} subtitle="Permisos, bloqueos" onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
+        </View>
+
+        {/* Apariencia */}
+        <SectionTitle label="APARIENCIA" />
+        <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
+          <View style={styles.themeRow}>
+            <Text variant="subtitle" style={{ flex: 1 }}>{t.settings.theme.label}</Text>
+            <View style={[styles.themeToggle, { backgroundColor: colors['bg.base'] }]}>
+              {[
+                { value: 'system', icon: 'phone-portrait-outline', label: 'Auto' },
+                { value: 'dark',   icon: 'moon-outline',           label: 'Oscuro' },
+                { value: 'light',  icon: 'sunny-outline',          label: 'Claro' },
+              ].map(opt => (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setThemeMode(opt.value)}
+                  style={[
+                    styles.themeBtn,
+                    mode === opt.value && { backgroundColor: colors['action.primary'] },
+                  ]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: mode === opt.value }}
+                  accessibilityLabel={opt.label}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={18}
+                    color={mode === opt.value ? colors['text.onAction'] : colors['text.tertiary']}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Notificaciones */}
+        <SectionTitle label="NOTIFICACIONES" />
+        <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
+          <SwitchRow
+            label="Notificaciones push"
+            description="Alertas de actividad e interacciones"
+            value={notifs}
+            onValueChange={setNotifs}
           />
         </View>
 
-        <SectionHeader title="Notificaciones" />
-        <View style={styles.section}>
-          <SettingItem
-            icon="notifications-outline"
-            iconColor="#00b894"
-            title="Notificaciones push"
-            subtitle="Recibe alertas de actividad"
-            rightComponent={
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
-                trackColor={{ false: '#3d3d5c', true: '#6c5ce7' }}
-                thumbColor="#fff"
-              />
-            }
+        {/* Información */}
+        <SectionTitle label="INFORMACIÓN" />
+        <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
+          <Row icon="document-text-outline" iconColor={colors['status.warning']} label="Términos y condiciones" onPress={() => Alert.alert('Términos', 'Próximamente…')} />
+          <Row icon="shield-checkmark-outline" iconColor={colors['status.free']} label="Política de privacidad" onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
+          <Row icon="help-circle-outline" iconColor={colors['status.info']} label="Ayuda y soporte" onPress={() => Alert.alert('Soporte', 'Escribinos a soporte@enfiestados.com')} />
+          <MetaRow
+            icon={<Ionicons name="information-circle-outline" size={20} color={colors['text.tertiary']} />}
+            label="Versión"
+            value={`${Constants.expoConfig?.version ?? '1.0.0'} (Beta)`}
           />
         </View>
 
-        <SectionHeader title="Informacion" />
-        <View style={styles.section}>
-          <SettingItem
-            icon="document-text-outline"
-            iconColor="#fdcb6e"
-            title="Terminos y condiciones"
-            onPress={() => Alert.alert('Terminos', 'Proximamente...')}
-          />
-          <SettingItem
-            icon="shield-checkmark-outline"
-            iconColor="#00b894"
-            title="Politica de privacidad"
-            onPress={() => Alert.alert('Privacidad', 'Proximamente...')}
-          />
-          <SettingItem
-            icon="help-circle-outline"
-            iconColor="#0984e3"
-            title="Ayuda y soporte"
-            onPress={() => Alert.alert('Ayuda', 'Contactanos en: soporte@enfiestados.app')}
-          />
-          <SettingItem
-            icon="information-circle-outline"
-            iconColor="#888"
-            title="Version de la app"
-            subtitle="1.0.0 (Beta)"
-          />
+        {/* Sesión */}
+        <SectionTitle label="SESIÓN" />
+        <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
+          <Pressable
+            onPress={() => setShowLogout(true)}
+            style={[styles.logoutRow, { borderBottomColor: colors['border.subtle'] }]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="log-out-outline" size={20} color={colors['status.urgent']} />
+            <Text variant="subtitle" style={{ color: colors['status.urgent'], marginLeft: space[3] }}>
+              {t.settings.logout}
+            </Text>
+          </Pressable>
         </View>
 
-        <SectionHeader title="Sesion" />
-        <View style={styles.section}>
-          <SettingItem
-            icon="log-out-outline"
-            iconColor="#e74c3c"
-            title="Cerrar sesion"
-            onPress={handleLogout}
-            danger
-          />
-        </View>
-
+        {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Hecho en Costa Rica</Text>
-          <Text style={styles.footerText}>© 2025 Enfiestados</Text>
+          <Text variant="caption" color="text.tertiary" align="center">Hecho con ☀️ en Costa Rica</Text>
+          <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: 4 }}>© 2026 Enfiestados</Text>
         </View>
       </ScrollView>
+
+      <Dialog
+        visible={showLogout}
+        title="¿Cerrar sesión?"
+        message="Tendrás que volver a iniciar sesión para acceder a tu cuenta."
+        confirmLabel={t.settings.logout}
+        cancelLabel={t.common.cancel}
+        destructive
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogout(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15 },
-  backButton: { padding: 5 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  placeholder: { width: 34 },
-  sectionHeader: { color: '#888', fontSize: 13, fontWeight: '600', paddingHorizontal: 20, paddingTop: 25, paddingBottom: 10, textTransform: 'uppercase' },
-  section: { backgroundColor: '#2d2d44', marginHorizontal: 15, borderRadius: 12, overflow: 'hidden' },
-  settingItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' },
-  settingIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  settingContent: { flex: 1 },
-  settingTitle: { color: '#fff', fontSize: 16, fontWeight: '500' },
-  settingSubtitle: { color: '#888', fontSize: 13, marginTop: 2 },
-  dangerText: { color: '#e74c3c' },
-  footer: { alignItems: 'center', paddingVertical: 30 },
-  footerText: { color: '#888', fontSize: 13, marginTop: 5 },
+  safe:         { flex: 1 },
+  header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4] },
+  back:         { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { paddingHorizontal: space[5], paddingTop: space[5], paddingBottom: space[2] },
+  section:      { marginHorizontal: space[5], borderRadius: 16, paddingHorizontal: space[4], overflow: 'hidden' },
+
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space[3],
+  },
+  themeToggle: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    gap: 2,
+  },
+  themeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space[4],
+  },
+
+  footer: { paddingVertical: space[8], alignItems: 'center' },
 });
