@@ -4,7 +4,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -238,9 +238,39 @@ export default function NotificationsScreen({ navigation }) {
   const regular  = notifications.filter(n => n.type !== NOTIFICATION_TYPES.FOLLOW_REQUEST);
   const unread   = regular.filter(n => !n.read).length;
 
-  const renderNotif = useCallback(({ item }) => (
-    <NotificationItem item={item} onPress={handlePress} onDelete={handleDelete} colors={colors} />
-  ), [handlePress, handleDelete, colors]);
+  // Agrupación por día: inyecta separadores en la lista plana
+  const regularWithDays = useMemo(() => {
+    const result = [];
+    let lastDay = '';
+    regular.forEach(n => {
+      const ts = n.createdAt;
+      if (!ts) { result.push(n); return; }
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      let label;
+      if (d >= today) label = 'Hoy';
+      else if (d >= yesterday) label = 'Ayer';
+      else label = d.toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' });
+      if (label !== lastDay) {
+        result.push({ _isDaySep: true, id: `day_${label}`, label });
+        lastDay = label;
+      }
+      result.push(n);
+    });
+    return result;
+  }, [regular]);
+
+  const renderNotif = useCallback(({ item }) => {
+    if (item._isDaySep) {
+      return (
+        <View style={[styles.daySep, { borderBottomColor: colors['border.subtle'] }]}>
+          <Text variant="overline" color="text.tertiary">{item.label.toUpperCase()}</Text>
+        </View>
+      );
+    }
+    return <NotificationItem item={item} onPress={handlePress} onDelete={handleDelete} colors={colors} />;
+  }, [handlePress, handleDelete, colors]);
 
   const renderRequest = useCallback(({ item }) => (
     <FollowRequestItem item={item} onAccept={handleAccept} onReject={handleReject} onNavigate={handleRequestNav} colors={colors} />
@@ -281,13 +311,13 @@ export default function NotificationsScreen({ navigation }) {
         regular.length === 0 ? (
           <EmptyState
             icon={<Ionicons name="notifications-outline" size={28} color={colors['text.tertiary']} />}
-            title={t.alerts.empty.title}
-            description={t.alerts.empty.desc}
-            actionLabel={t.alerts.empty.action}
+            title="Todavía no hay nada"
+            description="Seguí a un organizador o guardá un evento y acá te avisamos de todo lo que pase."
+            actionLabel="Explorar eventos"
             onAction={() => navigation.navigate('Home')}
           />
         ) : (
-          <FlashList data={regular} keyExtractor={i => i.id} renderItem={renderNotif} {...LIST_PROPS} />
+          <FlashList data={regularWithDays} keyExtractor={i => i.id} renderItem={renderNotif} {...LIST_PROPS} />
         )
       ) : (
         requests.length === 0 ? (
@@ -308,6 +338,12 @@ const styles = StyleSheet.create({
   safe:   { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4] },
   tabsWrap: { paddingHorizontal: space[5] },
+  daySep: {
+    paddingHorizontal: space[5],
+    paddingTop: space[4],
+    paddingBottom: space[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
 
   notifRow: {
     flexDirection: 'row',

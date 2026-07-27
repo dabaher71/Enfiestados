@@ -2,7 +2,7 @@
 // Reutiliza la lógica existente de ChatsScreen pero con estructura del design system
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View, Text as RNText } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebase';
 import Avatar from '../components/ui/Avatar';
@@ -12,6 +12,23 @@ import Text from '../components/ui/Text';
 import { subscribeToChats } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+
+// Tiempo relativo humano: "hace 2 h", "ayer", "lun 21 jul"
+function chatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now - d;
+  const h = diff / 3600000;
+  const days = diff / 86400000;
+  if (h < 1) return 'Ahora';
+  if (h < 24) return `${Math.floor(h)} h`;
+  if (days < 2) return 'Ayer';
+  const DAYS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  if (days < 7) return DAYS[d.getDay()];
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
 
 export default function MessagesScreen({ navigation }) {
   const { colors } = useTheme();
@@ -46,7 +63,7 @@ export default function MessagesScreen({ navigation }) {
             <Text variant="title" numberOfLines={1} style={{ flex: 1 }}>{item.otherUserName ?? 'Usuario'}</Text>
             {item.lastMessageTime && (
               <Text variant="caption" color="text.tertiary">
-                {new Date(item.lastMessageTime).toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit' })}
+                {chatTime(item.lastMessageTime)}
               </Text>
             )}
           </View>
