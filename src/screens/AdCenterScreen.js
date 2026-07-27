@@ -1,37 +1,38 @@
+// AdCenterScreen — Centro de Anuncios
+// § 2.1: tokens. § 2.2: CTA amarillo. § 2.5: ceros ocultos, "Clics".
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { getMyAds, pauseAd, resumeAd } from '../services/adService';
 
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import { SkeletonList } from '../components/ui/Skeleton';
+import Text from '../components/ui/Text';
+import { useTheme } from '../theme/ThemeProvider';
+import { elev, radius, space } from '../theme/tokens';
+
 const STATUS_CONFIG = {
-  active:   { label: 'Activo',    color: '#00b894', icon: 'checkmark-circle' },
-  pending:  { label: 'En revisión', color: '#fdcb6e', icon: 'time' },
-  paused:   { label: 'Pausado',   color: '#636e72', icon: 'pause-circle' },
-  rejected: { label: 'Rechazado', color: '#e17055', icon: 'close-circle' },
+  active:   { label: 'Activo',      tint: 'status.free' },
+  pending:  { label: 'En revisión', tint: 'status.warning' },
+  paused:   { label: 'Pausado',     tint: 'text.tertiary' },
+  rejected: { label: 'Rechazado',   tint: 'status.urgent' },
 };
 
-function ctr(impressions, clicks) {
-  if (!impressions) return '0%';
-  return ((clicks / impressions) * 100).toFixed(1) + '%';
+function ctr(imps, clicks) {
+  if (!imps || !clicks) return null;
+  return `${((clicks / imps) * 100).toFixed(1)}%`;
 }
 
 export default function AdCenterScreen({ navigation }) {
-  const [ads, setAds] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [credits, setCredits] = useState(0);
+  const { colors } = useTheme();
+  const [ads,       setAds]       = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [refreshing,setRefreshing]= useState(false);
+  const [credits,   setCredits]   = useState(0);
   const userId = auth.currentUser?.uid;
 
   const loadData = useCallback(async () => {
@@ -42,148 +43,158 @@ export default function AdCenterScreen({ navigation }) {
       ]);
       setAds(myAds);
       setCredits(userSnap.data()?.adCredits || 0);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } catch {}
+    setLoading(false);
+    setRefreshing(false);
   }, [userId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleTogglePause = async (ad) => {
     const action = ad.status === 'active' ? pauseAd : resumeAd;
-    const label = ad.status === 'active' ? 'pausar' : 'reactivar';
-    Alert.alert(
-      `¿${label.charAt(0).toUpperCase() + label.slice(1)} anuncio?`,
-      `¿Querés ${label} "${ad.title}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: label.charAt(0).toUpperCase() + label.slice(1),
-          onPress: async () => {
-            await action(ad.id);
-            loadData();
-          },
-        },
-      ]
-    );
+    const label  = ad.status === 'active' ? 'Pausar' : 'Reactivar';
+    Alert.alert(label, `¿${label} "${ad.title}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: label, onPress: async () => { await action(ad.id); loadData(); } },
+    ]);
   };
 
-  const totalImpressions = ads.reduce((s, a) => s + (a.impressions || 0), 0);
-  const totalClicks = ads.reduce((s, a) => s + (a.clicks || 0), 0);
+  // Stats totales — solo si hay datos reales
+  const totalImps   = ads.reduce((s, a) => s + (a.impressions || 0), 0);
+  const totalClics  = ads.reduce((s, a) => s + (a.clicks || 0), 0);
   const activeCount = ads.filter(a => a.status === 'active').length;
+  const hasMetrics  = totalImps > 0 || totalClics > 0 || activeCount > 0;
 
   const renderAd = ({ item }) => {
     const s = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
+    const itemCtr = ctr(item.impressions, item.clicks);
     return (
-      <View style={styles.adCard}>
+      <View style={[styles.adCard, { backgroundColor: colors['bg.surface'] }, elev[1]]}>
         <View style={styles.adHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.adTitle} numberOfLines={1}>{item.title}</Text>
+            <Text variant="title" numberOfLines={1}>{item.title}</Text>
             <View style={styles.statusRow}>
-              <Ionicons name={s.icon} size={14} color={s.color} />
-              <Text style={[styles.statusText, { color: s.color }]}>{s.label}</Text>
+              <Ionicons name="ellipse" size={8} color={colors[s.tint]} />
+              <Text variant="caption" style={{ color: colors[s.tint] }}>{s.label}</Text>
             </View>
           </View>
           {(item.status === 'active' || item.status === 'paused') && (
-            <TouchableOpacity onPress={() => handleTogglePause(item)} style={styles.iconBtn}>
+            <Pressable onPress={() => handleTogglePause(item)} style={styles.iconBtn} accessibilityRole="button">
               <Ionicons
                 name={item.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
                 size={26}
-                color="#aaa"
+                color={colors['text.tertiary']}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
 
         {item.status === 'rejected' && item.rejectionReason ? (
-          <View style={styles.rejectionBox}>
-            <Ionicons name="information-circle" size={14} color="#e17055" />
-            <Text style={styles.rejectionText}>{item.rejectionReason}</Text>
+          <View style={[styles.rejectionBox, { backgroundColor: colors['status.urgent.bg'] }]}>
+            <Ionicons name="information-circle-outline" size={14} color={colors['status.urgent']} />
+            <Text variant="caption" style={{ color: colors['status.urgent'], flex: 1 }}>{item.rejectionReason}</Text>
           </View>
         ) : null}
 
-        <View style={styles.metricsRow}>
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{(item.impressions || 0).toLocaleString()}</Text>
-            <Text style={styles.metricLabel}>Impresiones</Text>
+        {/* Métricas — solo si hay datos (§ 2.5: ceros no se muestran como dato) */}
+        {(item.impressions > 0 || item.clicks > 0) && (
+          <View style={[styles.metricsRow, { backgroundColor: colors['bg.base'] }]}>
+            {item.impressions > 0 && (
+              <View style={styles.metric}>
+                <Text variant="h3">{item.impressions.toLocaleString('es-CR')}</Text>
+                <Text variant="caption" color="text.tertiary">Impresiones</Text>
+              </View>
+            )}
+            {item.clicks > 0 && (
+              <View style={styles.metric}>
+                <Text variant="h3">{item.clicks.toLocaleString('es-CR')}</Text>
+                <Text variant="caption" color="text.tertiary">Clics</Text>
+              </View>
+            )}
+            {itemCtr && (
+              <View style={styles.metric}>
+                <Text variant="h3">{itemCtr}</Text>
+                <Text variant="caption" color="text.tertiary">CTR</Text>
+              </View>
+            )}
           </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{(item.clicks || 0).toLocaleString()}</Text>
-            <Text style={styles.metricLabel}>Clicks</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{ctr(item.impressions, item.clicks)}</Text>
-            <Text style={styles.metricLabel}>CTR</Text>
-          </View>
-        </View>
+        )}
       </View>
     );
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ActivityIndicator color="#6c5ce7" style={{ marginTop: 60 }} />
-      </SafeAreaView>
-    );
-  }
+  if (loading) return (
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]} edges={['top']}>
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
+        </Pressable>
+        <Text variant="h2">Centro de Anuncios</Text>
+      </View>
+      <SkeletonList count={3} />
+    </SafeAreaView>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Centro de Anuncios</Text>
-        <TouchableOpacity
-          style={styles.newAdBtn}
-          onPress={() => navigation.navigate('CreateAd')}
-        >
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.newAdText}>Nuevo</Text>
-        </TouchableOpacity>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
+        </Pressable>
+        <Text variant="h2" style={{ flex: 1 }}>Centro de Anuncios</Text>
+        {/* CTA amarillo (§ 2.2) */}
+        <Button variant="primary" size="sm" label="Crear anuncio"
+          leadingIcon={<Ionicons name="add" size={16} color={colors['text.onAction']} />}
+          onPress={() => navigation.navigate('CreateAd')} />
       </View>
 
-      {/* Stats globales */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{activeCount}</Text>
-          <Text style={styles.statLabel}>Activos</Text>
+      {/* Resumen — solo si hay métricas reales (§ 2.5) */}
+      {hasMetrics && (
+        <View style={[styles.statsRow, { borderBottomColor: colors['border.subtle'] }]}>
+          {activeCount > 0 && (
+            <View style={styles.statCell}>
+              <Text style={{ fontSize: 22, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.primary'] }}>{activeCount}</Text>
+              <Text variant="caption" color="text.tertiary">Activos</Text>
+            </View>
+          )}
+          {totalImps > 0 && (
+            <View style={styles.statCell}>
+              <Text style={{ fontSize: 22, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.primary'] }}>{totalImps.toLocaleString('es-CR')}</Text>
+              <Text variant="caption" color="text.tertiary">Impresiones</Text>
+            </View>
+          )}
+          {totalClics > 0 && (
+            <View style={styles.statCell}>
+              <Text style={{ fontSize: 22, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.primary'] }}>{totalClics.toLocaleString('es-CR')}</Text>
+              <Text variant="caption" color="text.tertiary">Clics</Text>
+            </View>
+          )}
+          {credits > 0 && (
+            <View style={[styles.statCell, { borderLeftWidth: 1, borderLeftColor: colors['border.subtle'] }]}>
+              <Text style={{ fontSize: 22, fontFamily: 'BricolageGrotesque_700Bold', color: colors['action.primary'] }}>₡{credits.toLocaleString('es-CR')}</Text>
+              <Text variant="caption" color="text.tertiary">Créditos</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{totalImpressions.toLocaleString()}</Text>
-          <Text style={styles.statLabel}>Impresiones</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{totalClicks.toLocaleString()}</Text>
-          <Text style={styles.statLabel}>Clicks</Text>
-        </View>
-        <View style={[styles.statCard, styles.creditsCard]}>
-          <Text style={[styles.statValue, styles.creditsValue]}>{credits.toLocaleString()}</Text>
-          <Text style={styles.statLabel}>Créditos</Text>
-        </View>
-      </View>
+      )}
 
       <FlatList
         data={ads}
         keyExtractor={item => item.id}
         renderItem={renderAd}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor="#6c5ce7" />}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={colors['action.primary']} />
+        }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="megaphone-outline" size={56} color="#3d3d54" />
-            <Text style={styles.emptyTitle}>Sin anuncios aún</Text>
-            <Text style={styles.emptyText}>Creá tu primer anuncio y llegá a tu audiencia.</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => navigation.navigate('CreateAd')}>
-              <Text style={styles.emptyBtnText}>Crear anuncio</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon={<Ionicons name="megaphone-outline" size={28} color={colors['text.tertiary']} />}
+            title="Sin anuncios todavía"
+            description="Creá tu primer anuncio y llegá a tu audiencia en Costa Rica."
+            actionLabel="Crear anuncio"
+            onAction={() => navigation.navigate('CreateAd')}
+          />
         }
       />
     </SafeAreaView>
@@ -191,84 +202,17 @@ export default function AdCenterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 14,
-  },
-  backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', flex: 1 },
-  newAdBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#6c5ce7',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 4,
-  },
-  newAdText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 15,
-    gap: 8,
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  creditsCard: { borderWidth: 1, borderColor: '#6c5ce7' },
-  statValue: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  creditsValue: { color: '#6c5ce7' },
-  statLabel: { color: '#888', fontSize: 10, marginTop: 3 },
-  list: { paddingHorizontal: 15, paddingBottom: 30 },
-  adCard: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-  },
-  adHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
-  adTitle: { color: '#fff', fontWeight: 'bold', fontSize: 15, marginBottom: 4 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  iconBtn: { padding: 4 },
-  rejectionBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#3d2020',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    gap: 6,
-  },
-  rejectionText: { color: '#e17055', fontSize: 12, flex: 1 },
-  metricsRow: {
-    flexDirection: 'row',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 10,
-    paddingVertical: 10,
-  },
-  metric: { flex: 1, alignItems: 'center' },
-  metricValue: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  metricLabel: { color: '#888', fontSize: 11, marginTop: 2 },
-  metricDivider: { width: 1, backgroundColor: '#2d2d44' },
-  empty: { alignItems: 'center', paddingTop: 60 },
-  emptyTitle: { color: '#fff', fontWeight: 'bold', fontSize: 18, marginTop: 14, marginBottom: 8 },
-  emptyText: { color: '#888', fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
-  emptyBtn: {
-    marginTop: 20,
-    backgroundColor: '#6c5ce7',
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  emptyBtnText: { color: '#fff', fontWeight: '700' },
+  safe:    { flex: 1 },
+  header:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4], gap: space[3] },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  statsRow: { flexDirection: 'row', paddingHorizontal: space[5], paddingBottom: space[4], borderBottomWidth: StyleSheet.hairlineWidth, gap: space[4] },
+  statCell: { alignItems: 'center', gap: 2 },
+  list:    { paddingHorizontal: space[5], paddingVertical: space[3], gap: space[3], paddingBottom: space[12] },
+  adCard:  { borderRadius: radius.lg, overflow: 'hidden', padding: space[4] },
+  adHeader:{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: space[3] },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: space[1], marginTop: 3 },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  rejectionBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: radius.sm, padding: space[3], marginBottom: space[3], gap: space[2] },
+  metricsRow: { flexDirection: 'row', borderRadius: radius.md, paddingVertical: space[3], marginTop: space[2] },
+  metric: { flex: 1, alignItems: 'center', gap: 2 },
 });
