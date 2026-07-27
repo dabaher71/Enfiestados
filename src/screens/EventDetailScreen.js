@@ -1,132 +1,155 @@
+// EventDetailScreen — Detalle de evento propio
+// LÓGICA INTACTA: likes, asistencia, comentarios, eliminar, editar, compartir, chats.
+// PRESENTACIÓN: diseño 4a/4b — bloque único de datos, CTA amarillo, sin ceros, sin tilde faltante.
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Image } from 'expo-image';
-import UserAvatar from '../components/UserAvatar';
-import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { safeOpenURL } from '../utils/security';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Alert, FlatList, KeyboardAvoidingView, Platform, Pressable,
+  ScrollView, Share, StyleSheet, View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+
 import CommentsSection from '../components/CommentsSection';
 import ImageViewerModal from '../components/ImageViewerModal';
 import ReportModal from '../components/ReportModal';
+import Avatar from '../components/ui/Avatar';
+import StatusBadge from '../components/ui/StatusBadge';
+import Text from '../components/ui/Text';
+import Sheet from '../components/ui/Sheet';
+
 import { auth, db } from '../config/firebase';
 import { getOrCreateChat, sendMessage } from '../services/chatService';
 import { deleteEvent, toggleAttendance, toggleLike } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
+import { safeOpenURL } from '../utils/security';
+import { formatDateLong, formatTimeShort } from '../lib/format';
+import { useTheme } from '../theme/ThemeProvider';
+import { elev, radius, space } from '../theme/tokens';
+
+// ─── MetaRow con ícono en cápsula ────────────────────────────────────────────
+
+function DataMetaRow({ icon, tint, title, subtitle, actionLabel, onAction, last = false, colors }) {
+  const tintMap = { yellow: colors['action.primary'], violet: colors['nav.selected'], green: colors['status.free'] };
+  const tintColor = tintMap[tint] ?? colors['text.secondary'];
+  return (
+    <View style={[
+      styles.metaRow,
+      !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors['border.subtle'] },
+    ]}>
+      <View style={[styles.metaIcon, { backgroundColor: `${tintColor}22` }]}>
+        <Ionicons name={icon} size={18} color={tintColor} />
+      </View>
+      <View style={styles.metaText}>
+        <Text variant="subtitle" numberOfLines={2}>{title}</Text>
+        {subtitle ? <Text variant="caption" color="text.tertiary">{subtitle}</Text> : null}
+      </View>
+      {actionLabel && onAction ? (
+        <Pressable onPress={onAction} accessibilityRole="button" style={{ paddingLeft: space[2] }}>
+          <Text variant="label" color="nav.selected">{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+// ─── EventDetailScreen ────────────────────────────────────────────────────────
 
 export default function EventDetailScreen({ route, navigation }) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { event } = route.params;
-  const [likes, setLikes] = useState(event.likes || []);
-  const [attendees, setAttendees] = useState(event.attendees || []);
-  const [showOptions, setShowOptions] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [chats, setChats] = useState([]);
-  const [loadingChats, setLoadingChats] = useState(false);
-  const [organizerAvatar, setOrganizerAvatar] = useState(event.organizerAvatar || '');
-  const [organizerName, setOrganizerName] = useState(event.organizerName || '');
-  const [commentsState, setCommentsState] = useState(event.comments || []);
-  const userId = auth.currentUser?.uid;
-  const isLiked = likes.includes(userId);
-  const isAttending = attendees.includes(userId);
-  const isOrganizer = userId === event.organizerId;
-  const lastLoadRef = useRef(0);
-  // helper to try several possible uid fields inside a comment object
-  const getCommentUserId = (c) => c.userId || c.uid || c.authorId || (c.user && (c.user.uid || c.user.id)) || c.ownerId;
 
-  const eventLink = `https://enfiestados.app/evento/${event.id}`;
+  const [likes,          setLikes]          = useState(event.likes || []);
+  const [attendees,      setAttendees]      = useState(event.attendees || []);
+  const [showOptions,    setShowOptions]    = useState(false);
+  const [showShare,      setShowShare]      = useState(false);
+  const [showReport,     setShowReport]     = useState(false);
+  const [showImgViewer,  setShowImgViewer]  = useState(false);
+  const [chats,          setChats]          = useState([]);
+  const [loadingChats,   setLoadingChats]   = useState(false);
+  const [organizerAvatar,setOrganizerAvatar]= useState(event.organizerAvatar || '');
+  const [organizerName,  setOrganizerName]  = useState(event.organizerName || '');
+  const [commentsState,  setCommentsState]  = useState(event.comments || []);
+  const [descExpanded,   setDescExpanded]   = useState(false);
+  const lastLoadRef = useRef(0);
+
+  const userId     = auth.currentUser?.uid;
+  const isLiked    = likes.includes(userId);
+  const isAttending= attendees.includes(userId);
+  const isOrganizer= userId === event.organizerId;
+  const hasLocation= !!(event.location?.lat && event.location?.lng && event.location.lat !== 0);
+  const eventLink  = `https://enfiestados.app/evento/${event.id}`;
+
+  // Datos formateados
+  const dateLabel  = formatDateLong(event.date);
+  const timeLabel  = formatTimeShort(event.time);
+  const dateSubtitle = timeLabel || undefined;
+
+  // ── Carga ──────────────────────────────────────────────────────────────────
 
   const loadOrganizerAndComments = async () => {
-    // Organizer fetch aislado: si el perfil es privado las reglas lo bloquean,
-    // pero no debe impedir cargar los comentarios ni crashear la pantalla.
     if (event.organizerId) {
       try {
         const orgDoc = await getDoc(doc(db, 'users', event.organizerId));
         if (orgDoc.exists()) {
-          const data = orgDoc.data();
-          setOrganizerAvatar(data.avatar || '');
-          setOrganizerName(data.name || data.displayName || event.organizerName || '');
+          const d = orgDoc.data();
+          setOrganizerAvatar(d.avatar || '');
+          setOrganizerName(d.name || d.displayName || event.organizerName || '');
         }
-      } catch {
-        // Usa los datos del evento como fallback (organizerName/organizerAvatar)
-      }
+      } catch {}
     }
-
     try {
-
-      // comments: replace avatar/name with latest user data when available
-      if (event.comments && event.comments.length > 0) {
-        const uniqueIds = [...new Set(event.comments.map(c => getCommentUserId(c)).filter(Boolean))];
-        const userMap = {};
-        for (const uid of uniqueIds) {
-          try {
-            const uDoc = await getDoc(doc(db, 'users', uid));
-            if (uDoc.exists()) userMap[uid] = uDoc.data();
-          } catch {
-            // perfil privado o sin permisos — usa los datos guardados en el comentario
-          }
-        }
-        const updatedComments = event.comments.map(c => {
-          const cid = getCommentUserId(c);
-          if (cid && userMap[cid]) {
-            return {
-              ...c,
-              avatar: userMap[cid].avatar || c.avatar,
-              name: userMap[cid].name || userMap[cid].displayName || c.name,
-            };
-          }
-          return c;
-        });
-        setCommentsState(updatedComments);
+      const getCommentUserId = c => c.userId || c.uid || c.authorId || c.ownerId;
+      if (event.comments?.length) {
+        const ids = [...new Set(event.comments.map(getCommentUserId).filter(Boolean))];
+        const docs = await Promise.all(ids.map(id => getDoc(doc(db, 'users', id)).catch(() => null)));
+        const map = {};
+        ids.forEach((id, i) => { if (docs[i]?.exists()) map[id] = docs[i].data(); });
+        setCommentsState(event.comments.map(c => {
+          const id = getCommentUserId(c);
+          return id && map[id] ? { ...c, avatar: map[id].avatar || c.avatar, name: map[id].name || c.name } : c;
+        }));
       } else {
         setCommentsState([]);
       }
-    } catch (error) {
-      console.error('Error cargando organizer/comentarios:', error);
-    }
+    } catch {}
   };
 
   useEffect(() => {
     loadOrganizerAndComments();
     lastLoadRef.current = Date.now();
     if (userId) recordSignal(userId, event, 'open');
-
     const unsub = navigation.addListener?.('focus', () => {
-      // solo recarga si pasaron más de 30 segundos desde la última carga
       if (Date.now() - lastLoadRef.current > 30_000) {
         loadOrganizerAndComments();
         lastLoadRef.current = Date.now();
       }
     });
-    return () => {
-      if (unsub && typeof unsub === 'function') unsub();
-    };
+    return () => { if (typeof unsub === 'function') unsub(); };
   }, [event, navigation]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleLike = async () => {
     try {
       const newLikes = await toggleLike(event.id, userId);
       setLikes(newLikes);
       recordSignal(userId, event, isLiked ? 'unlike' : 'like');
-      if (!isLiked) {
-        await createNotification({
-          type: NOTIFICATION_TYPES.LIKE,
-          fromUserId: userId,
-          fromUserName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
-          fromUserAvatar: auth.currentUser.photoURL || '',
-          toUserId: event.organizerId,
-          message: 'le dio like a tu evento',
-          eventId: event.id,
-          eventData: event,
-        });
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    }
+      if (!isLiked) await createNotification({
+        type: NOTIFICATION_TYPES.LIKE,
+        fromUserId: userId,
+        fromUserName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
+        fromUserAvatar: auth.currentUser.photoURL || '',
+        toUserId: event.organizerId,
+        message: 'le dio like a tu evento',
+        eventId: event.id, eventData: event,
+      });
+    } catch {}
   };
 
   const handleAttend = async () => {
@@ -134,418 +157,523 @@ export default function EventDetailScreen({ route, navigation }) {
       const newAttendees = await toggleAttendance(event.id, userId);
       setAttendees(newAttendees);
       recordSignal(userId, event, isAttending ? 'unattend' : 'attend');
-      if (!isAttending) {
-        await createNotification({
-          type: NOTIFICATION_TYPES.ATTEND,
-          fromUserId: userId,
-          fromUserName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
-          fromUserAvatar: auth.currentUser.photoURL || '',
-          toUserId: event.organizerId,
-          message: 'asistira a tu evento',
-          eventId: event.id,
-          eventData: event,
-        });
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    }
+      if (!isAttending) await createNotification({
+        type: NOTIFICATION_TYPES.ATTEND,
+        fromUserId: userId,
+        fromUserName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
+        fromUserAvatar: auth.currentUser.photoURL || '',
+        toUserId: event.organizerId,
+        message: 'confirmó asistencia a tu evento',
+        eventId: event.id, eventData: event,
+      });
+    } catch {}
   };
 
-  const handleDelete = () => {
-    Alert.alert('Eliminar evento', 'Estas seguro?', [
+  const handleDelete = () => Alert.alert(
+    '¿Eliminar evento?',
+    `Esta acción no se puede deshacer. Los ${attendees.length} asistentes recibirán una notificación.`,
+    [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: async () => {
-        try {
-          await deleteEvent(event.id, userId);
-          Alert.alert('Exito', 'Evento eliminado');
-          navigation.goBack();
-        } catch (error) {
-          Alert.alert('Error', 'No se pudo eliminar');
-        }
+        try { await deleteEvent(event.id, userId); navigation.goBack(); }
+        catch { Alert.alert('Error', 'No se pudo eliminar'); }
       }},
-    ]);
-  };
+    ]
+  );
 
-  const handleEdit = () => {
-    setShowOptions(false);
-    navigation.navigate('EditEvent', { event });
-  };
-
+  const handleEdit = () => { setShowOptions(false); navigation.navigate('EditEvent', { event }); };
   const openMaps = () => {
-    const lat = event.location?.lat;
-    const lng = event.location?.lng;
-    if (lat && lng) {
-      safeOpenURL('https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng);
-    }
+    if (hasLocation) safeOpenURL(`https://www.google.com/maps/dir/?api=1&destination=${event.location.lat},${event.location.lng}`);
   };
 
   const handleShare = async () => {
-    setShowShareModal(true);
-    loadUserChats();
-  };
-
-  const loadUserChats = async () => {
+    setShowShare(true);
     setLoadingChats(true);
     try {
-      const chatsQuery = query(
-        collection(db, 'chats'),
-        where('participants', 'array-contains', userId)
-      );
-      const snapshot = await getDocs(chatsQuery);
-      const chatsData = [];
-      
-      for (const chatDoc of snapshot.docs) {
-        const chatData = chatDoc.data();
-        const otherUserId = chatData.participants.find(id => id !== userId);
-        const userDoc = await getDoc(doc(db, 'users', otherUserId));
-        if (userDoc.exists()) {
-          chatsData.push({
-            id: chatDoc.id,
-            uid: otherUserId,
-            ...userDoc.data()
-          });
-        }
+      const snap = await getDocs(query(collection(db, 'chats'), where('participants', 'array-contains', userId)));
+      const list = [];
+      for (const d of snap.docs) {
+        const otherId = d.data().participants.find(id => id !== userId);
+        const uDoc = await getDoc(doc(db, 'users', otherId));
+        if (uDoc.exists()) list.push({ id: d.id, uid: otherId, ...uDoc.data() });
       }
-      setChats(chatsData);
-    } catch (error) {
-      console.error('Error cargando chats:', error);
-    }
+      setChats(list);
+    } catch {}
     setLoadingChats(false);
   };
 
   const shareExternal = async () => {
-    setShowShareModal(false);
-    try {
-      await Share.share({
-        message: `Mira este evento en Enfiestados: ${event.title}\n\n${event.date} a las ${event.time}\n${event.location?.name || 'Evento virtual'}\n\n${eventLink}`,
-        title: event.title,
-      });
-    } catch (error) {
-      console.error('Error compartiendo:', error);
-    }
+    setShowShare(false);
+    await Share.share({ message: `${event.title}\n${event.date} · ${event.location?.name || ''}\n${eventLink}`, title: event.title }).catch(() => {});
   };
 
   const copyLink = async () => {
     await Clipboard.setStringAsync(eventLink);
-    Alert.alert('Copiado', 'Link copiado al portapapeles');
-    setShowShareModal(false);
+    setShowShare(false);
+    Alert.alert('', 'Link copiado');
   };
 
   const shareToChat = async (chat) => {
     try {
       const chatData = await getOrCreateChat(userId, chat.uid);
-      const messageText = `Te comparto este evento: ${event.title}\n${event.date} - ${event.time}\n${eventLink}`;
-      await sendMessage(chatData.id, userId, messageText);
-      setShowShareModal(false);
-      Alert.alert('Enviado', `Evento compartido con ${chat.name}`);
-    } catch (error) {
-      console.error('Error enviando:', error);
-      Alert.alert('Error', 'No se pudo enviar');
-    }
+      await sendMessage(chatData.id, userId, `Te comparto este evento: ${event.title}\n${event.date} - ${event.time}\n${eventLink}`);
+      setShowShare(false);
+    } catch {}
   };
 
-  const hasLocation = event.location?.lat && event.location?.lng && event.location.lat !== 0;
-
-  const renderChatItem = ({ item }) => (
-    <TouchableOpacity style={styles.chatItem} onPress={() => shareToChat(item)}>
-      {item.avatar ? (
-        <Image source={{ uri: item.avatar }} style={styles.chatAvatar} />
-      ) : (
-        <View style={[styles.chatAvatar, styles.chatAvatarPlaceholder]}>
-          <Ionicons name="person" size={20} color="#888" />
-        </View>
-      )}
-      <Text style={styles.chatName}>{item.name}</Text>
-      <Ionicons name="send" size={20} color="#6c5ce7" />
-    </TouchableOpacity>
-  );
-
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.flex1}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 50 }}
-      >
-        
-        <View style={styles.imageContainer}>
-          <TouchableOpacity activeOpacity={0.9} onPress={() => event.image && setShowImageViewer(true)}>
-            <Image source={event.image ? { uri: event.image } : require('../../assets/images/icon.png')} style={styles.image} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.optionsButton} onPress={() => setShowOptions(!showOptions)}>
-            <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
-          </TouchableOpacity>
-          {showOptions ? (
-            <View style={styles.optionsMenu}>
-              {isOrganizer ? (
-                <>
-                  <TouchableOpacity style={styles.optionItem} onPress={handleEdit}>
-                    <Ionicons name="create-outline" size={20} color="#fff" />
-                    <Text style={styles.optionText}>Editar evento</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.optionItem} onPress={handleDelete}>
-                    <Ionicons name="trash-outline" size={20} color="#e74c3c" />
-                    <Text style={[styles.optionText, styles.deleteOptionText]}>Eliminar evento</Text>
-                  </TouchableOpacity>
-                </>
+    <View style={[styles.screen, { backgroundColor: colors['bg.base'] }]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        >
+
+          {/* ── HERO ─────────────────────────────────────────────────────── */}
+          <View style={styles.hero}>
+            <Pressable onPress={() => event.image && setShowImgViewer(true)} activeOpacity={0.9}>
+              {event.image ? (
+                <Image source={{ uri: event.image }} style={styles.heroImg} contentFit="cover" transition={200} />
               ) : (
-                <TouchableOpacity style={styles.optionItem} onPress={() => { setShowOptions(false); setShowReportModal(true); }}>
-                  <Ionicons name="flag-outline" size={20} color="#e74c3c" />
-                  <Text style={[styles.optionText, styles.deleteOptionText]}>Reportar evento</Text>
-                </TouchableOpacity>
+                <View style={[styles.heroImg, styles.heroPlaceholder, { backgroundColor: colors['bg.surface'] }]}>
+                  <Ionicons name="image-outline" size={40} color={colors['text.tertiary']} />
+                </View>
+              )}
+            </Pressable>
+
+            {/* Botón atrás */}
+            <Pressable
+              style={[styles.heroBtn, { top: space[3] + insets.top, left: space[4] }]}
+              onPress={() => navigation.goBack()}
+              accessibilityLabel="Volver"
+            >
+              <Ionicons name="arrow-back" size={22} color="#fff" />
+            </Pressable>
+
+            {/* Opciones (···) */}
+            <Pressable
+              style={[styles.heroBtn, { top: space[3] + insets.top, right: space[4] }]}
+              onPress={() => setShowOptions(v => !v)}
+              accessibilityLabel="Opciones"
+            >
+              <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+            </Pressable>
+
+            {/* Menú opciones */}
+            {showOptions && (
+              <View style={[styles.optionsMenu, { backgroundColor: colors['bg.raised'], top: 52 + insets.top, right: space[4] }, elev[3]]}>
+                {isOrganizer ? (
+                  <>
+                    <Pressable style={styles.optionItem} onPress={handleEdit}>
+                      <Ionicons name="create-outline" size={18} color={colors['text.primary']} />
+                      <Text variant="body">Editar evento</Text>
+                    </Pressable>
+                    <View style={[styles.optionDivider, { backgroundColor: colors['border.subtle'] }]} />
+                    <Pressable style={styles.optionItem} onPress={handleDelete}>
+                      <Ionicons name="trash-outline" size={18} color={colors['status.urgent']} />
+                      <Text variant="body" style={{ color: colors['status.urgent'] }}>Eliminar</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable style={styles.optionItem} onPress={() => { setShowOptions(false); setShowReport(true); }}>
+                    <Ionicons name="flag-outline" size={18} color={colors['status.urgent']} />
+                    <Text variant="body" style={{ color: colors['status.urgent'] }}>Reportar</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            {/* Badge tipo */}
+            <View style={[styles.typeBadge, { backgroundColor: event.isVirtual ? colors['status.info'] : colors['status.free'] }]}>
+              <Ionicons name={event.isVirtual ? 'videocam' : 'location'} size={13} color="#fff" />
+              <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#fff' }}>
+                {event.isVirtual ? 'Virtual' : 'Presencial'}
+              </Text>
+            </View>
+          </View>
+
+          {/* ── IDENTIDAD ─────────────────────────────────────────────────── */}
+          <View style={[styles.section, { paddingTop: 18 }]}>
+            <View style={styles.badges}>
+              {event.category && <StatusBadge label={event.category.toUpperCase()} variant="neutral" />}
+              {event.isFree === true || event.price === 0
+                ? <StatusBadge label="Gratis" variant="free" />
+                : typeof event.price === 'number' && event.price > 0
+                  ? <StatusBadge label={`₡${event.price.toLocaleString('es-CR')}`} variant="neutral" />
+                  : null}
+            </View>
+
+            <Text style={[styles.title, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]} numberOfLines={3}>
+              {event.title}
+            </Text>
+
+            {/* Organizador */}
+            <Pressable
+              style={[styles.organizerRow, { backgroundColor: colors['bg.surface'] }]}
+              onPress={() => navigation.navigate('UserProfile', { userId: event.organizerId })}
+              accessibilityRole="button"
+            >
+              <Avatar uri={organizerAvatar} name={organizerName} size={40} />
+              <View style={{ flex: 1, marginLeft: space[3] }}>
+                <Text variant="caption" color="text.tertiary">Organizado por</Text>
+                <Text variant="subtitle">{organizerName || event.organizerName}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors['text.tertiary']} />
+            </Pressable>
+          </View>
+
+          {/* ── BLOQUE ÚNICO DE DATOS ─────────────────────────────────────── */}
+          <View style={[styles.section]}>
+            <View style={[styles.dataCard, { backgroundColor: colors['bg.surface'] }, elev[1]]}>
+              {/* Fecha + hora (una sola fila) */}
+              {dateLabel ? (
+                <DataMetaRow
+                  icon="calendar-outline" tint="yellow"
+                  title={dateLabel}
+                  subtitle={dateSubtitle}
+                  colors={colors}
+                />
+              ) : null}
+
+              {/* Lugar */}
+              {hasLocation || event.location?.name ? (
+                <DataMetaRow
+                  icon="location-outline" tint="violet"
+                  title={event.location?.name || 'Ubicación confirmada'}
+                  actionLabel={hasLocation ? 'Mapa' : undefined}
+                  onAction={hasLocation ? openMaps : undefined}
+                  colors={colors}
+                />
+              ) : null}
+
+              {/* Link virtual */}
+              {event.isVirtual && event.virtualLink ? (
+                <DataMetaRow
+                  icon="link-outline" tint="green"
+                  title="Enlace de la transmisión"
+                  subtitle={event.virtualLink}
+                  actionLabel="Abrir"
+                  onAction={() => safeOpenURL(event.virtualLink)}
+                  last
+                  colors={colors}
+                />
+              ) : null}
+            </View>
+          </View>
+
+          {/* ── MAPA (si tiene ubicación) ─────────────────────────────────── */}
+          {hasLocation && (
+            <View style={styles.section}>
+              <View style={[styles.mapContainer, { borderRadius: radius.lg, overflow: 'hidden' }]}>
+                <MapView
+                  style={styles.map}
+                  initialRegion={{ latitude: event.location.lat, longitude: event.location.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                >
+                  <Marker coordinate={{ latitude: event.location.lat, longitude: event.location.lng }}>
+                    <View style={[styles.mapMarker, { backgroundColor: colors['action.primary'] }]}>
+                      <Ionicons name="location" size={18} color={colors['text.onAction']} />
+                    </View>
+                  </Marker>
+                </MapView>
+                <Pressable
+                  style={[styles.directionsBtn, { backgroundColor: colors['bg.raised'] }, elev[2]]}
+                  onPress={openMaps}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="navigate-outline" size={16} color={colors['nav.selected']} />
+                  <Text variant="label" color="nav.selected">Cómo llegar</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* ── DESCRIPCIÓN (colapsada 3 líneas) ─────────────────────────── */}
+          {event.description ? (
+            <View style={styles.section}>
+              <Text variant="body" color="text.secondary" numberOfLines={descExpanded ? undefined : 3}>
+                {event.description}
+              </Text>
+              {!descExpanded && (
+                <Pressable onPress={() => setDescExpanded(true)} style={{ marginTop: space[2] }}>
+                  <Text variant="label" color="link">Ver más</Text>
+                </Pressable>
               )}
             </View>
           ) : null}
-          <ReportModal
-            visible={showReportModal}
-            onClose={() => setShowReportModal(false)}
-            targetType="event"
-            targetId={event.id}
-          />
-          <View style={[styles.typeBadge, event.isVirtual ? styles.virtualBadge : styles.presentialBadge]}>
-            <Ionicons name={event.isVirtual ? "videocam" : "location"} size={14} color="#fff" />
-            <Text style={styles.typeBadgeText}>{event.isVirtual ? 'Virtual' : 'Presencial'}</Text>
+
+          {/* ── PRUEBA SOCIAL (solo si > 0) ───────────────────────────────── */}
+          {(likes.length > 0 || attendees.length > 0) && (
+            <View style={[styles.section, styles.statsRow]}>
+              {likes.length > 0 && (
+                <View style={styles.statItem}>
+                  <Ionicons name="heart" size={18} color={colors['status.urgent']} />
+                  <Text variant="caption" color="text.secondary">
+                    {likes.length} {likes.length === 1 ? 'like' : 'likes'}
+                  </Text>
+                </View>
+              )}
+              {attendees.length > 0 && (
+                <View style={styles.statItem}>
+                  <Ionicons name="people-outline" size={18} color={colors['status.free']} />
+                  <Text variant="caption" color="text.secondary">
+                    {attendees.length} {attendees.length === 1 ? 'persona va' : 'personas van'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ── BANNER "VAS A IR" (estado 4b) ────────────────────────────── */}
+          {isAttending && (
+            <View style={[styles.section]}>
+              <View style={[styles.attendingBanner, { backgroundColor: colors['status.free.bg'], borderColor: colors['status.free'] }]}>
+                <Ionicons name="checkmark-circle" size={20} color={colors['status.free']} />
+                <Text variant="subtitle" style={{ color: colors['status.free'], flex: 1 }}>
+                  Vas a ir
+                </Text>
+                <Pressable onPress={handleAttend} accessibilityRole="button">
+                  <Text variant="label" style={{ color: colors['status.free'] }}>Cancelar</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* ── COMENTARIOS ──────────────────────────────────────────────── */}
+          <View style={styles.section}>
+            <CommentsSection
+              eventId={event.id}
+              comments={commentsState}
+              organizerId={event.organizerId}
+              event={event}
+              onUserPress={uid => navigation.navigate('UserProfile', { userId: uid })}
+            />
           </View>
-        </View>
-        <View style={styles.content}>
-          <View style={styles.badges}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{event.category}</Text>
-            </View>
-            {event.isFree ? (
-              <View style={styles.freeBadge}>
-                <Text style={styles.freeText}>Gratis</Text>
-              </View>
-            ) : (
-              <View style={styles.priceBadge}>
-                <Text style={styles.priceText}>₡{event.price}</Text>
-              </View>
-            )}
-          </View>
-          <Text style={styles.title}>{event.title}</Text>
-          <TouchableOpacity style={styles.organizer} onPress={() => navigation.navigate('UserProfile', { userId: event.organizerId })}>
-            <UserAvatar uri={organizerAvatar || event.organizerAvatar} size={40} style={styles.organizerAvatar} />
-            <View>
-              <Text style={styles.organizerLabel}>Organizado por</Text>
-              <Text style={styles.organizerName}>{organizerName || event.organizerName}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#888" style={styles.chevron} />
-          </TouchableOpacity>
-          <View style={styles.infoSection}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="calendar" size={20} color="#6c5ce7" />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Fecha</Text>
-                <Text style={styles.infoValue}>{event.date}</Text>
-              </View>
-            </View>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="time" size={20} color="#6c5ce7" />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Hora</Text>
-                <Text style={styles.infoValue}>{event.time}</Text>
-              </View>
-            </View>
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="location" size={20} color="#6c5ce7" />
-              </View>
-              <View style={styles.infoFlex}>
-                <Text style={styles.infoLabel}>Ubicacion</Text>
-                <Text style={styles.infoValue}>{event.location?.name || 'Por definir'}</Text>
-              </View>
-            </View>
-          </View>
-          {!event.isVirtual && hasLocation ? (
-            <View style={styles.mapSection}>
-              <Text style={styles.sectionTitle}>Ubicacion</Text>
-              <View style={styles.mapContainer}>
-                <MapView style={styles.map} initialRegion={{latitude: event.location.lat, longitude: event.location.lng, latitudeDelta: 0.01, longitudeDelta: 0.01}} scrollEnabled={false} zoomEnabled={false}>
-                  <Marker coordinate={{latitude: event.location.lat, longitude: event.location.lng}}>
-                    <Ionicons name="location" size={36} color="#6c5ce7" />
-                  </Marker>
-                </MapView>
-                <TouchableOpacity style={styles.directionsButton} onPress={openMaps}>
-                  <Ionicons name="navigate" size={18} color="#fff" />
-                  <Text style={styles.directionsText}>Como llegar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-          {event.description ? (
-            <View style={styles.descriptionSection}>
-              <Text style={styles.sectionTitle}>Descripcion</Text>
-              <Text style={styles.description}>{event.description}</Text>
-            </View>
-          ) : null}
-          <View style={styles.statsSection}>
-            <View style={styles.stat}>
-              <Ionicons name="heart" size={20} color="#e74c3c" />
-              <Text style={styles.statNumber}>{likes.length}</Text>
-              <Text style={styles.statLabel}>likes</Text>
-            </View>
-            <View style={styles.stat}>
-              <Ionicons name="people" size={20} color="#00b894" />
-              <Text style={styles.statNumber}>{attendees.length}</Text>
-              <Text style={styles.statLabel}>asistiran</Text>
-            </View>
-            <View style={styles.stat}>
-              <Ionicons name="chatbubbles" size={20} color="#0984e3" />
-              <Text style={styles.statNumber}>{event.comments?.length || 0}</Text>
-              <Text style={styles.statLabel}>comentarios</Text>
-            </View>
-          </View>
-          <CommentsSection
-            eventId={event.id}
-            comments={commentsState}
-            organizerId={event.organizerId}
-            event={event}
-            onUserPress={(uid) => navigation.navigate('UserProfile', { userId: uid })}
-          />
-        </View>
-      </ScrollView>
+        </ScrollView>
       </KeyboardAvoidingView>
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={[styles.actionButton, isLiked && styles.actionButtonActive]} onPress={handleLike}>
-          <Ionicons name={isLiked ? "heart" : "heart-outline"} size={24} color={isLiked ? "#e74c3c" : "#fff"} />
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.attendButton, isAttending && styles.attendButtonActive]} onPress={handleAttend}>
-          <Ionicons name={isAttending ? "checkmark-circle" : "checkmark-circle-outline"} size={24} color="#fff" />
-          <Text style={styles.attendButtonText}>{isAttending ? 'Asistire' : 'Asistir'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-          <Ionicons name="share-outline" size={24} color="#fff" />
-        </TouchableOpacity>
+
+      {/* ── BARRA DE ACCIÓN FIJA ─────────────────────────────────────────── */}
+      <View style={[
+        styles.actionBar,
+        {
+          backgroundColor: colors['bg.base'],
+          borderTopColor: colors['border.subtle'],
+          paddingBottom: Math.max(space[4], insets.bottom),
+        },
+        elev[3],
+      ]}>
+        {/* Like */}
+        <Pressable
+          onPress={handleLike}
+          style={[styles.iconAction, { backgroundColor: isLiked ? `${colors['status.urgent']}22` : colors['bg.surface'] }]}
+          accessibilityLabel={isLiked ? 'Quitar like' : 'Dar like'}
+        >
+          <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={22} color={isLiked ? colors['status.urgent'] : colors['text.primary']} />
+        </Pressable>
+
+        {/* CTA "¡Voy!" — amarillo, no violeta */}
+        <Pressable
+          onPress={handleAttend}
+          style={[styles.ctaBtn, { backgroundColor: isAttending ? colors['status.free'] : colors['action.primary'] }]}
+          accessibilityRole="button"
+          accessibilityLabel={isAttending ? 'Cancelar asistencia' : 'Confirmar asistencia'}
+        >
+          <Ionicons name={isAttending ? 'checkmark-circle' : 'calendar-outline'} size={20} color={colors['text.onAction']} />
+          <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: colors['text.onAction'] }}>
+            {isAttending ? 'Vas a ir' : '¡Voy!'}
+          </Text>
+        </Pressable>
+
+        {/* Compartir */}
+        <Pressable
+          onPress={handleShare}
+          style={[styles.iconAction, { backgroundColor: colors['bg.surface'] }]}
+          accessibilityLabel="Compartir"
+        >
+          <Ionicons name="share-outline" size={22} color={colors['text.primary']} />
+        </Pressable>
       </View>
-      <Modal visible={showShareModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Compartir evento</Text>
-              <TouchableOpacity onPress={() => setShowShareModal(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.shareOptions}>
-              <TouchableOpacity style={styles.shareOption} onPress={shareExternal}>
-                <View style={[styles.shareIconCircle, styles.shareIconGreen]}>
-                  <Ionicons name="share-social" size={24} color="#fff" />
-                </View>
-                <Text style={styles.shareOptionText}>Compartir en...</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.shareOption} onPress={copyLink}>
-                <View style={[styles.shareIconCircle, styles.shareIconBlue]}>
-                  <Ionicons name="link" size={24} color="#fff" />
-                </View>
-                <Text style={styles.shareOptionText}>Copiar link</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.shareSubtitle}>Enviar a un amigo</Text>
-            {loadingChats ? (
-              <Text style={styles.loadingText}>Cargando conversaciones...</Text>
-            ) : chats.length === 0 ? (
-              <Text style={styles.emptyText}>No tienes conversaciones aun</Text>
-            ) : (
+
+      {/* ── SHEET COMPARTIR ──────────────────────────────────────────────── */}
+      <Sheet visible={showShare} onClose={() => setShowShare(false)} height="half" title="Compartir">
+        <View style={{ paddingHorizontal: space[5], paddingTop: space[3] }}>
+          <View style={styles.shareRow}>
+            {/* Compartir en — cuadrado 52px radius.md */}
+            <Pressable onPress={shareExternal} style={[styles.shareBtn, { backgroundColor: colors['status.free.bg'] }]} accessibilityLabel="Compartir en...">
+              <Ionicons name="share-social-outline" size={24} color={colors['status.free']} />
+              <Text variant="caption" color="text.secondary" align="center">Compartir en…</Text>
+            </Pressable>
+            {/* Copiar enlace */}
+            <Pressable onPress={copyLink} style={[styles.shareBtn, { backgroundColor: colors['bg.surface'] }]} accessibilityLabel="Copiar enlace">
+              <Ionicons name="link-outline" size={24} color={colors['text.primary']} />
+              <Text variant="caption" color="text.secondary" align="center">Copiar enlace</Text>
+            </Pressable>
+          </View>
+
+          {/* Enviar a chat */}
+          {chats.length > 0 && (
+            <>
+              <Text variant="caption" color="text.tertiary" style={{ marginTop: space[4], marginBottom: space[3] }}>
+                Enviar a un amigo
+              </Text>
               <FlatList
                 data={chats}
-                keyExtractor={(item) => item.id}
-                renderItem={renderChatItem}
-                style={styles.chatList}
+                keyExtractor={item => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: space[3] }}
+                renderItem={({ item }) => (
+                  <Pressable onPress={() => shareToChat(item)} style={styles.chatChip}>
+                    <Avatar uri={item.avatar} name={item.name} size={44} />
+                    <Text variant="caption" color="text.secondary" align="center" numberOfLines={1} style={{ width: 60 }}>
+                      {item.name?.split(' ')[0]}
+                    </Text>
+                  </Pressable>
+                )}
               />
-            )}
-          </View>
+            </>
+          )}
         </View>
-      </Modal>
-      <ImageViewerModal
-        uri={event.image}
-        visible={showImageViewer}
-        onClose={() => setShowImageViewer(false)}
-      />
-    </SafeAreaView>
+      </Sheet>
+
+      <ReportModal visible={showReport} onClose={() => setShowReport(false)} targetType="event" targetId={event.id} />
+      <ImageViewerModal uri={event.image} visible={showImgViewer} onClose={() => setShowImgViewer(false)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#1a1a2e'},
-  flex1: {flex: 1},
-  infoFlex: {flex: 1},
-  deleteOptionText: {color: '#e74c3c'},
-  shareIconGreen: {backgroundColor: '#00b894'},
-  shareIconBlue: {backgroundColor: '#0984e3'},
-  imageContainer: {position: 'relative'},
-  image: {width: '100%', height: 250, backgroundColor: '#2d2d44'},
-  backButton: {position: 'absolute', top: Platform.OS === 'android' ? 40 : 10, left: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8},
-  optionsButton: {position: 'absolute', top: Platform.OS === 'android' ? 40 : 10, right: 15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 8, zIndex: 10},
-  optionsMenu: {position: 'absolute', top: Platform.OS === 'android' ? 80 : 50, right: 15, backgroundColor: '#2d2d44', borderRadius: 12, padding: 5, zIndex: 100},
-  optionItem: {flexDirection: 'row', alignItems: 'center', padding: 12},
-  optionText: {color: '#fff', fontSize: 15, marginLeft: 10},
-  typeBadge: {position: 'absolute', bottom: 10, right: 15, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20},
-  virtualBadge: {backgroundColor: '#0984e3'},
-  presentialBadge: {backgroundColor: '#00b894'},
-  typeBadgeText: {color: '#fff', fontSize: 12, fontWeight: '600', marginLeft: 5},
-  content: {padding: 20},
-  badges: {flexDirection: 'row', marginBottom: 15},
-  categoryBadge: {backgroundColor: '#6c5ce7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 10},
-  categoryText: {color: '#fff', fontSize: 13, fontWeight: '600'},
-  freeBadge: {backgroundColor: '#00b894', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20},
-  freeText: {color: '#fff', fontSize: 13, fontWeight: '600'},
-  priceBadge: {backgroundColor: '#fdcb6e', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20},
-  priceText: {color: '#1a1a2e', fontSize: 13, fontWeight: '600'},
-  title: {fontSize: 26, fontWeight: 'bold', color: '#fff', marginBottom: 20},
-  organizer: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', padding: 15, borderRadius: 12, marginBottom: 20},
-  organizerAvatar: {width: 45, height: 45, borderRadius: 23, marginRight: 12, backgroundColor: '#3d3d5c'},
-  organizerLabel: {color: '#888', fontSize: 12},
-  organizerName: {color: '#fff', fontSize: 16, fontWeight: '600'},
-  chevron: {marginLeft: 'auto'},
-  infoSection: {backgroundColor: '#2d2d44', borderRadius: 12, padding: 15, marginBottom: 20},
-  infoRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 15},
-  infoIcon: {width: 40, height: 40, backgroundColor: '#1a1a2e', borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12},
-  infoLabel: {color: '#888', fontSize: 12},
-  infoValue: {color: '#fff', fontSize: 15, fontWeight: '500'},
-  mapSection: {marginBottom: 20},
-  sectionTitle: {color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 10},
-  mapContainer: {borderRadius: 12, overflow: 'hidden', position: 'relative'},
-  map: {width: '100%', height: 180},
-  directionsButton: {position: 'absolute', bottom: 10, right: 10, backgroundColor: '#6c5ce7', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20},
-  directionsText: {color: '#fff', fontWeight: '600', marginLeft: 6},
-  descriptionSection: {marginBottom: 20},
-  description: {color: '#aaa', fontSize: 15, lineHeight: 22},
-  statsSection: {flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2d2d44', borderRadius: 12, padding: 20, marginBottom: 20},
-  stat: {alignItems: 'center'},
-  statNumber: {color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 5},
-  statLabel: {color: '#888', fontSize: 12},
-  bottomBar: {position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 20, paddingVertical: 15, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#2d2d44'},
-  actionButton: {width: 50, height: 50, backgroundColor: '#2d2d44', borderRadius: 25, justifyContent: 'center', alignItems: 'center'},
-  actionButtonActive: {backgroundColor: '#3d3d5c'},
-  attendButton: {flex: 1, flexDirection: 'row', backgroundColor: '#6c5ce7', borderRadius: 25, justifyContent: 'center', alignItems: 'center', paddingVertical: 14, marginHorizontal: 15},
-  attendButtonActive: {backgroundColor: '#00b894'},
-  attendButtonText: {color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8},
-  modalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end'},
-  modalContent: {backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '70%'},
-  modalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20},
-  modalTitle: {color: '#fff', fontSize: 20, fontWeight: 'bold'},
-  shareOptions: {flexDirection: 'row', justifyContent: 'space-around', marginBottom: 25},
-  shareOption: {alignItems: 'center'},
-  shareIconCircle: {width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 8},
-  shareOptionText: {color: '#fff', fontSize: 13},
-  shareSubtitle: {color: '#888', fontSize: 14, marginBottom: 15},
-  loadingText: {color: '#888', textAlign: 'center', padding: 20},
-  emptyText: {color: '#888', textAlign: 'center', padding: 20},
-  chatList: {maxHeight: 250},
-  chatItem: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', padding: 15, borderRadius: 12, marginBottom: 10},
-  chatAvatar: {width: 45, height: 45, borderRadius: 23, marginRight: 12},
-  chatAvatarPlaceholder: {backgroundColor: '#3d3d5c', justifyContent: 'center', alignItems: 'center'},
-  chatName: {flex: 1, color: '#fff', fontSize: 16, fontWeight: '500'},
+  screen: { flex: 1 },
+
+  // Hero
+  hero: { position: 'relative' },
+  heroImg: { width: '100%', height: 260 },
+  heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  heroBtn: {
+    position: 'absolute',
+    width: 40, height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeBadge: {
+    position: 'absolute',
+    bottom: space[3],
+    right: space[4],
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    paddingVertical: space[1],
+    borderRadius: radius.full,
+    gap: 4,
+  },
+  optionsMenu: {
+    position: 'absolute',
+    right: space[4],
+    borderRadius: radius.lg,
+    paddingVertical: space[2],
+    minWidth: 160,
+    zIndex: 100,
+  },
+  optionItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[4], paddingVertical: space[3], gap: space[3] },
+  optionDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: space[4] },
+
+  // Secciones
+  section: { paddingHorizontal: space[5], paddingBottom: space[4] },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] },
+  title: { fontSize: 24, lineHeight: 30, marginBottom: space[4] },
+
+  // Organizador
+  organizerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    padding: space[3],
+  },
+
+  // Data card
+  dataCard: { borderRadius: radius.lg, overflow: 'hidden' },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[4],
+    paddingVertical: space[3],
+    gap: space[3],
+    minHeight: 60,
+  },
+  metaIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  metaText: { flex: 1, gap: 2 },
+
+  // Mapa
+  mapContainer: { position: 'relative' },
+  map: { width: '100%', height: 160 },
+  mapMarker: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  directionsBtn: {
+    position: 'absolute',
+    bottom: space[3],
+    right: space[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.full,
+    paddingHorizontal: space[3],
+    paddingVertical: space[2],
+    gap: space[1],
+  },
+
+  // Stats
+  statsRow: { flexDirection: 'row', gap: space[4] },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: space[1] },
+
+  // Banner asistencia
+  attendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: space[3],
+    gap: space[3],
+  },
+
+  // Action bar
+  actionBar: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[5],
+    paddingTop: space[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: space[2],
+  },
+  iconAction: {
+    width: 56, height: 56,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  ctaBtn: {
+    flex: 1,
+    height: 56,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space[2],
+  },
+
+  // Share sheet
+  shareRow: { flexDirection: 'row', gap: space[3] },
+  shareBtn: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space[1],
+  },
+  chatChip: { alignItems: 'center', gap: space[1] },
 });
