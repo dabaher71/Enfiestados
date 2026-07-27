@@ -399,7 +399,7 @@ export default function CreateEventScreen({ navigation }) {
           {/* ── PASO 2: Cuándo y dónde ───────────────────────────────── */}
           {step === 2 && (
             <>
-              {/* Fecha */}
+              {/* Fecha — un solo control, picker en Modal (§ 1.2) */}
               <Field>
                 <FieldLabel label="Fecha" colors={colors} />
                 <Pressable
@@ -413,13 +413,10 @@ export default function CreateEventScreen({ navigation }) {
                   </Text>
                   <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
                 </Pressable>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={date}
-                    mode="date"
-                    minimumDate={new Date()}
-                    onChange={(_, d) => { setShowDatePicker(Platform.OS === 'ios'); if (d) setDate(d); }}
-                  />
+                {/* Android: diálogo nativo auto-dismiss. iOS: Modal + Listo */}
+                {Platform.OS === 'android' && showDatePicker && (
+                  <DateTimePicker value={date} mode="date" display="default" minimumDate={new Date()}
+                    onChange={(_, d) => { setShowDatePicker(false); if (d) setDate(d); }} />
                 )}
               </Field>
 
@@ -437,12 +434,9 @@ export default function CreateEventScreen({ navigation }) {
                   </Text>
                   <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
                 </Pressable>
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={time}
-                    mode="time"
-                    onChange={(_, t) => { setShowTimePicker(Platform.OS === 'ios'); if (t) setTime(t); }}
-                  />
+                {Platform.OS === 'android' && showTimePicker && (
+                  <DateTimePicker value={time} mode="time" display="default"
+                    onChange={(_, t) => { setShowTimePicker(false); if (t) setTime(t); }} />
                 )}
               </Field>
 
@@ -554,19 +548,38 @@ export default function CreateEventScreen({ navigation }) {
           )}
         </ScrollView>
 
-        {/* ── BARRA DE ACCIÓN FIJA — botón CTA amarillo ────────────── */}
+        {/* ── BARRA DE ACCIÓN FIJA (§ 1.5: contraste + razón) ────────── */}
         <View style={[styles.actionBar, { paddingBottom: Math.max(space[4], insets.bottom), borderTopColor: colors['border.subtle'], backgroundColor: colors['bg.base'] }]}>
+          {/* Razón por la que está deshabilitado */}
+          {!stepIsValid && step === 2 && !isVirtual && !locationCoords && (
+            <Text variant="caption" color="text.tertiary" align="center" style={{ marginBottom: space[2] }}>
+              Falta elegir la ubicación en el mapa
+            </Text>
+          )}
+          {!stepIsValid && step === 2 && isVirtual && !virtualLink && (
+            <Text variant="caption" color="text.tertiary" align="center" style={{ marginBottom: space[2] }}>
+              Ingresá el link del evento virtual
+            </Text>
+          )}
           <Pressable
             onPress={goNext}
             disabled={!stepIsValid || loading}
             style={[
               styles.ctaBtn,
-              { backgroundColor: stepIsValid && !loading ? colors['action.primary'] : colors['action.primary.disabled'] },
+              stepIsValid && !loading
+                ? { backgroundColor: colors['action.primary'] }
+                : { backgroundColor: colors['bg.surface'] },  // disabled: legible, no acción
             ]}
             accessibilityRole="button"
             accessibilityState={{ disabled: !stepIsValid || loading }}
           >
-            <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans_700Bold', color: stepIsValid && !loading ? colors['text.onAction'] : colors['text.tertiary'] }}>
+            <Text style={{
+              fontSize: 16,
+              fontFamily: 'PlusJakartaSans_700Bold',
+              color: stepIsValid && !loading
+                ? colors['text.onAction']
+                : colors['text.secondary'],  // 4.6:1 sobre bg.surface
+            }}>
               {continueLabel}
             </Text>
             {step < 3 && stepIsValid && (
@@ -575,6 +588,38 @@ export default function CreateEventScreen({ navigation }) {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── Pickers iOS en Modal (§ 1.2: sin valor duplicado debajo) ──── */}
+      {Platform.OS === 'ios' && (
+        <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+          <Pressable style={styles.pickerOverlay} onPress={() => setShowDatePicker(false)} />
+          <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
+            <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
+              <Pressable onPress={() => setShowDatePicker(false)} style={{ padding: space[2] }}>
+                <Text variant="label" color="link">Listo</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker value={date} mode="date" display="spinner" minimumDate={new Date()}
+              onChange={(_, d) => { if (d) setDate(d); }}
+              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+          </View>
+        </Modal>
+      )}
+      {Platform.OS === 'ios' && (
+        <Modal visible={showTimePicker} transparent animationType="slide" onRequestClose={() => setShowTimePicker(false)}>
+          <Pressable style={styles.pickerOverlay} onPress={() => setShowTimePicker(false)} />
+          <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
+            <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
+              <Pressable onPress={() => setShowTimePicker(false)} style={{ padding: space[2] }}>
+                <Text variant="label" color="link">Listo</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker value={time} mode="time" display="spinner"
+              onChange={(_, t) => { if (t) setTime(t); }}
+              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+          </View>
+        </Modal>
+      )}
 
       {/* ── MODAL DE MAPA ────────────────────────────────────────────── */}
       <Modal visible={showMapModal} animationType="slide" onRequestClose={() => setShowMapModal(false)}>
@@ -715,6 +760,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: space[2],
+  },
+
+  // Modals de picker iOS (§ 1.2)
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  pickerSheet: {
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    overflow: 'hidden',
+  },
+  pickerSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: space[5],
+    paddingVertical: space[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 
   // Modal de mapa

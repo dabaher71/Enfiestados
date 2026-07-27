@@ -3,12 +3,23 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import Text from './Text';
 
-// SegmentedControl — 2-3 opciones, dentro de pantalla (no barra de tabs)
+// SegmentedControl — 2-3 opciones dentro de pantalla (no barra de tabs)
+// Fix § 1.1: texto activo SIEMPRE contrasta con el fill, claro y oscuro.
 export function SegmentedControl({ options, selected, onSelect }) {
   const { colors, isDark } = useTheme();
+
+  // Fill del ítem activo
+  const activeBg = isDark ? colors['text.primary'] : colors['bg.raised'];
+  // Texto sobre el fill: siempre el ink del tema opuesto al fill
+  const activeText   = isDark ? colors['bg.base'] : colors['text.primary'];
+  // Texto inactivo: text.secondary (más legible que tertiary)
+  const inactiveText = colors['text.secondary'];
+
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : colors['bg.surface'] }]}>
-      {options.map((opt) => {
+    <View style={[styles.container, {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : colors['bg.surface'],
+    }]}>
+      {options.map(opt => {
         const isActive = opt.value === selected;
         return (
           <Pressable
@@ -18,22 +29,21 @@ export function SegmentedControl({ options, selected, onSelect }) {
             accessibilityState={{ selected: isActive }}
             style={[
               styles.segment,
-              isActive && [
-                styles.segmentActive,
-                {
-                  backgroundColor: isDark ? colors['text.primary'] : colors['bg.raised'],
-                  shadowColor: colors['bg.overlay'],
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.12,
-                  shadowRadius: 2,
-                  elevation: 2,
-                },
-              ],
+              isActive && {
+                backgroundColor: activeBg,
+                borderRadius: radius.sm,
+                // Sombra para separarlo del track
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.10,
+                shadowRadius: 3,
+                elevation: 2,
+              },
             ]}
           >
             <Text
               variant="label"
-              style={{ color: isActive ? colors['bg.base'] : colors['text.tertiary'] }}
+              style={{ color: isActive ? activeText : inactiveText }}
             >
               {opt.label}
             </Text>
@@ -44,12 +54,12 @@ export function SegmentedControl({ options, selected, onSelect }) {
   );
 }
 
-// UnderlineTabs — para ≥4 secciones o contenido paginable
+// UnderlineTabs — para ≥4 secciones o contenido paginable horizontalmente
 export function UnderlineTabs({ options, selected, onSelect }) {
   const { colors } = useTheme();
   return (
     <View style={[styles.underlineContainer, { borderBottomColor: colors['border.subtle'] }]}>
-      {options.map((opt) => {
+      {options.map(opt => {
         const isActive = opt.value === selected;
         return (
           <Pressable
@@ -62,7 +72,7 @@ export function UnderlineTabs({ options, selected, onSelect }) {
             <Text
               variant="label"
               style={{
-                color: isActive ? colors['text.primary'] : colors['text.tertiary'],
+                color: isActive ? colors['text.primary'] : colors['text.secondary'],
                 fontSize: 15,
               }}
             >
@@ -90,9 +100,6 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.sm,
-  },
-  segmentActive: {
     borderRadius: radius.sm,
   },
   underlineContainer: {
