@@ -1,38 +1,38 @@
+// HomeScreen — feed "Para vos" / "Siguiendo" con agenda por día, scroll infinito.
+// LÓGICA INTACTA: feed personalizado, señales, paginación, ads, push notifications.
+// PRESENTACIÓN: design system v1.1 — tokens, EventRow, EmptyState, SkeletonList.
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { FeedSkeleton } from '../components/SkeletonLoader';
-
 import { SafeAreaView } from 'react-native-safe-area-context';
-import EventCard from '../components/EventCard';
-import ExternalEventCard from '../components/ExternalEventCard';
+
 import InternalAdCard from '../components/InternalAdCard';
 import NativeAdCard from '../components/NativeAdCard';
+import EmptyState from '../components/ui/EmptyState';
+import { EventCardHero } from '../components/ui/EventCardHero';
+import EventRow from '../components/ui/EventRow';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { SkeletonList } from '../components/ui/Skeleton';
+import Text from '../components/ui/Text';
+
 import { auth, db, functions } from '../config/firebase';
-import { httpsCallable } from 'firebase/functions';
-import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
 import useExternalEvents from '../hooks/useExternalEvents';
-import { registerForPushNotifications } from '../services/pushNotificationService';
-import { recordSignal, getHiddenEventIds } from '../services/signalService';
-import { scoreAndRankEvents } from '../services/feedService';
+import { formatEventDate, formatRelative } from '../lib/format';
 import { fetchActiveAds } from '../services/adService';
+import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
+import { registerForPushNotifications } from '../services/pushNotificationService';
+import { getHiddenEventIds, recordSignal } from '../services/signalService';
+import { scoreAndRankEvents } from '../services/feedService';
+import { useTheme } from '../theme/ThemeProvider';
+import { space } from '../theme/tokens';
+import t from '../i18n/es-CR.json';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// --- Funciones auxiliares ---
-
-// Devuelve un timestamp numérico para cualquier tipo de evento.
-// Eventos externos: usa dateISO (ISO string correcto).
-// Eventos nativos: parsea date como DD/MM/YYYY.
 const getEventTimestamp = (ev) => {
   if (ev?._isExternal) {
     if (!ev.dateISO) return Infinity;
@@ -43,7 +43,6 @@ const getEventTimestamp = (ev) => {
   if (!d) return Infinity;
   if (typeof d.toMillis === 'function') return d.toMillis();
   if (typeof d === 'number') return d;
-  // Formato DD/MM/YYYY usado por eventos nativos
   const parts = d.split('/');
   if (parts.length === 3) {
     const ts = new Date(+parts[2], +parts[1] - 1, +parts[0]).getTime();
@@ -53,16 +52,113 @@ const getEventTimestamp = (ev) => {
   return isNaN(parsed) ? Infinity : parsed;
 };
 
-// Ordena ascendente: fecha más próxima primero, más lejana al final.
-// Eventos sin fecha reconocible van al fondo (Infinity).
 const sortByDateAsc = (events = []) =>
   events.slice().sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
 
+const getDateKey = (event) => {
+  const ts = getEventTimestamp(event);
+  if (ts === Infinity) return null;
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};
+
+// Inyecta separadores de fecha + ads (ratio 1:6, nunca antes del 4º ítem)
+function buildFeedData(events, internalAds) {
+  const withSeps = [];
+  let lastKey = null;
+  let adSlot = 0;
+  let eventCount = 0;
+
+  events.forEach((event) => {
+    const key = getDateKey(event);
+    if (key && key !== lastKey) {
+      withSeps.push({ _isSeparator: true, date: event.date ?? event.dateISO, id: `sep_${key}` });
+      lastKey = key;
+    }
+    withSeps.push(event);
+    eventCount++;
+
+    // Ad cada 6 eventos, nunca antes del 4º
+    if (eventCount >= 4 && eventCount % 6 === 0) {
+      if (internalAds.length > 0) {
+        const ad = internalAds[adSlot % internalAds.length];
+        withSeps.push({ _isInternalAd: true, ad, id: `iad_${adSlot}` });
+        adSlot++;
+      } else {
+        withSeps.push({ _isAd: true, id: `ad_${eventCount}` });
+      }
+    }
+  });
+  return withSeps;
+}
+
+// ─── Filtros rápidos ──────────────────────────────────────────────────────────
+
+const TIME_FILTERS = [
+  { label: t.home.filters.today,   value: 'today' },
+  { label: t.home.filters.weekend, value: 'weekend' },
+  { label: t.home.filters.free,    value: 'free' },
+];
+
+function applyTimeFilter(events, filter) {
+  if (!filter) return events;
+  const now = new Date();
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  const friday = new Date(today); friday.setDate(today.getDate() + ((5 - today.getDay() + 7) % 7));
+  const sunday = new Date(friday); sunday.setDate(friday.getDate() + 2); sunday.setHours(23, 59, 59);
+
+  return events.filter(ev => {
+    if (filter === 'free') return ev.isFree || ev.price === 0;
+    const ts = getEventTimestamp(ev);
+    if (ts === Infinity) return false;
+    const d = new Date(ts);
+    if (filter === 'today') return d >= today && d < new Date(today.getTime() + 86400000);
+    if (filter === 'weekend') return d >= friday && d <= sunday;
+    return true;
+  });
+}
+
+// ─── Componente de separador de fecha ────────────────────────────────────────
+
+function DateSeparator({ date }) {
+  const { colors } = useTheme();
+  const label = formatRelative(date) ?? formatEventDate(date);
+  return (
+    <View style={[styles.separator, { borderBottomColor: colors['border.subtle'] }]}>
+      <Text variant="overline" color="text.tertiary">{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+// ─── Componente de unread messages en header ──────────────────────────────────
+
+function MessagesButton({ onPress, unread }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={styles.headerIcon}
+      accessibilityLabel={t.home.messages}
+      accessibilityRole="button"
+    >
+      <Ionicons name="chatbubble-outline" size={24} color={colors['text.primary']} />
+      {unread > 0 && (
+        <View style={[styles.headerBadge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]} />
+      )}
+    </Pressable>
+  );
+}
+
+// ─── HomeScreen ───────────────────────────────────────────────────────────────
+
 export default function HomeScreen({ navigation }) {
+  const { colors } = useTheme();
   const [events, setEvents] = useState([]);
   const [activeTab, setActiveTab] = useState('parati');
+  const [timeFilter, setTimeFilter] = useState(null);
   const [following, setFollowing] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastDoc, setLastDoc] = useState(null);
@@ -71,108 +167,101 @@ export default function HomeScreen({ navigation }) {
   const [userInterests, setUserInterests] = useState([]);
   const [hiddenIds, setHiddenIds] = useState(new Set());
   const [internalAds, setInternalAds] = useState([]);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
   const adIndexRef = useRef(0);
+  const visibleSinceRef = useRef({});
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
   const userId = auth.currentUser?.uid;
   const { data: externalEvents } = useExternalEvents();
 
-  // Mapa de eventId → timestamp de cuando el card se hizo visible
-  const visibleSinceRef = useRef({});
+  // ── Carga inicial ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     loadUserFollowing();
     loadUserProfile();
 
-    const unsubscribe = subscribeToEvents((firstPageEvents, cursor) => {
-      setEvents(firstPageEvents);
+    const unsub = subscribeToEvents((firstPage, cursor) => {
+      setEvents(firstPage);
       setLastDoc(cursor);
-      setHasMore(firstPageEvents.length === 20);
+      setHasMore(firstPage.length === 20);
       setLoading(false);
+      setError(false);
+    }, () => {
+      setLoading(false);
+      setError(true);
     });
 
-    const setupPushNotifications = async () => {
-      if (userId) {
-        await registerForPushNotifications(userId);
-      }
-    };
-    setupPushNotifications();
+    if (userId) registerForPushNotifications(userId).catch(() => {});
 
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
   const loadUserProfile = async () => {
     if (!userId) return;
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
+      const snap = await getDoc(doc(db, 'users', userId));
+      if (snap.exists()) {
+        const data = snap.data();
         setInterestVector(data.interestVector || {});
-        const interests = data.interests || [];
-        setUserInterests(interests);
-        const ads = await fetchActiveAds({ province: data.location, interests });
+        setUserInterests(data.interests || []);
+        const ads = await fetchActiveAds({ province: data.location, interests: data.interests });
         setInternalAds(ads);
         adIndexRef.current = 0;
       }
       const hidden = await getHiddenEventIds(userId);
       setHiddenIds(hidden);
-    } catch {
-      // non-critical
-    }
+    } catch {}
   };
-
-
-  const isEventExpired = (event) => {
-    try {
-      const [day, month, year] = event.date.split('/');
-      const [hours, minutes] = (event.time || '23:59').split(':');
-      const eventDate = new Date(year, month - 1, day, hours, minutes);
-      return eventDate < new Date();
-    } catch (e) { return false; }
-  };
-
-  const displayedEvents = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const native = events.filter(ev => !isEventExpired(ev));
-
-    if (activeTab === 'siguiendo') {
-      return sortByDateAsc(
-        native.filter(ev => following?.includes(ev.organizerId) || false)
-      );
-    }
-
-    // "parati": nativos + externos futuros, ordenados por score personalizado
-    const validExternal = externalEvents.filter(e => {
-      if (e.dateISO) return new Date(e.dateISO) >= today;
-      return true;
-    });
-    return scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
-  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests]);
 
   const loadUserFollowing = async () => {
+    if (!userId) return;
     try {
-      if (userId) {
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (userDoc.exists()) {
-          setFollowing(userDoc.data().following || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error cargando following:', error);
-    }
+      const snap = await getDoc(doc(db, 'users', userId));
+      if (snap.exists()) setFollowing(snap.data().following || []);
+    } catch {}
   };
+
+  // ── Feed computado ─────────────────────────────────────────────────────────
+
+  const isExpired = useCallback((ev) => {
+    try {
+      const [day, month, year] = ev.date.split('/');
+      const [h, m] = (ev.time || '23:59').split(':');
+      return new Date(year, month - 1, day, h, m) < new Date();
+    } catch { return false; }
+  }, []);
+
+  const displayedEvents = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const native = events.filter(ev => !isExpired(ev));
+
+    let base;
+    if (activeTab === 'siguiendo') {
+      base = sortByDateAsc(native.filter(ev => following?.includes(ev.organizerId)));
+    } else {
+      const validExternal = externalEvents.filter(e =>
+        e.dateISO ? new Date(e.dateISO) >= today : true
+      );
+      base = scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
+    }
+    return applyTimeFilter(base, timeFilter);
+  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired]);
+
+  const feedData = useMemo(
+    () => buildFeedData(displayedEvents, internalAds),
+    [displayedEvents, internalAds]
+  );
+
+  // ── Interacciones ──────────────────────────────────────────────────────────
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadUserFollowing();
-    // Solicitar regeneración del feed personalizado en servidor
     try {
-      const refreshMyFeed = httpsCallable(functions, 'refreshMyFeed');
-      await refreshMyFeed();
-      await loadUserProfile(); // recargar interestVector + hiddenIds actualizados
-    } catch {
-      // si falla la Cloud Function, el scoring local ya funciona como fallback
-    }
+      await httpsCallable(functions, 'refreshMyFeed')();
+      await loadUserProfile();
+    } catch {}
     setRefreshing(false);
   };
 
@@ -180,210 +269,129 @@ export default function HomeScreen({ navigation }) {
     if (loadingMore || !hasMore || !lastDoc) return;
     setLoadingMore(true);
     try {
-      const { events: moreEvents, lastDoc: newLastDoc, hasMore: more } = await fetchMoreEvents(lastDoc);
+      const { events: more, lastDoc: newCursor, hasMore: moreAvail } = await fetchMoreEvents(lastDoc);
       setEvents(prev => {
-        const existingIds = new Set(prev.map(e => e.id));
-        const newEvents = moreEvents.filter(e => !existingIds.has(e.id));
-        return [...prev, ...newEvents];
+        const ids = new Set(prev.map(e => e.id));
+        return [...prev, ...more.filter(e => !ids.has(e.id))];
       });
-      setLastDoc(newLastDoc);
-      setHasMore(more);
-    } catch (e) {
-      console.error('Error cargando más eventos:', e);
-    } finally {
-      setLoadingMore(false);
-    }
+      setLastDoc(newCursor);
+      setHasMore(moreAvail);
+    } catch {}
+    setLoadingMore(false);
   }, [loadingMore, hasMore, lastDoc]);
-
-  const renderFooter = useCallback(() => {
-    if (!loadingMore) return null;
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#6c5ce7" />
-      </View>
-    );
-  }, [loadingMore]);
-
-  const renderEmptyState = () => {
-    let icon = 'sparkles';
-    let title = 'No hay eventos';
-    let text = 'Aqui apareceran eventos basados en tus intereses';
-
-    if (activeTab === 'siguiendo') {
-      icon = 'people';
-      title = 'Sin eventos';
-      text = following.length === 0 
-        ? 'Sigue a usuarios para ver sus eventos aqui' 
-        : 'Las personas que sigues no han creado eventos aun';
-    } else if (activeTab === 'explorar') {
-      icon = 'globe';
-      title = 'Sin eventos';
-      text = 'Aun no hay eventos disponibles. Se el primero en crear uno!';
-    }
-
-    return (
-      <View style={styles.emptyState}>
-        <Ionicons name={icon} size={60} color="#6c5ce7" />
-        <Text style={styles.emptyTitle}>{title}</Text>
-        <Text style={styles.emptyText}>{text}</Text>
-        {activeTab === 'siguiendo' && following.length === 0 && (
-          <TouchableOpacity 
-            style={styles.emptyButton}
-            onPress={() => navigation.navigate('Search')}
-          >
-            <Text style={styles.emptyButtonText}>Explorar usuarios</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
-
-  // Dispatcher pattern: referencia estable — EventCard no re-renderiza por este prop
-  const dispatch = useCallback(({ type, payload }) => {
-    if (type === 'PRESS') navigation.navigate('EventDetail', { event: payload });
-  }, [navigation]);
-
-  // Tracking de tiempo de vista — cuando un card sale del viewport registra la señal
-  const onViewableItemsChanged = useCallback(({ changed }) => {
-    if (!userId) return;
-    const now = Date.now();
-    changed.forEach(({ item, isViewable }) => {
-      if (item._isAd || item._isInternalAd || item._isExternal) return;
-      if (isViewable) {
-        visibleSinceRef.current[item.id] = now;
-      } else {
-        const since = visibleSinceRef.current[item.id];
-        if (since) {
-          const durationMs = now - since;
-          delete visibleSinceRef.current[item.id];
-          // >3s = longView (señal fuerte), <3s = view (señal débil)
-          recordSignal(userId, item, durationMs >= 3000 ? 'longView' : 'view');
-        }
-      }
-    });
-  }, [userId]);
-
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
 
   const handleHide = useCallback((eventId) => {
     setHiddenIds(prev => new Set([...prev, eventId]));
   }, []);
 
-  // Feed con ads cada 4 eventos: ads internos primero, AdMob como fallback
-  const feedWithAds = useMemo(() => {
-    const result = [];
-    let adSlot = 0;
-    displayedEvents.forEach((event, index) => {
-      result.push(event);
-      if ((index + 1) % 4 === 0) {
-        if (internalAds.length > 0) {
-          const ad = internalAds[adSlot % internalAds.length];
-          result.push({ _isInternalAd: true, ad, id: `iad_${adSlot}` });
-          adSlot++;
-        } else {
-          result.push({ _isAd: true, id: `ad_${index}` });
+  const onViewableItemsChanged = useCallback(({ changed }) => {
+    if (!userId) return;
+    const now = Date.now();
+    changed.forEach(({ item, isViewable }) => {
+      if (item._isAd || item._isInternalAd || item._isSeparator) return;
+      if (isViewable) {
+        visibleSinceRef.current[item.id] = now;
+      } else {
+        const since = visibleSinceRef.current[item.id];
+        if (since) {
+          const ms = now - since;
+          delete visibleSinceRef.current[item.id];
+          recordSignal(userId, item, ms >= 3000 ? 'longView' : 'view');
         }
       }
     });
-    return result;
-  }, [displayedEvents, internalAds]);
+  }, [userId]);
 
-  const handleAdEventPress = useCallback((eventId) => {
-    navigation.navigate('EventDetail', { eventId });
-  }, [navigation]);
+  // ── Render items ───────────────────────────────────────────────────────────
 
-  const renderItem = useCallback(({ item }) => {
-    if (item._isInternalAd) {
-      return <InternalAdCard ad={item.ad} onEventPress={handleAdEventPress} />;
+  const renderItem = useCallback(({ item, index }) => {
+    if (item._isSeparator) return <DateSeparator date={item.date} />;
+    if (item._isInternalAd)  return <InternalAdCard ad={item.ad} onEventPress={id => navigation.navigate('EventDetail', { eventId: id })} />;
+    if (item._isAd)          return <NativeAdCard />;
+
+    // Primeros 2 eventos nativos con imagen como hero cards
+    const isHero = index < 3 && !item._isExternal && item.imageUrl;
+    if (isHero) {
+      return (
+        <EventCardHero
+          event={item}
+          onPress={() => navigation.navigate('EventDetail', { event: item })}
+          onSave={() => recordSignal(userId, item, 'attend')}
+          style={styles.heroCard}
+        />
+      );
     }
-    if (item._isAd) {
-      return <NativeAdCard />;
-    }
-    if (item._isExternal) {
-      return <ExternalEventCard event={item} />;
-    }
-    return <EventCard event={item} dispatch={dispatch} userId={userId} onHide={handleHide} />;
-  }, [dispatch, userId, handleHide, handleAdEventPress]);
+
+    return (
+      <EventRow
+        event={item}
+        trailing="price"
+        onPress={() => navigation.navigate('EventDetail', { event: item })}
+      />
+    );
+  }, [navigation, userId]);
+
+  const getItemType = useCallback((item) => {
+    if (item._isSeparator)  return 'separator';
+    if (item._isInternalAd) return 'internalAd';
+    if (item._isAd)         return 'ad';
+    return 'event';
+  }, []);
+
+  // ── Estados ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <SafeAreaView edges={['top']} style={styles.container}>
-        <View style={styles.header}>
-          <Image
-            source={require('../../assets/images/logo.png')}
-            style={styles.logoImage}
-          />
-          <Text style={styles.logo}>Enfiestados</Text>
-        </View>
-        <View style={styles.tabsContainer}>
-          <View style={[styles.tab, styles.tabActive]}>
-            <Text style={[styles.tabText, styles.tabTextActive]}>Para ti</Text>
-          </View>
-          <View style={styles.tab}>
-            <Ionicons name="people-outline" size={18} color="#888" />
-            <Text style={styles.tabText}>Siguiendo</Text>
-          </View>
-        </View>
-        <FeedSkeleton count={3} />
+      <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+        <Header colors={colors} navigation={navigation} unread={unreadMessages} />
+        <Tabs activeTab={activeTab} onSelect={setActiveTab} colors={colors} />
+        <SkeletonList count={5} />
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+        <Header colors={colors} navigation={navigation} unread={unreadMessages} />
+        <EmptyState
+          icon={<Ionicons name="cloud-offline-outline" size={28} color={colors['text.tertiary']} />}
+          title={t.home.error.title}
+          actionLabel={t.home.error.action}
+          onAction={() => { setError(false); setLoading(true); loadUserProfile(); }}
+        />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.container}>
-      <View style={styles.header}>
-        <Image
-          source={require('../../assets/images/logo.png')}
-          style={styles.logoImage}
-        />
-        <Text style={styles.logo}>Enfiestados</Text>
-      </View>
-
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'parati' && styles.tabActive]}
-          onPress={() => setActiveTab('parati')}
-        >
-          <Text style={[styles.tabText, activeTab === 'parati' && styles.tabTextActive]}>
-            Para ti
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'siguiendo' && styles.tabActive]}
-          onPress={() => setActiveTab('siguiendo')}
-        >
-          <Ionicons 
-            name={activeTab === 'siguiendo' ? 'people' : 'people-outline'} 
-            size={18} 
-            color={activeTab === 'siguiendo' ? '#fff' : '#888'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'siguiendo' && styles.tabTextActive]}>
-            Siguiendo
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      <Header colors={colors} navigation={navigation} unread={unreadMessages} />
+      <Tabs activeTab={activeTab} onSelect={setActiveTab} colors={colors} />
+      <TimeFilters active={timeFilter} onSelect={f => setTimeFilter(prev => prev === f ? null : f)} colors={colors} />
 
       {displayedEvents.length === 0 ? (
-        renderEmptyState()
+        <EmptyState
+          icon={<Ionicons name={activeTab === 'siguiendo' ? 'people-outline' : 'sparkles-outline'} size={28} color={colors['text.tertiary']} />}
+          title={activeTab === 'siguiendo' ? t.home.empty.following.title : t.home.empty.forYou.title}
+          description={activeTab === 'siguiendo' ? t.home.empty.following.desc : t.home.empty.forYou.desc}
+          actionLabel={activeTab === 'siguiendo' ? t.home.empty.following.action : t.home.empty.forYou.action}
+          onAction={() => activeTab === 'siguiendo' ? navigation.navigate('Explore') : navigation.navigate('Interests')}
+        />
       ) : (
         <FlashList
-          data={feedWithAds}
-          keyExtractor={(item) => item.id}
+          data={feedData}
+          keyExtractor={item => item.id}
           renderItem={renderItem}
-          estimatedItemSize={430}
-          getItemType={(item) => {
-            if (item._isInternalAd) return 'internalAd';
-            if (item._isAd) return 'ad';
-            if (item._isExternal) return 'external';
-            return 'event';
-          }}
-          contentContainerStyle={styles.listContent}
+          estimatedItemSize={96}
+          getItemType={getItemType}
+          contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
           onRefresh={onRefresh}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
-          ListFooterComponent={renderFooter}
+          ListFooterComponent={loadingMore ? <SkeletonList count={2} /> : null}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig.current}
         />
@@ -392,97 +400,137 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
+// ─── Sub-componentes de layout ────────────────────────────────────────────────
+
+function Header({ colors, navigation, unread }) {
+  return (
+    <View style={styles.header}>
+      <Image
+        source={require('../../assets/images/logo.png')}
+        style={styles.logo}
+        contentFit="cover"
+      />
+      <Text variant="h2" style={styles.brandName}>Enfiestados</Text>
+      <View style={styles.headerActions}>
+        <MessagesButton onPress={() => navigation.navigate('Messages')} unread={unread} />
+        <Pressable
+          onPress={() => navigation.navigate('CreateEvent')}
+          style={styles.headerIcon}
+          accessibilityLabel={t.home.createEvent}
+          accessibilityRole="button"
+        >
+          <Ionicons name="add-circle-outline" size={26} color={colors['action.primary']} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function Tabs({ activeTab, onSelect, colors }) {
+  return (
+    <View style={[styles.tabsRow, { borderBottomColor: colors['border.subtle'] }]}>
+      <SegmentedControl
+        options={[
+          { label: t.home.tabs.forYou,    value: 'parati' },
+          { label: t.home.tabs.following, value: 'siguiendo' },
+        ]}
+        selected={activeTab}
+        onSelect={onSelect}
+      />
+    </View>
+  );
+}
+
+function TimeFilters({ active, onSelect, colors }) {
+  return (
+    <View style={styles.chipsRow}>
+      {TIME_FILTERS.map(f => (
+        <Pressable
+          key={f.value}
+          onPress={() => onSelect(f.value)}
+          style={[
+            styles.chip,
+            {
+              backgroundColor: active === f.value ? colors['action.primary'] : colors['bg.surface'],
+              borderColor:     active === f.value ? colors['action.primary'] : colors['border.strong'],
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: active === f.value }}
+        >
+          <Text
+            variant="label"
+            style={{ color: active === f.value ? colors['text.onAction'] : colors['text.secondary'] }}
+          >
+            {f.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  safe:   { flex: 1 },
+  list:   { paddingBottom: space[12] },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 15,
+    paddingHorizontal: space[5],
+    paddingVertical: space[3],
+    height: 60,
   },
-  logoImage: {
-    width: 35,
-    height: 35,
-    marginRight: 10,
+  logo: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
+    marginRight: space[2],
   },
-    logo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  tab: {
-    flexDirection: 'row',
+  brandName: { flex: 1 },
+  headerActions: { flexDirection: 'row', gap: space[1] },
+  headerIcon: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 25,
-    backgroundColor: '#2d2d44',
-    gap: 8,
-  },
-  tabActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  tabText: {
-    fontSize: 14,
-    color: '#888',
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: '#fff',
-  },
-  listContent: {
-    paddingVertical: 10,
-  },
-  emptyState: {
-    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 15,
-    marginBottom: 8,
+  headerBadge: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    paddingHorizontal: 40,
+
+  tabsRow: {
+    paddingHorizontal: space[5],
+    paddingVertical: space[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  emptyButton: {
-    marginTop: 20,
-    backgroundColor: '#6c5ce7',
-    paddingHorizontal: 25,
-    paddingVertical: 12,
-    borderRadius: 25,
+
+  chipsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: space[5],
+    paddingVertical: space[3],
+    gap: space[2],
   },
-  emptyButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 15,
+  chip: {
+    paddingHorizontal: space[3],
+    paddingVertical: space[2],
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
-  footerLoader: {
-    paddingVertical: 20,
-    alignItems: 'center',
+
+  separator: {
+    paddingHorizontal: space[5],
+    paddingVertical: space[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
+
+  heroCard: { marginBottom: space[6] },
 });

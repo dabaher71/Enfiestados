@@ -1,372 +1,361 @@
+// ProfileScreen — "Mi mochila" (perfil propio)
+// LÓGICA INTACTA: eventos, posts, follows, admin/advertiser checks.
+// PRESENTACIÓN: design system v1.1 — tokens, EventRow, Avatar, UnderlineTabs.
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image } from 'expo-image';
-import UserAvatar from '../components/UserAvatar';
-import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import EventCard from '../components/EventCard';
+
+import Avatar from '../components/ui/Avatar';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import EventRow from '../components/ui/EventRow';
+import { SkeletonList } from '../components/ui/Skeleton';
+import Text from '../components/ui/Text';
+import { UnderlineTabs } from '../components/ui/SegmentedControl';
 import PostCard from '../components/PostCard';
+
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
 import { addPostComment, deletePost, subscribeToUserPosts, togglePostLike } from '../services/postService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+import t from '../i18n/es-CR.json';
+
+const TABS = [
+  { label: t.profile.tabs.events, value: 'eventos' },
+  { label: t.profile.tabs.posts,  value: 'publicaciones' },
+];
 
 export default function ProfileScreen({ navigation }) {
-  const [user, setUser] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [posts, setPosts] = useState([]);
+  const { colors } = useTheme();
+  const [user,    setUser]    = useState(null);
+  const [events,  setEvents]  = useState([]);
+  const [posts,   setPosts]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('eventos');
+  const [tab,     setTab]     = useState('eventos');
 
   const currentUser = auth.currentUser;
 
   useEffect(() => {
     loadUser();
-    const unsubscribeEvents = loadUserEvents();
-    let unsubscribePosts;
+    const unsubEvents = subscribeToEvents((all) => {
+      setEvents(all.filter(e => e.organizerId === currentUser.uid));
+    });
+    let unsubPosts;
     try {
-      unsubscribePosts = subscribeToUserPosts(currentUser.uid, (userPosts) => {
-        setPosts(userPosts);
-      });
-    } catch (error) {
-      console.error('Error posts:', error);
-    }
+      unsubPosts = subscribeToUserPosts(currentUser.uid, setPosts);
+    } catch {}
 
     const focusUnsub = navigation.addListener('focus', () => {
       setLoading(true);
       loadUser();
     });
-
     return () => {
-      unsubscribeEvents && unsubscribeEvents();
-      unsubscribePosts && unsubscribePosts();
-      focusUnsub && focusUnsub();
+      unsubEvents?.();
+      unsubPosts?.();
+      focusUnsub?.();
     };
   }, []);
 
   const loadUser = async () => {
     try {
-      setLoading(true);
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      if (userDoc.exists()) {
-        setUser(userDoc.data());
-      }
-    } catch (error) {
-      console.error('Error al cargar usuario:', error);
-    }
+      const snap = await getDoc(doc(db, 'users', currentUser.uid));
+      if (snap.exists()) setUser(snap.data());
+    } catch {}
     setLoading(false);
   };
 
-  const loadUserEvents = () => {
-    return subscribeToEvents((allEvents) => {
-      const userEvents = allEvents.filter(event => event.organizerId === currentUser.uid);
-      setEvents(userEvents);
-    });
-  };
-
-  const isExpired = (event) => {
+  const isExpired = (e) => {
     try {
-      const [day, month, year] = event.date.split('/');
-      const [hours, minutes] = (event.time || '23:59').split(':');
-      return new Date(year, month - 1, day, hours, minutes) < new Date();
+      const [d, m, y] = e.date.split('/');
+      const [h, min] = (e.time || '23:59').split(':');
+      return new Date(y, m - 1, d, h, min) < new Date();
     } catch { return false; }
   };
 
-  const { activeEvents, expiredEvents } = useMemo(() => {
-    const active = events.filter(e => !isExpired(e))
-      .sort((a, b) => {
-        const parse = d => { const [dd,mm,yy] = d.date.split('/'); return new Date(yy,mm-1,dd); };
-        return parse(a) - parse(b);
-      });
-    const expired = events.filter(e => isExpired(e))
-      .sort((a, b) => {
-        const parse = d => { const [dd,mm,yy] = d.date.split('/'); return new Date(yy,mm-1,dd); };
-        return parse(b) - parse(a); // más reciente primero
-      });
-    return { activeEvents: active, expiredEvents: expired };
+  const { active, expired } = useMemo(() => {
+    const parse = e => { const [d,m,y] = e.date.split('/'); return new Date(y,m-1,d); };
+    return {
+      active:  events.filter(e => !isExpired(e)).sort((a,b) => parse(a)-parse(b)),
+      expired: events.filter(e =>  isExpired(e)).sort((a,b) => parse(b)-parse(a)),
+    };
   }, [events]);
 
-  const handleEventPress = useCallback((event) => {
-    navigation.navigate('EventDetail', { event });
-  }, [navigation]);
-
-  const handleUserPress = useCallback((userId) => {
-    if (userId !== currentUser.uid) {
-      navigation.navigate('UserProfile', { userId });
-    }
-  }, [navigation, currentUser.uid]);
+  // ── Post handlers ──────────────────────────────────────────────────────────
 
   const handlePostLike = useCallback(async (postId) => {
     try {
       const { likes, ownerId, added } = await togglePostLike(postId, currentUser.uid);
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes } : p));
       if (added && ownerId && ownerId !== currentUser.uid) {
-        createNotification({
-          type: NOTIFICATION_TYPES.POST_LIKE,
-          fromUserId: currentUser.uid,
-          fromUserName: currentUser.displayName || currentUser.email.split('@')[0],
-          fromUserAvatar: currentUser.photoURL || '',
-          toUserId: ownerId,
-          message: 'le dio like a tu publicación',
-          postId,
-        }).catch(() => {});
+        createNotification({ type: NOTIFICATION_TYPES.POST_LIKE, fromUserId: currentUser.uid, fromUserName: currentUser.displayName || currentUser.email.split('@')[0], fromUserAvatar: currentUser.photoURL || '', toUserId: ownerId, message: 'le dio like a tu publicación', postId }).catch(() => {});
       }
-    } catch (_) {}
+    } catch {}
   }, [currentUser]);
 
   const handlePostComment = useCallback(async (postId, text) => {
     try {
       const userName = currentUser.displayName || currentUser.email.split('@')[0];
       const userAvatar = currentUser.photoURL || '';
-      const { comment, ownerId } = await addPostComment(postId, {
-        userId: currentUser.uid,
-        userName,
-        userAvatar,
-        text,
-      });
-      setPosts(prev => prev.map(p =>
-        p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p
-      ));
+      const { comment, ownerId } = await addPostComment(postId, { userId: currentUser.uid, userName, userAvatar, text });
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p));
       if (ownerId && ownerId !== currentUser.uid) {
-        createNotification({
-          type: NOTIFICATION_TYPES.POST_COMMENT,
-          fromUserId: currentUser.uid,
-          fromUserName: userName,
-          fromUserAvatar: userAvatar,
-          toUserId: ownerId,
-          message: 'comentó en tu publicación',
-          postId,
-        }).catch(() => {});
+        createNotification({ type: NOTIFICATION_TYPES.POST_COMMENT, fromUserId: currentUser.uid, fromUserName: userName, fromUserAvatar: userAvatar, toUserId: ownerId, message: 'comentó en tu publicación', postId }).catch(() => {});
       }
-    } catch (_) {}
+    } catch {}
   }, [currentUser]);
 
   const handlePostDelete = useCallback(async (postId) => {
-    try {
-      await deletePost(postId, currentUser.uid);
-      setPosts(prev => prev.filter(p => p.id !== postId));
-    } catch (_) {}
+    try { await deletePost(postId, currentUser.uid); setPosts(prev => prev.filter(p => p.id !== postId)); } catch {}
   }, [currentUser.uid]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6c5ce7" />
-      </View>
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+        <View style={styles.header}>
+          <Text variant="h2">Perfil</Text>
+        </View>
+        <SkeletonList count={4} />
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
+
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Mi Perfil</Text>
-          <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('Settings')}>
-            <Ionicons name="settings-outline" size={24} color="#fff" />
-          </TouchableOpacity>
+          <Text variant="h2">Perfil</Text>
+          <Pressable
+            onPress={() => navigation.navigate('Settings')}
+            style={styles.headerIcon}
+            accessibilityLabel={t.settings.title}
+            accessibilityRole="button"
+          >
+            <Ionicons name="settings-outline" size={24} color={colors['text.primary']} />
+          </Pressable>
         </View>
 
-        <View style={styles.coverContainer}>
-          {user?.coverImage ? (
-            <Image source={{ uri: user.coverImage }} style={styles.coverImage} />
-          ) : null}
+        {/* Cover */}
+        <View style={[styles.cover, { backgroundColor: colors['bg.surface'] }]}>
+          {user?.coverImage && (
+            <Image source={{ uri: user.coverImage }} style={styles.coverImg} contentFit="cover" />
+          )}
         </View>
 
+        {/* Avatar + info */}
         <View style={styles.profileSection}>
-          <UserAvatar uri={user?.avatar} size={90} style={styles.avatar} />
-          <Text style={styles.name}>{user?.name || 'Usuario'}</Text>
-          <Text style={styles.email}>{currentUser.email}</Text>
-          {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
+          <View style={[styles.avatarRing, { borderColor: colors['bg.base'] }]}>
+            <Avatar uri={user?.avatar} name={user?.name || currentUser.displayName} size={88} />
+          </View>
+
+          <Text variant="h2" style={styles.name}>{user?.name || 'Usuario'}</Text>
+          {user?.bio && <Text variant="body" color="text.secondary" align="center" style={styles.bio}>{user.bio}</Text>}
+
+          {/* Botón editar perfil */}
+          <Button
+            variant="secondary"
+            size="sm"
+            label={t.profile.editProfile}
+            onPress={() => navigation.navigate('EditProfile')}
+            style={styles.editBtn}
+          />
 
           {/* Accesos especiales */}
           {(user?.isAdmin || user?.isAdvertiser) && (
-            <View style={styles.specialBtns}>
+            <View style={styles.specialRow}>
               {user?.isAdvertiser && (
-                <TouchableOpacity style={styles.specialBtn} onPress={() => navigation.navigate('AdCenter')}>
-                  <Ionicons name="megaphone" size={16} color="#6c5ce7" />
-                  <Text style={styles.specialBtnText}>Centro de Anuncios</Text>
-                </TouchableOpacity>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  label="Centro de Anuncios"
+                  leadingIcon={<Ionicons name="megaphone" size={16} color={colors['nav.selected']} />}
+                  onPress={() => navigation.navigate('AdCenter')}
+                />
               )}
               {user?.isAdmin && (
-                <TouchableOpacity style={[styles.specialBtn, styles.adminBtn]} onPress={() => navigation.navigate('Admin')}>
-                  <Ionicons name="shield-checkmark" size={16} color="#fff" />
-                  <Text style={[styles.specialBtnText, { color: '#fff' }]}>Panel Admin</Text>
-                </TouchableOpacity>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  label="Panel Admin"
+                  leadingIcon={<Ionicons name="shield-checkmark" size={16} color={colors['text.onAction']} />}
+                  onPress={() => navigation.navigate('Admin')}
+                />
               )}
             </View>
           )}
 
-          {/* Invitación a anunciarse (solo si no es anunciante aún) */}
+          {/* Invitación a anunciarse */}
           {!user?.isAdvertiser && !user?.isAdmin && (
-            <TouchableOpacity style={styles.advertiseInvite} onPress={() => navigation.navigate('AdvertiserRequest')}>
-              <Ionicons name="megaphone-outline" size={16} color="#6c5ce7" />
-              <Text style={styles.advertiseInviteText}>¿Querés publicitar en Enfiestados?</Text>
-              <Ionicons name="chevron-forward" size={14} color="#6c5ce7" />
-            </TouchableOpacity>
+            <Pressable
+              style={[styles.advertiseBar, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+              onPress={() => navigation.navigate('AdvertiserRequest')}
+            >
+              <Ionicons name="megaphone-outline" size={16} color={colors['nav.selected']} />
+              <Text variant="caption" color="nav.selected" style={{ flex: 1 }}>¿Querés publicitar en Enfiestados?</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors['nav.selected']} />
+            </Pressable>
           )}
 
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{posts.length}</Text>
-              <Text style={styles.statLabel}>Posts</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{user?.followers?.length || 0}</Text>
-              <Text style={styles.statLabel}>Seguidores</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{user?.following?.length || 0}</Text>
-              <Text style={styles.statLabel}>Siguiendo</Text>
-            </View>
+          {/* Stats */}
+          <View style={[styles.statsRow, { borderTopColor: colors['border.subtle'], borderBottomColor: colors['border.subtle'] }]}>
+            {[
+              { label: 'Posts',      value: posts.length },
+              { label: 'Seguidores', value: user?.followers?.length ?? 0 },
+              { label: 'Siguiendo',  value: user?.following?.length  ?? 0 },
+            ].map((s, i) => (
+              <View key={i} style={styles.statItem}>
+                <Text variant="h3">{s.value > 999 ? `${(s.value/1000).toFixed(1)}k` : s.value}</Text>
+                <Text variant="caption" color="text.tertiary">{s.label}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity style={[styles.tab, activeTab === 'eventos' && styles.tabActive]} onPress={() => setActiveTab('eventos')}>
-            <Ionicons name="calendar" size={22} color={activeTab === 'eventos' ? '#6c5ce7' : '#888'} />
-            <Text style={[styles.tabText, activeTab === 'eventos' && styles.tabTextActive]}>Eventos</Text>
-            {events.length > 0 && (
-              <View style={[styles.tabBadge, activeTab === 'eventos' && styles.tabBadgeActive]}>
-                <Text style={[styles.tabBadgeText, activeTab === 'eventos' && styles.tabBadgeTextActive]}>{events.length}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, activeTab === 'publicaciones' && styles.tabActive]} onPress={() => setActiveTab('publicaciones')}>
-            <Ionicons name="grid" size={22} color={activeTab === 'publicaciones' ? '#6c5ce7' : '#888'} />
-            <Text style={[styles.tabText, activeTab === 'publicaciones' && styles.tabTextActive]}>Publicaciones</Text>
-          </TouchableOpacity>
+        {/* Tabs */}
+        <View style={styles.tabsWrap}>
+          <UnderlineTabs options={TABS} selected={tab} onSelect={setTab} />
         </View>
 
-        <View style={styles.contentSection}>
-          {activeTab === 'eventos' ? (
-            events.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="calendar-outline" size={50} color="#888" />
-                <Text style={styles.emptyText}>No has creado eventos aún</Text>
-                <TouchableOpacity style={styles.createButton} onPress={() => navigation.navigate('Create')}>
-                  <Text style={styles.createButtonText}>Crear mi primer evento</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                {activeEvents.length > 0 && (
-                  <>
-                    <View style={styles.sectionHeader}>
-                      <Ionicons name="radio-button-on" size={14} color="#00b894" />
-                      <Text style={styles.sectionTitle}>Activos</Text>
-                      <Text style={styles.sectionCount}>{activeEvents.length}</Text>
-                    </View>
-                    {activeEvents.map(event => (
-                      <EventCard key={event.id} event={event} onPress={() => handleEventPress(event)} />
-                    ))}
-                  </>
-                )}
-
-                {expiredEvents.length > 0 && (
-                  <>
-                    <View style={styles.sectionHeader}>
-                      <Ionicons name="time-outline" size={14} color="#888" />
-                      <Text style={[styles.sectionTitle, styles.sectionTitleMuted]}>Pasados</Text>
-                      <Text style={styles.sectionCount}>{expiredEvents.length}</Text>
-                    </View>
-                    {expiredEvents.map(event => (
-                      <View key={event.id} style={styles.expiredWrapper}>
-                        <EventCard event={event} onPress={() => handleEventPress(event)} />
-                        <View style={styles.expiredOverlay}>
-                          <Text style={styles.expiredLabel}>Finalizado</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </>
-            )
+        {/* Contenido de tabs */}
+        {tab === 'eventos' ? (
+          events.length === 0 ? (
+            <EmptyState
+              icon={<Ionicons name="calendar-outline" size={28} color={colors['text.tertiary']} />}
+              title="No has creado eventos aún"
+              description="Creá tu primer evento y empezá a recibir asistentes."
+              actionLabel="Crear evento"
+              onAction={() => navigation.navigate('CreateEvent')}
+            />
           ) : (
-            <>
-              <TouchableOpacity style={styles.createPostButton} onPress={() => navigation.navigate('CreatePost')}>
-                <Ionicons name="add-circle" size={24} color="#6c5ce7" />
-                <Text style={styles.createPostText}>Crear publicación</Text>
-              </TouchableOpacity>
-              {posts.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Ionicons name="chatbubbles-outline" size={50} color="#888" />
-                  <Text style={styles.emptyText}>No tienes publicaciones aún</Text>
-                  <Text style={styles.emptySubtext}>Comparte algo con tus seguidores</Text>
-                </View>
-              ) : (
-                posts.map(post => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    currentUserId={currentUser.uid}
-                    onLike={handlePostLike}
-                    onComment={handlePostComment}
-                    onDelete={handlePostDelete}
-                    onUserPress={handleUserPress}
-                  />
-                ))
+            <View>
+              {active.length > 0 && (
+                <>
+                  <View style={[styles.sectionHeader, { borderBottomColor: colors['border.subtle'] }]}>
+                    <View style={[styles.dot, { backgroundColor: colors['status.free'] }]} />
+                    <Text variant="overline" color="text.tertiary">ACTIVOS · {active.length}</Text>
+                  </View>
+                  {active.map(ev => (
+                    <EventRow key={ev.id} event={ev} trailing="price" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
+                  ))}
+                </>
               )}
-            </>
-          )}
-        </View>
+              {expired.length > 0 && (
+                <>
+                  <View style={[styles.sectionHeader, { borderBottomColor: colors['border.subtle'] }]}>
+                    <View style={[styles.dot, { backgroundColor: colors['text.tertiary'] }]} />
+                    <Text variant="overline" color="text.tertiary">PASADOS · {expired.length}</Text>
+                  </View>
+                  {expired.map(ev => (
+                    <View key={ev.id} style={{ opacity: 0.55 }}>
+                      <EventRow event={ev} trailing="price" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
+          )
+        ) : (
+          <>
+            <Pressable
+              style={[styles.createPostBar, { backgroundColor: colors['bg.surface'], borderColor: colors['nav.selected'] }]}
+              onPress={() => navigation.navigate('CreatePost')}
+            >
+              <Ionicons name="add-circle-outline" size={22} color={colors['nav.selected']} />
+              <Text variant="label" color="nav.selected">Crear publicación</Text>
+            </Pressable>
+            {posts.length === 0 ? (
+              <EmptyState
+                icon={<Ionicons name="grid-outline" size={28} color={colors['text.tertiary']} />}
+                title="Sin publicaciones"
+                description="Compartí algo con tus seguidores."
+              />
+            ) : (
+              posts.map(post => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  currentUserId={currentUser.uid}
+                  onLike={handlePostLike}
+                  onComment={handlePostComment}
+                  onDelete={handlePostDelete}
+                  onUserPress={(uid) => { if (uid !== currentUser.uid) navigation.navigate('UserProfile', { userId: uid }); }}
+                />
+              ))
+            )}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  loadingContainer: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  headerButton: { marginLeft: 15 },
-  coverContainer: { height: 150, backgroundColor: '#2d2d44' },
-  coverImage: { width: '100%', height: '100%' },
-  profileSection: { alignItems: 'center', paddingHorizontal: 20, marginTop: -50 },
-  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: '#1a1a2e', backgroundColor: '#2d2d44' },
-  name: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginTop: 15 },
-  email: { fontSize: 14, color: '#888', marginTop: 4 },
-  bio: { fontSize: 14, color: '#aaa', textAlign: 'center', marginTop: 10, paddingHorizontal: 20 },
-  statsRow: { flexDirection: 'row', marginTop: 20, paddingHorizontal: 10 },
-  statItem: { flex: 1, alignItems: 'center' },
-  statNumber: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  statLabel: { fontSize: 12, color: '#888', marginTop: 4 },
-  tabsContainer: { flexDirection: 'row', marginTop: 25, borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
-  tab: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#6c5ce7' },
-  tabText: { color: '#888', fontSize: 14, fontWeight: '600', marginLeft: 8 },
-  tabTextActive: { color: '#fff' },
-  contentSection: { paddingVertical: 15, paddingBottom: 100 },
-  createPostButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d2d44', marginHorizontal: 15, marginBottom: 15, paddingVertical: 15, borderRadius: 12, borderWidth: 1, borderColor: '#6c5ce7', borderStyle: 'dashed' },
-  createPostText: { color: '#6c5ce7', fontSize: 15, fontWeight: '600', marginLeft: 8 },
-  emptyState: { alignItems: 'center', paddingVertical: 50 },
-  emptyText: { color: '#888', fontSize: 16, marginTop: 15 },
-  emptySubtext: { color: '#666', fontSize: 14, marginTop: 5 },
-  createButton: { backgroundColor: '#6c5ce7', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, marginTop: 20 },
-  createButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, gap: 6 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#fff', flex: 1 },
-  sectionTitleMuted: { color: '#888' },
-  sectionCount: { fontSize: 13, color: '#888', fontWeight: '600' },
-  expiredWrapper: { position: 'relative' },
-  expiredOverlay: { position: 'absolute', top: 10, left: 20, right: 20, bottom: 10, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' },
-  expiredLabel: { color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 1, opacity: 0.9 },
-  specialBtns: { flexDirection: 'row', gap: 10, marginBottom: 12, flexWrap: 'wrap' },
-  specialBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#2d2d44', borderWidth: 1, borderColor: '#6c5ce7', gap: 6 },
-  adminBtn: { backgroundColor: '#6c5ce7', borderColor: '#6c5ce7' },
-  specialBtnText: { color: '#6c5ce7', fontWeight: '700', fontSize: 13 },
-  tabBadge: { backgroundColor: '#3d3d54', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, marginLeft: 6 },
-  tabBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  tabBadgeText: { color: '#888', fontSize: 11, fontWeight: '700' },
-  tabBadgeTextActive: { color: '#fff' },
-  advertiseInvite: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 16, marginBottom: 14, gap: 8 },
-  advertiseInviteText: { color: '#6c5ce7', fontSize: 13, flex: 1 },
+  safe:   { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[5], paddingVertical: space[4] },
+  headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+
+  cover:    { height: 140 },
+  coverImg: { width: '100%', height: '100%' },
+
+  profileSection: { alignItems: 'center', paddingHorizontal: space[5], marginTop: -44 },
+  avatarRing: { borderWidth: 4, borderRadius: 999, marginBottom: space[3] },
+  name:      { marginTop: space[2] },
+  bio:       { marginTop: space[2], paddingHorizontal: space[4] },
+  editBtn:   { marginTop: space[3] },
+  specialRow: { flexDirection: 'row', gap: space[2], marginTop: space[3], flexWrap: 'wrap', justifyContent: 'center' },
+
+  advertiseBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    paddingHorizontal: space[3],
+    paddingVertical: space[2],
+    marginTop: space[3],
+    borderWidth: 1,
+    gap: space[2],
+    width: '100%',
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: space[5],
+    width: '100%',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: space[4],
+  },
+  statItem: { flex: 1, alignItems: 'center', gap: 4 },
+
+  tabsWrap: { paddingHorizontal: space[5], marginTop: space[2] },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[5],
+    paddingVertical: space[3],
+    gap: space[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+
+  createPostBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: space[5],
+    marginVertical: space[4],
+    paddingVertical: space[4],
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    gap: space[2],
+  },
 });

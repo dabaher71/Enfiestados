@@ -1,747 +1,633 @@
+// SearchScreen (Explorar) — lista + mapa con filtros.
+// LÓGICA INTACTA: mapa, marcadores, filtros, eventos externos, ads.
+// PRESENTACIÓN: design system v1.1 — tokens, EventRow, EmptyState, Sheet.
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image } from 'expo-image';
-import { Animated, Dimensions, FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Animated, Dimensions, FlatList, Pressable, ScrollView, StyleSheet, View,
+} from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
-import { safeOpenURL } from '../utils/security';
-import { SearchListSkeleton } from '../components/SkeletonLoader';
-import ExternalEventSearchCard from '../components/ExternalEventSearchCard';
+
 import NativeAdCard from '../components/NativeAdCard';
+import Chip from '../components/ui/Chip';
+import EmptyState from '../components/ui/EmptyState';
+import EventRow from '../components/ui/EventRow';
+import { SearchField } from '../components/ui/Input';
+import Sheet from '../components/ui/Sheet';
+import { SkeletonList } from '../components/ui/Skeleton';
+import StatusBadge from '../components/ui/StatusBadge';
+import Text from '../components/ui/Text';
+import Button from '../components/ui/Button';
+
+import { formatEventDate, formatPrice } from '../lib/format';
+import { safeOpenURL } from '../utils/security';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { subscribeToEvents } from '../services/eventService';
-import { CATEGORIES as BASE_CATEGORIES, CATEGORY_COLORS, getCategoryColor } from '../constants/categories';
+import { CATEGORIES as BASE_CATEGORIES, getCategoryColor } from '../constants/categories';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+import t from '../i18n/es-CR.json';
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.75;
-const CARD_HEIGHT = 200;
+const CARD_W = width * 0.75;
+const CARD_H = 190;
 
-// Para el filtro de búsqueda: "Todos" + categorías del catálogo central
+const COSTA_RICA = { latitude: 9.9281, longitude: -84.0907, latitudeDelta: 0.5, longitudeDelta: 0.5 };
+
 const CATEGORIES = [
   { id: 'all', label: 'Todos', icon: 'apps' },
   ...BASE_CATEGORIES.map(c => ({ id: c.id, label: c.name, icon: c.icon })),
 ];
 
-// Filtros de tiempo
-const TIME_FILTERS = [
-  { id: 'all', label: 'Cualquier fecha' },
-  { id: 'today', label: 'Hoy' },
+const TIME_OPTS = [
+  { id: 'all',      label: 'Cualquier fecha' },
+  { id: 'today',    label: 'Hoy' },
   { id: 'tomorrow', label: 'Mañana' },
-  { id: 'week', label: 'Esta semana' },
-  { id: 'month', label: 'Este mes' },
+  { id: 'week',     label: 'Esta semana' },
+  { id: 'month',    label: 'Este mes' },
 ];
 
-// Provincias de Costa Rica
 const PROVINCES = [
-  { id: 'all', label: 'Todas', lat: 9.9281, lng: -84.0907 },
-  { id: 'San José', label: 'San José', lat: 9.9281, lng: -84.0907 },
-  { id: 'Alajuela', label: 'Alajuela', lat: 10.0162, lng: -84.2115 },
-  { id: 'Cartago', label: 'Cartago', lat: 9.8644, lng: -83.9194 },
-  { id: 'Heredia', label: 'Heredia', lat: 10.0024, lng: -84.1165 },
-  { id: 'Guanacaste', label: 'Guanacaste', lat: 10.4274, lng: -85.4520 },
-  { id: 'Puntarenas', label: 'Puntarenas', lat: 9.9762, lng: -84.8382 },
-  { id: 'Limón', label: 'Limón', lat: 9.9907, lng: -83.0359 },
+  { id: 'all',         label: 'Todas',       lat: 9.9281,  lng: -84.0907 },
+  { id: 'San José',    label: 'San José',    lat: 9.9281,  lng: -84.0907 },
+  { id: 'Alajuela',   label: 'Alajuela',    lat: 10.0162, lng: -84.2115 },
+  { id: 'Cartago',    label: 'Cartago',     lat: 9.8644,  lng: -83.9194 },
+  { id: 'Heredia',    label: 'Heredia',     lat: 10.0024, lng: -84.1165 },
+  { id: 'Guanacaste', label: 'Guanacaste',  lat: 10.4274, lng: -85.4520 },
+  { id: 'Puntarenas', label: 'Puntarenas',  lat: 9.9762,  lng: -84.8382 },
+  { id: 'Limón',      label: 'Limón',       lat: 9.9907,  lng: -83.0359 },
 ];
 
-const COSTA_RICA_REGION = {
-  latitude: 9.9281,
-  longitude: -84.0907,
-  latitudeDelta: 0.5,
-  longitudeDelta: 0.5,
-};
+// ─── Helpers de filtrado (fuera del componente — sin recreación) ──────────────
 
-
-// Ordenamiento por fecha ascendente (más próxima primero)
-function getEventTimestamp(ev) {
+function getEventTs(ev) {
   if (ev?._isExternal) {
-    if (!ev.dateISO) return Infinity;
-    const ts = new Date(ev.dateISO).getTime();
+    const ts = ev.dateISO ? new Date(ev.dateISO).getTime() : Infinity;
     return isNaN(ts) ? Infinity : ts;
   }
   const d = ev?.date;
   if (!d) return Infinity;
-  if (typeof d.toMillis === 'function') return d.toMillis();
-  if (typeof d === 'number') return d;
   const parts = d.split('/');
   if (parts.length === 3) {
     const ts = new Date(+parts[2], +parts[1] - 1, +parts[0]).getTime();
     if (!isNaN(ts)) return ts;
   }
-  const parsed = Date.parse(d);
-  return isNaN(parsed) ? Infinity : parsed;
+  return isNaN(Date.parse(d)) ? Infinity : Date.parse(d);
 }
 
-const sortByDateAsc = (arr) =>
-  arr.slice().sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
-
-// Fuera del componente: no se recrea en cada render
-function formatDate(dateString) {
-  if (!dateString) return '';
-  const parts = dateString.split('/');
-  if (parts.length === 3) {
-    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    return `${parts[0]} ${months[parseInt(parts[1]) - 1]}`;
-  }
-  return dateString;
+function parseDate(s) {
+  if (!s) return null;
+  const p = s.split('/');
+  return p.length === 3 ? new Date(p[2], p[1] - 1, p[0]) : null;
 }
 
-// Funciones puras de filtrado (sin acceso a estado/props del componente)
-function parseDate(dateString) {
-  if (!dateString) return null;
-  const parts = dateString.split('/');
-  if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
-  return null;
+function isInTimeRange(dateStr, filter) {
+  const d = parseDate(dateStr);
+  if (!d) return true;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const endWeek  = new Date(today); endWeek.setDate(today.getDate() + (7 - today.getDay()));
+  const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  if (filter === 'today')    return d.toDateString() === today.toDateString();
+  if (filter === 'tomorrow') return d.toDateString() === tomorrow.toDateString();
+  if (filter === 'week')     return d >= today && d <= endWeek;
+  if (filter === 'month')    return d >= today && d <= endMonth;
+  return true;
 }
 
-function isInTimeRange(eventDate, filter) {
-  const date = parseDate(eventDate);
-  if (!date) return true;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const endOfWeek = new Date(today);
-  endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  switch (filter) {
-    case 'today':    return date.toDateString() === today.toDateString();
-    case 'tomorrow': return date.toDateString() === tomorrow.toDateString();
-    case 'week':     return date >= today && date <= endOfWeek;
-    case 'month':    return date >= today && date <= endOfMonth;
-    default:         return true;
-  }
-}
+// ─── Marcador del mapa ────────────────────────────────────────────────────────
 
-// Componente extraído: antes se redefinía en cada render del padre
-function CustomMarker({ event, isSelected }) {
-  const priceText = event.isFree ? 'Gratis' : `₡${event.price}`;
+function MapMarkerBubble({ event, isSelected, colors }) {
   return (
-    <View style={[markerStyles.bubble, isSelected && markerStyles.bubbleSelected]}>
-      <Text style={[markerStyles.text, isSelected && markerStyles.textSelected]}>
-        {priceText}
+    <View style={[
+      styles.markerBubble,
+      {
+        backgroundColor: isSelected ? colors['action.primary'] : colors['bg.raised'],
+        borderColor: isSelected ? colors['action.primary'] : colors['border.strong'],
+      },
+    ]}>
+      <Text
+        variant="caption"
+        style={{ color: isSelected ? colors['text.onAction'] : colors['text.primary'], fontFamily: 'PlusJakartaSans_700Bold' }}
+      >
+        {event.isFree ? 'Gratis' : `₡${event.price}`}
       </Text>
     </View>
   );
 }
 
-const markerStyles = StyleSheet.create({
-  bubble: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Platform.OS === 'ios' ? 16 : 4,
-    borderWidth: Platform.OS === 'ios' ? 2 : 1,
-    borderColor: '#333',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-  bubbleSelected: {
-    backgroundColor: '#6c5ce7',
-    borderColor: '#6c5ce7',
-  },
-  text: {
-    color: '#1a1a2e',
-    fontWeight: 'bold',
-    fontSize: Platform.OS === 'ios' ? 12 : 10,
-    includeFontPadding: false,
-    textAlign: 'center',
-  },
-  textSelected: {
-    color: '#fff',
-  },
-});
+// ─── SearchScreen ─────────────────────────────────────────────────────────────
 
 export default function SearchScreen({ navigation }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const [events, setEvents] = useState([]);
-  const [visibleEvents, setVisibleEvents] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedTime, setSelectedTime] = useState('all');
-  const [selectedProvince, setSelectedProvince] = useState('all');
-  const [viewMode, setViewMode] = useState('map');
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [mapRegion, setMapRegion] = useState(COSTA_RICA_REGION);
-  const [showFilters, setShowFilters] = useState(false);
-  const [loading, setLoading] = useState(true);
 
+  const [events,          setEvents]          = useState([]);
+  const [visibleEvents,   setVisibleEvents]   = useState([]);
+  const [query,           setQuery]           = useState('');
+  const [category,        setCategory]        = useState('all');
+  const [timeFilter,      setTimeFilter]      = useState('all');
+  const [province,        setProvince]        = useState('all');
+  const [viewMode,        setViewMode]        = useState('map');
+  const [selectedEvent,   setSelectedEvent]   = useState(null);
+  const [mapRegion,       setMapRegion]       = useState(COSTA_RICA);
+  const [showFilters,     setShowFilters]     = useState(false);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState(false);
+
+  const mapRef      = useRef(null);
+  const listRef     = useRef(null);
   const { data: externalEvents } = useExternalEvents();
 
-  const mapRef = useRef(null);
-  const flatListRef = useRef(null);
+  // ── Carga ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const unsubscribe = subscribeToEvents((newEvents) => {
-      const eventsWithLocation = newEvents.filter(e =>
-        e.location?.lat && e.location?.lng &&
-        e.location.lat !== 0 && e.location.lng !== 0 &&
-        !e.isVirtual
-      );
-      setEvents(eventsWithLocation);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    const unsub = subscribeToEvents(
+      (newEvents) => {
+        setEvents(newEvents.filter(e => e.location?.lat && e.location?.lng && !e.isVirtual));
+        setLoading(false);
+        setError(false);
+      },
+      () => { setLoading(false); setError(true); }
+    );
+    return () => unsub();
   }, []);
 
-  // useMemo: sustituye filterEvents() + useEffect — recalcula solo cuando cambian sus deps
-  const filteredEvents = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // Excluir eventos cuya fecha ya pasó
-    let filtered = events.filter(e => {
-      const date = parseDate(e.date);
-      if (!date) return true;
-      return date >= today;
-    });
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(e =>
+  // ── Filtrado ───────────────────────────────────────────────────────────────
+
+  const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+
+  const filteredNative = useMemo(() => {
+    let f = events.filter(e => { const d = parseDate(e.date); return !d || d >= today; });
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      f = f.filter(e =>
         e.title?.toLowerCase().includes(q) ||
         e.description?.toLowerCase().includes(q) ||
         e.location?.name?.toLowerCase().includes(q) ||
         e.organizerName?.toLowerCase().includes(q)
       );
     }
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(e => e.category === selectedCategory);
+    if (category !== 'all') f = f.filter(e => e.category === category);
+    if (timeFilter !== 'all') f = f.filter(e => isInTimeRange(e.date, timeFilter));
+    if (province !== 'all') {
+      const p = PROVINCES.find(x => x.id === province);
+      if (p) f = f.filter(e => {
+        const dLat = e.location.lat - p.lat, dLng = e.location.lng - p.lng;
+        return dLat*dLat + dLng*dLng < 0.25;
+      });
     }
-    if (selectedTime !== 'all') {
-      filtered = filtered.filter(e => isInTimeRange(e.date, selectedTime));
-    }
-    if (selectedProvince !== 'all') {
-      const province = PROVINCES.find(p => p.id === selectedProvince);
-      if (province) {
-        filtered = filtered.filter(e => {
-          const dLat = e.location.lat - province.lat;
-          const dLng = e.location.lng - province.lng;
-          return (dLat * dLat + dLng * dLng) < 0.25; // equivale a distance < 0.5 sin Math.sqrt
-        });
-      }
-    }
-    return filtered;
-  }, [events, searchQuery, selectedCategory, selectedTime, selectedProvince]);
+    return f;
+  }, [events, query, category, timeFilter, province, today]);
 
-  // Eventos externos: descartar pasados + filtro por texto
-  const filteredExternalEvents = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    let result = externalEvents.filter(e => {
-      if (e.dateISO) return new Date(e.dateISO) >= today;
-      return true; // sin fecha conocida: mostrar igual
-    });
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(e =>
+  const filteredExternal = useMemo(() => {
+    let f = externalEvents.filter(e => e.dateISO ? new Date(e.dateISO) >= today : true);
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      f = f.filter(e =>
         e.title?.toLowerCase().includes(q) ||
         e.locationText?.toLowerCase().includes(q) ||
-        e.source?.toLowerCase().includes(q),
+        e.source?.toLowerCase().includes(q)
       );
     }
-    return result;
-  }, [externalEvents, searchQuery]);
+    return f;
+  }, [externalEvents, query, today]);
 
-  // Sync visibleEvents cuando cambian los filtros
-  useEffect(() => {
-    setVisibleEvents(filteredEvents);
-  }, [filteredEvents]);
+  useEffect(() => { setVisibleEvents(filteredNative); }, [filteredNative]);
 
-  // Lista combinada ordenada por fecha + ads intercalados cada 4 eventos
-  const listDataWithAds = useMemo(() => {
-    const allEvents = sortByDateAsc([...filteredEvents, ...filteredExternalEvents]);
+  const listData = useMemo(() => {
+    const all = [...filteredNative, ...filteredExternal]
+      .slice().sort((a, b) => getEventTs(a) - getEventTs(b));
     const result = [];
-    allEvents.forEach((event, index) => {
-      result.push(event);
-      if ((index + 1) % 4 === 0) {
-        result.push({ _isAd: true, id: `ad_${index}` });
-      }
+    all.forEach((ev, i) => {
+      result.push(ev);
+      if ((i + 1) % 6 === 0 && i >= 3) result.push({ _isAd: true, id: `ad_${i}` });
     });
     return result;
-  }, [filteredEvents, filteredExternalEvents]);
+  }, [filteredNative, filteredExternal]);
 
-  // Memoizar markers para evitar recrear el array en cada render
-  const mapMarkers = useMemo(() =>
-    filteredEvents.map((event, index) => {
-      const isSelected = selectedEvent?.id === event.id;
-      const pinColor = isSelected ? '#6c5ce7' : getCategoryColor(event.category);
+  const activeFiltersCount = useMemo(() => {
+    let n = 0;
+    if (category !== 'all') n++;
+    if (timeFilter !== 'all') n++;
+    if (province !== 'all') n++;
+    return n;
+  }, [category, timeFilter, province]);
 
-      if (Platform.OS === 'android') {
-        return (
-          <Marker
-            key={event.id}
-            coordinate={{ latitude: event.location.lat, longitude: event.location.lng }}
-            onPress={() => handleMarkerPress(event, index)}
-            pinColor={pinColor}
-          />
-        );
-      }
-      return (
-        <Marker
-          key={event.id}
-          coordinate={{ latitude: event.location.lat, longitude: event.location.lng }}
-          onPress={() => handleMarkerPress(event, index)}
-        >
-          <CustomMarker event={event} isSelected={isSelected} />
-        </Marker>
-      );
-    }),
-  [filteredEvents, selectedEvent, handleMarkerPress]);
-
-  const onRegionChangeComplete = (region) => {
-    setMapRegion(region);
-    
-    const visible = filteredEvents.filter(e => {
-      const latInRange = e.location.lat >= region.latitude - region.latitudeDelta / 2 &&
-                         e.location.lat <= region.latitude + region.latitudeDelta / 2;
-      const lngInRange = e.location.lng >= region.longitude - region.longitudeDelta / 2 &&
-                         e.location.lng <= region.longitude + region.longitudeDelta / 2;
-      return latInRange && lngInRange;
-    });
-    
-    setVisibleEvents(visible);
-  };
+  // ── Interacciones de mapa ──────────────────────────────────────────────────
 
   const handleMarkerPress = useCallback((event, index) => {
     setSelectedEvent(event);
-
     mapRef.current?.animateToRegion({
-      latitude: event.location.lat,
-      longitude: event.location.lng,
-      latitudeDelta: 0.02,
-      longitudeDelta: 0.02,
+      latitude: event.location.lat, longitude: event.location.lng,
+      latitudeDelta: 0.02, longitudeDelta: 0.02,
     }, 300);
+    const vi = visibleEvents.findIndex(e => e.id === event.id);
+    if (vi >= 0) listRef.current?.scrollToIndex({ index: vi, animated: true });
+  }, [visibleEvents]);
 
-    const visibleIndex = visibleEvents.findIndex(e => e.id === event.id);
-    if (visibleIndex >= 0) {
-      flatListRef.current?.scrollToIndex({ index: visibleIndex, animated: true });
+  const onRegionChangeComplete = useCallback((region) => {
+    setMapRegion(region);
+    setVisibleEvents(filteredNative.filter(e =>
+      e.location.lat >= region.latitude  - region.latitudeDelta  / 2 &&
+      e.location.lat <= region.latitude  + region.latitudeDelta  / 2 &&
+      e.location.lng >= region.longitude - region.longitudeDelta / 2 &&
+      e.location.lng <= region.longitude + region.longitudeDelta / 2
+    ));
+  }, [filteredNative]);
+
+  const onCarouselScroll = useCallback((e) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / (CARD_W + space[3]));
+    const ev = visibleEvents[i];
+    if (ev) {
+      setSelectedEvent(ev);
+      mapRef.current?.animateToRegion({
+        latitude: ev.location.lat, longitude: ev.location.lng,
+        latitudeDelta: 0.02, longitudeDelta: 0.02,
+      }, 300);
     }
   }, [visibleEvents]);
 
   const handleCardPress = useCallback((event) => {
-    if (event._isExternal) {
-      safeOpenURL(event.eventUrl);
-    } else {
-      navigation.navigate('EventDetail', { event });
-    }
+    if (event._isExternal) safeOpenURL(event.eventUrl);
+    else navigation.navigate('EventDetail', { event });
   }, [navigation]);
 
-  const onScrollEnd = (e) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / (CARD_WIDTH + 10));
-    if (visibleEvents[index]) {
-      const event = visibleEvents[index];
-      setSelectedEvent(event);
-      mapRef.current?.animateToRegion({
-        latitude: event.location.lat,
-        longitude: event.location.lng,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      }, 300);
-    }
-  };
-
-  const handleProvinceSelect = (province) => {
-    setSelectedProvince(province.id);
-    if (province.id !== 'all') {
-      mapRef.current?.animateToRegion({
-        latitude: province.lat,
-        longitude: province.lng,
-        latitudeDelta: 0.3,
-        longitudeDelta: 0.3,
-      }, 500);
-    }
+  const clearFilters = useCallback(() => {
+    setCategory('all'); setTimeFilter('all'); setProvince('all');
     setShowFilters(false);
-  };
+  }, []);
 
-  const getActiveFiltersCount = () => {
-    let count = 0;
-    if (selectedCategory !== 'all') count++;
-    if (selectedTime !== 'all') count++;
-    if (selectedProvince !== 'all') count++;
-    return count;
-  };
+  // ── Renders ────────────────────────────────────────────────────────────────
 
-  const renderCategoryItem = useCallback(({ item }) => (
-    <TouchableOpacity
-      style={[styles.categoryItem, selectedCategory === item.id && styles.categoryItemActive]}
-      onPress={() => setSelectedCategory(item.id)}
-    >
-      <Ionicons 
-        name={item.icon} 
-        size={18} 
-        color={selectedCategory === item.id ? '#fff' : '#888'} 
-      />
-      <Text style={[styles.categoryText, selectedCategory === item.id && styles.categoryTextActive]}>
-        {item.label}
-      </Text>
-    </TouchableOpacity>
-  ), [selectedCategory]);
+  const mapMarkers = useMemo(() =>
+    filteredNative.map((ev, i) => (
+      <Marker
+        key={ev.id}
+        coordinate={{ latitude: ev.location.lat, longitude: ev.location.lng }}
+        onPress={() => handleMarkerPress(ev, i)}
+      >
+        <MapMarkerBubble event={ev} isSelected={selectedEvent?.id === ev.id} colors={colors} />
+      </Marker>
+    )),
+  [filteredNative, selectedEvent, handleMarkerPress, colors]);
 
-  const renderEventCard = useCallback(({ item }) => (
-    <TouchableOpacity 
-      style={[styles.eventCard, selectedEvent?.id === item.id && styles.eventCardSelected]}
+  const renderCarouselCard = useCallback(({ item }) => (
+    <Pressable
+      style={[
+        styles.mapCard,
+        {
+          backgroundColor: colors['bg.raised'],
+          borderColor: selectedEvent?.id === item.id ? colors['action.primary'] : 'transparent',
+          borderWidth: selectedEvent?.id === item.id ? 2 : 0,
+        },
+      ]}
       onPress={() => handleCardPress(item)}
-      activeOpacity={0.9}
     >
-      <Image source={item.image ? { uri: item.image } : require('../../assets/images/icon.png')} style={styles.eventImage} />
-      <View style={styles.eventInfo}>
-        <View style={styles.eventHeader}>
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{item.category}</Text>
-          </View>
-          {item.isFree ? (
-            <Text style={styles.freeTag}>Gratis</Text>
-          ) : (
-            <Text style={styles.priceTag}>₡{item.price}</Text>
-          )}
+      {(item.imageUrl || item.image) && (
+        <View style={styles.mapCardImg}>
+          <Animated.Image
+            source={{ uri: item.imageUrl || item.image }}
+            style={styles.mapCardImg}
+            resizeMode="cover"
+          />
         </View>
-        <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-        <View style={styles.eventDetails}>
-          <View style={styles.eventDetailRow}>
-            <Ionicons name="calendar-outline" size={12} color="#888" />
-            <Text style={styles.eventDetailText}>{formatDate(item.date)} - {item.time}</Text>
-          </View>
-          <View style={styles.eventDetailRow}>
-            <Ionicons name="location-outline" size={12} color="#888" />
-            <Text style={styles.eventDetailText} numberOfLines={1}>{item.location?.name}</Text>
-          </View>
+      )}
+      <View style={styles.mapCardBody}>
+        <Text variant="overline" color="text.tertiary" numberOfLines={1}>
+          {item.category?.toUpperCase()} · {formatEventDate(item.date, item.time)}
+        </Text>
+        <Text variant="title" numberOfLines={2} style={{ marginTop: space[1] }}>{item.title}</Text>
+        <View style={[styles.mapCardFooter, { marginTop: space[2] }]}>
+          {item.location?.name && (
+            <Text variant="caption" color="text.tertiary" numberOfLines={1} style={{ flex: 1 }}>
+              {item.location.name}
+            </Text>
+          )}
+          <StatusBadge
+            label={formatPrice(item.price, item.isFree)}
+            variant={item.isFree ? 'free' : 'neutral'}
+          />
         </View>
       </View>
-    </TouchableOpacity>
-  ), [selectedEvent, handleCardPress]);
+    </Pressable>
+  ), [selectedEvent, handleCardPress, colors]);
 
-  const renderListEventCard = useCallback(({ item }) => {
-    if (item._isAd) {
-      return <NativeAdCard />;
-    }
-    if (item._isExternal) {
-      return (
-        <View style={styles.listContainer_externalRow}>
-          <ExternalEventSearchCard event={item} />
-        </View>
-      );
-    }
+  const renderListItem = useCallback(({ item }) => {
+    if (item._isAd) return <NativeAdCard />;
     return (
-    <TouchableOpacity style={styles.listCard} onPress={() => handleCardPress(item)}>
-      <Image source={item.image ? { uri: item.image } : require('../../assets/images/icon.png')} style={styles.listCardImage} />
-      <View style={styles.listCardInfo}>
-        <View style={styles.listCardHeader}>
-          <View style={styles.categoryBadgeSmall}>
-            <Text style={styles.categoryBadgeTextSmall}>{item.category}</Text>
-          </View>
-          {item.isFree ? (
-            <Text style={styles.freeTagSmall}>Gratis</Text>
-          ) : (
-            <Text style={styles.priceTagSmall}>₡{item.price}</Text>
-          )}
-        </View>
-        <Text style={styles.listCardTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={styles.listCardDetails}>
-          <Ionicons name="calendar-outline" size={12} color="#888" />
-          <Text style={styles.listCardDetailText}>{formatDate(item.date)} - {item.time}</Text>
-        </View>
-        <View style={styles.listCardDetails}>
-          <Ionicons name="location-outline" size={12} color="#888" />
-          <Text style={styles.listCardDetailText} numberOfLines={1}>{item.location?.name}</Text>
-        </View>
-        <View style={styles.listCardStats}>
-          <View style={styles.statItem}>
-            <Ionicons name="heart" size={12} color="#e74c3c" />
-            <Text style={styles.statText}>{item.likes?.length || 0}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name="people" size={12} color="#00b894" />
-            <Text style={styles.statText}>{item.attendees?.length || 0}</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}, [handleCardPress]);
+      <EventRow
+        event={item}
+        trailing="price"
+        onPress={() => handleCardPress(item)}
+      />
+    );
+  }, [handleCardPress]);
+
+  // ── Layout ─────────────────────────────────────────────────────────────────
+
+  const totalCount = viewMode === 'map' ? visibleEvents.length : listData.filter(i => !i._isAd).length;
 
   return (
-    <View style={styles.container}>
-      {/* Header con búsqueda */}
-      <View style={[styles.searchHeader, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color="#888" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar eventos..."
-            placeholderTextColor="#888"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#888" />
-            </TouchableOpacity>
-          )}
-        </View>
-        
-        <TouchableOpacity 
-          style={[styles.filterButton, getActiveFiltersCount() > 0 && styles.filterButtonActive]}
+    <View style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+
+      {/* Header — búsqueda + acciones */}
+      <View style={[styles.header, { paddingTop: insets.top + space[2] }]}>
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t.explore.searchPlaceholder}
+          style={styles.searchField}
+        />
+        <Pressable
           onPress={() => setShowFilters(true)}
+          style={[styles.iconBtn, { backgroundColor: activeFiltersCount > 0 ? colors['action.primary'] : colors['bg.surface'] }]}
+          accessibilityLabel={t.explore.filters}
+          accessibilityRole="button"
         >
-          <Ionicons name="options" size={20} color={getActiveFiltersCount() > 0 ? '#fff' : '#888'} />
-          {getActiveFiltersCount() > 0 && (
-            <View style={styles.filterBadge}>
-              <Text style={styles.filterBadgeText}>{getActiveFiltersCount()}</Text>
+          <Ionicons name="options-outline" size={20} color={activeFiltersCount > 0 ? colors['text.onAction'] : colors['text.primary']} />
+          {activeFiltersCount > 0 && (
+            <View style={[styles.filterBadge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]}>
+              <Text style={{ fontSize: 9, color: '#fff', fontFamily: 'PlusJakartaSans_700Bold' }}>{activeFiltersCount}</Text>
             </View>
           )}
-        </TouchableOpacity>
-
-        <View style={styles.viewToggle}>
-          <TouchableOpacity 
-            style={[styles.toggleButton, viewMode === 'map' && styles.toggleButtonActive]}
-            onPress={() => setViewMode('map')}
-          >
-            <Ionicons name="map" size={18} color={viewMode === 'map' ? '#fff' : '#888'} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.toggleButton, viewMode === 'list' && styles.toggleButtonActive]}
-            onPress={() => setViewMode('list')}
-          >
-            <Ionicons name="list" size={18} color={viewMode === 'list' ? '#fff' : '#888'} />
-          </TouchableOpacity>
+        </Pressable>
+        <View style={[styles.viewToggle, { backgroundColor: colors['bg.surface'] }]}>
+          {['map', 'list'].map(mode => (
+            <Pressable
+              key={mode}
+              onPress={() => setViewMode(mode)}
+              style={[styles.toggleBtn, viewMode === mode && { backgroundColor: colors['nav.selected'] }]}
+              accessibilityRole="button"
+              accessibilityLabel={mode === 'map' ? t.explore.viewMap : t.explore.viewList}
+            >
+              <Ionicons name={mode === 'map' ? 'map-outline' : 'list-outline'} size={18} color={viewMode === mode ? '#fff' : colors['text.tertiary']} />
+            </Pressable>
+          ))}
         </View>
       </View>
 
-      {/* Categorías horizontales */}
-      <View style={styles.categoriesContainer}>
-        <FlatList
-          data={CATEGORIES}
-          keyExtractor={(item) => item.id}
-          renderItem={renderCategoryItem}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesList}
-        />
-      </View>
-
-      {/* Filtros rápidos de tiempo */}
-      <View style={styles.timeFiltersContainer}>
-        <FlatList
-          data={TIME_FILTERS}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.timeFilter, selectedTime === item.id && styles.timeFilterActive]}
-              onPress={() => setSelectedTime(item.id)}
-            >
-              <Text style={[styles.timeFilterText, selectedTime === item.id && styles.timeFilterTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.timeFiltersList}
-        />
-      </View>
+      {/* Categorías */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {CATEGORIES.map(cat => (
+          <Chip
+            key={cat.id}
+            label={cat.label}
+            selected={category === cat.id}
+            onPress={() => setCategory(cat.id)}
+          />
+        ))}
+      </ScrollView>
 
       {/* Contador de resultados */}
-      <View style={styles.resultsCount}>
-        <Text style={styles.resultsText}>
-          {viewMode === 'map'
-            ? visibleEvents.length
-            : filteredEvents.length + filteredExternalEvents.length} eventos
-          {selectedProvince !== 'all' && ` en ${selectedProvince}`}
+      <View style={[styles.resultsRow, { borderBottomColor: colors['border.subtle'] }]}>
+        <Text variant="caption" color="text.tertiary">
+          {totalCount} {totalCount === 1 ? 'evento' : 'eventos'}
+          {province !== 'all' ? ` en ${province}` : ''}
         </Text>
       </View>
 
-      {viewMode === 'map' ? (
+      {/* Contenido principal */}
+      {loading ? (
+        <SkeletonList count={6} />
+      ) : error ? (
+        <EmptyState
+          icon={<Ionicons name="cloud-offline-outline" size={28} color={colors['text.tertiary']} />}
+          title={t.explore.error.title}
+          actionLabel={t.explore.error.action}
+          onAction={() => { setError(false); setLoading(true); }}
+        />
+      ) : viewMode === 'list' ? (
+        filteredNative.length === 0 && filteredExternal.length === 0 ? (
+          <EmptyState
+            icon={<Ionicons name="search-outline" size={28} color={colors['text.tertiary']} />}
+            title={t.explore.empty.title}
+            description={t.explore.empty.desc}
+            actionLabel={t.explore.empty.action}
+            onAction={() => { setProvince('all'); setCategory('all'); setTimeFilter('all'); }}
+          />
+        ) : (
+          <FlashList
+            data={listData}
+            keyExtractor={item => item.id}
+            renderItem={renderListItem}
+            estimatedItemSize={96}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: space[12] }}
+          />
+        )
+      ) : (
+        /* Vista mapa */
         <View style={styles.mapContainer}>
           <MapView
             ref={mapRef}
             style={styles.map}
             initialRegion={mapRegion}
             onRegionChangeComplete={onRegionChangeComplete}
-            showsUserLocation={true}
+            showsUserLocation
             showsMyLocationButton={false}
           >
             {mapMarkers}
           </MapView>
 
+          {/* FAB — centrar ubicación */}
+          <Pressable
+            style={[styles.fab, { backgroundColor: colors['bg.raised'] }]}
+            onPress={() => mapRef.current?.animateToRegion(COSTA_RICA, 500)}
+            accessibilityLabel="Centrar mapa"
+          >
+            <Ionicons name="locate-outline" size={22} color={colors['nav.selected']} />
+          </Pressable>
+
+          {/* Carrusel de cards */}
           {visibleEvents.length > 0 && (
             <Animated.FlatList
-              ref={flatListRef}
+              ref={listRef}
               data={visibleEvents}
-              keyExtractor={(item) => item.id}
-              renderItem={renderEventCard}
+              keyExtractor={item => item.id}
+              renderItem={renderCarouselCard}
               horizontal
               showsHorizontalScrollIndicator={false}
-              snapToInterval={CARD_WIDTH + 10}
-              snapToAlignment="center"
+              snapToInterval={CARD_W + space[3]}
+              snapToAlignment="start"
               decelerationRate="fast"
-              contentContainerStyle={styles.carouselContainer}
-              onMomentumScrollEnd={onScrollEnd}
-              getItemLayout={(data, index) => ({
-                length: CARD_WIDTH + 10,
-                offset: (CARD_WIDTH + 10) * index,
-                index,
-              })}
+              contentContainerStyle={styles.carousel}
+              onMomentumScrollEnd={onCarouselScroll}
+              getItemLayout={(_, i) => ({ length: CARD_W + space[3], offset: (CARD_W + space[3]) * i, index: i })}
             />
           )}
 
-          <TouchableOpacity 
-            style={styles.myLocationButton}
-            onPress={() => mapRef.current?.animateToRegion(COSTA_RICA_REGION, 500)}
-          >
-            <Ionicons name="locate" size={24} color="#6c5ce7" />
-          </TouchableOpacity>
-        </View>
-      ) : loading ? (
-        <SearchListSkeleton count={5} />
-      ) : (
-        <FlashList
-          data={listDataWithAds}
-          keyExtractor={(item) => item.id}
-          renderItem={renderListEventCard}
-          estimatedItemSize={120}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={60} color="#888" />
-              <Text style={styles.emptyTitle}>No se encontraron eventos</Text>
-              <Text style={styles.emptyText}>Intenta con otros filtros</Text>
+          {visibleEvents.length === 0 && (
+            <View style={[styles.mapEmptyBanner, { backgroundColor: colors['bg.raised'] }]}>
+              <Text variant="caption" color="text.secondary">No hay eventos en esta zona</Text>
+              <Pressable onPress={() => mapRef.current?.animateToRegion(COSTA_RICA, 500)}>
+                <Text variant="label" color="nav.selected">Ampliar</Text>
+              </Pressable>
             </View>
-          }
-        />
+          )}
+        </View>
       )}
 
-      {/* Modal de filtros avanzados */}
-      <Modal
-        visible={showFilters}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowFilters(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filtros</Text>
-              <TouchableOpacity onPress={() => setShowFilters(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.filterSectionTitle}>Provincia</Text>
-            <View style={styles.provinceGrid}>
-              {PROVINCES.map((province) => (
-                <TouchableOpacity
-                  key={province.id}
-                  style={[
-                    styles.provinceItem,
-                    selectedProvince === province.id && styles.provinceItemActive
-                  ]}
-                  onPress={() => handleProvinceSelect(province)}
-                >
-                  <Text style={[
-                    styles.provinceText,
-                    selectedProvince === province.id && styles.provinceTextActive
-                  ]}>
-                    {province.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity 
-              style={styles.clearButton}
-              onPress={() => {
-                setSelectedCategory('all');
-                setSelectedTime('all');
-                setSelectedProvince('all');
-                setShowFilters(false);
-              }}
-            >
-              <Text style={styles.clearButtonText}>Limpiar filtros</Text>
-            </TouchableOpacity>
+      {/* Sheet de filtros avanzados */}
+      <Sheet visible={showFilters} onClose={() => setShowFilters(false)} height="half" title="Filtros">
+        <ScrollView contentContainerStyle={styles.filtersContent}>
+          <Text variant="overline" color="text.tertiary" style={{ marginBottom: space[3] }}>FECHA</Text>
+          <View style={styles.filterChips}>
+            {TIME_OPTS.map(opt => (
+              <Chip key={opt.id} label={opt.label} selected={timeFilter === opt.id} onPress={() => setTimeFilter(opt.id)} />
+            ))}
           </View>
-        </View>
-      </Modal>
+
+          <Text variant="overline" color="text.tertiary" style={{ marginTop: space[4], marginBottom: space[3] }}>PROVINCIA</Text>
+          <View style={styles.filterChips}>
+            {PROVINCES.map(p => (
+              <Chip key={p.id} label={p.label} selected={province === p.id} onPress={() => {
+                setProvince(p.id);
+                if (p.id !== 'all') {
+                  mapRef.current?.animateToRegion({ latitude: p.lat, longitude: p.lng, latitudeDelta: 0.3, longitudeDelta: 0.3 }, 500);
+                }
+              }} />
+            ))}
+          </View>
+
+          <View style={styles.filterActions}>
+            <Button variant="ghost" size="sm" label="Limpiar" onPress={clearFilters} />
+            <Button variant="primary" size="md" label={`Aplicar${activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}`} onPress={() => setShowFilters(false)} style={{ flex: 1 }} />
+          </View>
+        </ScrollView>
+      </Sheet>
     </View>
   );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  searchHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingBottom: 10, gap: 8 },
-  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#2d2d44', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput: { flex: 1, color: '#fff', fontSize: 15, marginLeft: 8 },
-  filterButton: { backgroundColor: '#2d2d44', borderRadius: 10, padding: 10, position: 'relative' },
-  filterButtonActive: { backgroundColor: '#6c5ce7' },
-  filterBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#e74c3c', borderRadius: 10, width: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
-  filterBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  viewToggle: { flexDirection: 'row', backgroundColor: '#2d2d44', borderRadius: 10, padding: 3 },
-  toggleButton: { padding: 7, borderRadius: 7 },
-  toggleButtonActive: { backgroundColor: '#6c5ce7' },
-  categoriesContainer: { borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
-  categoriesList: { paddingHorizontal: 15, paddingVertical: 10 },
-  categoryItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#2d2d44', gap: 6 },
-  categoryItemActive: { backgroundColor: '#6c5ce7' },
-  categoryText: { color: '#888', fontSize: 12 },
-  categoryTextActive: { color: '#fff' },
-  timeFiltersContainer: { borderBottomWidth: 1, borderBottomColor: '#2d2d44' },
-  timeFiltersList: { paddingHorizontal: 15, paddingVertical: 8 },
-  timeFilter: { marginRight: 10, paddingVertical: 5, paddingHorizontal: 12, borderRadius: 15, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3d3d5c' },
-  timeFilterActive: { backgroundColor: '#6c5ce7', borderColor: '#6c5ce7' },
-  timeFilterText: { color: '#888', fontSize: 12 },
-  timeFilterTextActive: { color: '#fff' },
-  resultsCount: { paddingHorizontal: 15, paddingVertical: 6 },
-  resultsText: { color: '#888', fontSize: 12 },
-  mapContainer: { flex: 1, position: 'relative' },
+  safe: { flex: 1 },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[5],
+    paddingBottom: space[3],
+    gap: space[2],
+  },
+  searchField: { flex: 1 },
+  iconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    borderRadius: radius.md,
+    padding: 3,
+    gap: 2,
+  },
+  toggleBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+  },
+
+  chips: {
+    paddingHorizontal: space[5],
+    paddingBottom: space[3],
+    gap: space[2],
+  },
+
+  resultsRow: {
+    paddingHorizontal: space[5],
+    paddingBottom: space[2],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+
+  mapContainer: { flex: 1 },
   map: { flex: 1 },
-  carouselContainer: { position: 'absolute', bottom: 15, paddingHorizontal: 15 },
-  eventCard: { width: CARD_WIDTH, height: CARD_HEIGHT, backgroundColor: '#2d2d44', borderRadius: 14, marginRight: 10, overflow: 'hidden', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
-  eventCardSelected: { borderWidth: 2, borderColor: '#6c5ce7' },
-  eventImage: { width: '100%', height: 100, backgroundColor: '#3d3d5c' },
-  eventInfo: { padding: 12, flex: 1, justifyContent: 'space-between' },
-  eventHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  categoryBadge: { backgroundColor: '#6c5ce7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  categoryBadgeText: { color: '#fff', fontSize: 9, fontWeight: '600' },
-  freeTag: { color: '#00b894', fontSize: 11, fontWeight: 'bold' },
-  priceTag: { color: '#fdcb6e', fontSize: 11, fontWeight: 'bold' },
-  eventTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 6 },
-  eventDetails: { flex: 1, justifyContent: 'flex-end' },
-  eventDetailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  eventDetailText: { color: '#aaa', fontSize: 11, marginLeft: 5, flex: 1 },
-  myLocationButton: { position: 'absolute', top: 15, right: 15, backgroundColor: '#fff', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
-  listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
-  listContainer_externalRow: { paddingHorizontal: 0 },
-  listCard: { flexDirection: 'row', backgroundColor: '#2d2d44', borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
-  listCardImage: { width: 100, height: 120, backgroundColor: '#3d3d5c' },
-  listCardInfo: { flex: 1, padding: 12 },
-  listCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  categoryBadgeSmall: { backgroundColor: '#6c5ce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  categoryBadgeTextSmall: { color: '#fff', fontSize: 9, fontWeight: '600' },
-  freeTagSmall: { color: '#00b894', fontSize: 11, fontWeight: 'bold' },
-  priceTagSmall: { color: '#fdcb6e', fontSize: 11, fontWeight: 'bold' },
-  listCardTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginBottom: 6 },
-  listCardDetails: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  listCardDetailText: { color: '#888', fontSize: 11, marginLeft: 4, flex: 1 },
-  listCardStats: { flexDirection: 'row', marginTop: 8 },
-  statItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
-  statText: { color: '#888', fontSize: 11, marginLeft: 3 },
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 100 },
-  emptyTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 15 },
-  emptyText: { color: '#888', fontSize: 14, marginTop: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '70%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  filterSectionTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 12, marginTop: 10 },
-  provinceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  provinceItem: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#2d2d44', marginBottom: 5 },
-  provinceItemActive: { backgroundColor: '#6c5ce7' },
-  provinceText: { color: '#888', fontSize: 14 },
-  provinceTextActive: { color: '#fff' },
-  clearButton: { marginTop: 25, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#6c5ce7', alignItems: 'center' },
-  clearButtonText: { color: '#6c5ce7', fontSize: 15, fontWeight: '600' },
+
+  fab: {
+    position: 'absolute',
+    top: space[3],
+    right: space[3],
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+
+  carousel: {
+    position: 'absolute',
+    bottom: space[4],
+    paddingHorizontal: space[5],
+    gap: space[3],
+  },
+  mapCard: {
+    width: CARD_W,
+    height: CARD_H,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginRight: space[3],
+  },
+  mapCardImg: { width: '100%', height: 90 },
+  mapCardBody: { padding: space[3], flex: 1, justifyContent: 'space-between' },
+  mapCardFooter: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
+
+  mapEmptyBanner: {
+    position: 'absolute',
+    bottom: space[8],
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[4],
+    paddingVertical: space[3],
+    borderRadius: radius.full,
+    gap: space[3],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+
+  markerBubble: {
+    paddingHorizontal: space[3],
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  filtersContent: { padding: space[5], gap: space[2] },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
+  filterActions: { flexDirection: 'row', gap: space[3], marginTop: space[6] },
 });
