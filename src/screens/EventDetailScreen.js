@@ -76,6 +76,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [organizerName,  setOrganizerName]  = useState(event.organizerName || '');
   const [commentsState,  setCommentsState]  = useState(event.comments || []);
   const [descExpanded,   setDescExpanded]   = useState(false);
+  const [descNeedsMore,  setDescNeedsMore]  = useState(false);
   const lastLoadRef = useRef(0);
 
   const userId     = auth.currentUser?.uid;
@@ -227,7 +228,7 @@ export default function EventDetailScreen({ route, navigation }) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+          contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
         >
 
           {/* ── HERO ─────────────────────────────────────────────────────── */}
@@ -241,6 +242,8 @@ export default function EventDetailScreen({ route, navigation }) {
                 </View>
               )}
             </Pressable>
+            {/* Gradiente superior para que la barra de estado sea legible (§ 1.3) */}
+            <View style={[styles.heroTopGradient, { height: insets.top + 60 }]} pointerEvents="none" />
 
             {/* Botón atrás */}
             <Pressable
@@ -390,13 +393,20 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* ── DESCRIPCIÓN (colapsada 3 líneas) ─────────────────────────── */}
+          {/* ── DESCRIPCIÓN — "Ver más" solo si el texto tiene más de 3 líneas (§ 5.2) */}
           {event.description ? (
             <View style={styles.section}>
-              <Text variant="body" color="text.secondary" numberOfLines={descExpanded ? undefined : 3}>
+              <Text
+                variant="body"
+                color="text.secondary"
+                numberOfLines={descExpanded ? undefined : 3}
+                onTextLayout={e => {
+                  if (!descExpanded && e.nativeEvent.lines.length > 3) setDescNeedsMore(true);
+                }}
+              >
                 {event.description}
               </Text>
-              {!descExpanded && (
+              {descNeedsMore && !descExpanded && (
                 <Pressable onPress={() => setDescExpanded(true)} style={{ marginTop: space[2] }}>
                   <Text variant="label" color="link">Ver más</Text>
                 </Pressable>
@@ -404,20 +414,21 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
           ) : null}
 
-          {/* ── PRUEBA SOCIAL (solo si > 0) ───────────────────────────────── */}
+          {/* ── PRUEBA SOCIAL — iconos outline text.secondary, "me gusta" (§ 5.4, 5.5) */}
           {(likes.length > 0 || attendees.length > 0) && (
             <View style={[styles.section, styles.statsRow]}>
               {likes.length > 0 && (
                 <View style={styles.statItem}>
-                  <Ionicons name="heart" size={18} color={colors['status.urgent']} />
+                  {/* Corazón relleno solo si YO di like; outline si no (§ 5.4) */}
+                  <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={18} color={colors['text.secondary']} />
                   <Text variant="caption" color="text.secondary">
-                    {likes.length} {likes.length === 1 ? 'like' : 'likes'}
+                    {likes.length} {likes.length === 1 ? 'me gusta' : 'me gusta'}
                   </Text>
                 </View>
               )}
               {attendees.length > 0 && (
                 <View style={styles.statItem}>
-                  <Ionicons name="people-outline" size={18} color={colors['status.free']} />
+                  <Ionicons name="people-outline" size={18} color={colors['text.secondary']} />
                   <Text variant="caption" color="text.secondary">
                     {attendees.length} {attendees.length === 1 ? 'persona va' : 'personas van'}
                   </Text>
@@ -426,14 +437,19 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* ── BANNER "VAS A IR" (estado 4b) ────────────────────────────── */}
+          {/* ── BANNER "VAS A IR" — solo cuando asiste, aporta el recordatorio (§ 5.3) */}
           {isAttending && (
             <View style={[styles.section]}>
               <View style={[styles.attendingBanner, { backgroundColor: colors['status.free.bg'], borderColor: colors['status.free'] }]}>
                 <Ionicons name="checkmark-circle" size={20} color={colors['status.free']} />
-                <Text variant="subtitle" style={{ color: colors['status.free'], flex: 1 }}>
-                  Vas a ir
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text variant="subtitle" style={{ color: colors['status.free'] }}>Vas a ir</Text>
+                  {event.date && (
+                    <Text variant="caption" style={{ color: colors['status.free'], opacity: 0.8 }}>
+                      Te recordamos el día anterior
+                    </Text>
+                  )}
+                </View>
                 <Pressable onPress={handleAttend} accessibilityRole="button">
                   <Text variant="label" style={{ color: colors['status.free'] }}>Cancelar</Text>
                 </Pressable>
@@ -473,15 +489,28 @@ export default function EventDetailScreen({ route, navigation }) {
           <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={22} color={isLiked ? colors['status.urgent'] : colors['text.primary']} />
         </Pressable>
 
-        {/* CTA "¡Voy!" — amarillo, no violeta */}
+        {/* CTA — amarillo "¡Voy!" cuando no asiste; secundario con check cuando sí (§ 5.3) */}
         <Pressable
           onPress={handleAttend}
-          style={[styles.ctaBtn, { backgroundColor: isAttending ? colors['status.free'] : colors['action.primary'] }]}
+          style={[
+            styles.ctaBtn,
+            isAttending
+              ? { backgroundColor: colors['bg.surface'], borderWidth: 1.5, borderColor: colors['status.free'] }
+              : { backgroundColor: colors['action.primary'] },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={isAttending ? 'Cancelar asistencia' : 'Confirmar asistencia'}
         >
-          <Ionicons name={isAttending ? 'checkmark-circle' : 'calendar-outline'} size={20} color={colors['text.onAction']} />
-          <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: colors['text.onAction'] }}>
+          <Ionicons
+            name={isAttending ? 'checkmark-circle-outline' : 'calendar-outline'}
+            size={20}
+            color={isAttending ? colors['status.free'] : colors['text.onAction']}
+          />
+          <Text style={{
+            fontFamily: 'PlusJakartaSans_700Bold',
+            fontSize: 16,
+            color: isAttending ? colors['text.primary'] : colors['text.onAction'],
+          }}>
             {isAttending ? 'Vas a ir' : '¡Voy!'}
           </Text>
         </Pressable>
@@ -551,6 +580,13 @@ const styles = StyleSheet.create({
   hero: { position: 'relative' },
   heroImg: { width: '100%', height: 260 },
   heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  // Overlay superior para legibilidad de status bar (§ 1.3)
+  // Simula gradiente: oscuro arriba, transparente abajo
+  heroTopGradient: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
   heroBtn: {
     position: 'absolute',
     width: 40, height: 40,
