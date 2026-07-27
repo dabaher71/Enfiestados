@@ -92,19 +92,25 @@ export default function ChatDetailScreen({ route, navigation }) {
     } catch {}
   }, [navigation]);
 
-  // Inyecta separadores de fecha
+  // Inyecta separadores de fecha + flags de agrupación (burbujas consecutivas)
   const data = useMemo(() => {
     if (!messages.length) return [];
     const sorted = [...messages].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
     const result = [];
     let lastKey = '';
-    for (const msg of sorted) {
+    for (let i = 0; i < sorted.length; i++) {
+      const msg = sorted[i];
       const key = getDateKey(msg.timestamp);
       if (key !== lastKey) {
         result.push({ id: `sep-${msg.timestamp}`, type: 'separator', timestamp: msg.timestamp });
         lastKey = key;
       }
-      result.push({ ...msg, type: 'message' });
+      const prev = sorted[i - 1];
+      const next = sorted[i + 1];
+      // Agrupación: consecutivos del mismo remitente en el mismo día
+      const groupedWithPrev = !!(prev && prev.senderId === msg.senderId && getDateKey(prev.timestamp) === key);
+      const groupedWithNext = !!(next && next.senderId === msg.senderId && getDateKey(next.timestamp) === key);
+      result.push({ ...msg, type: 'message', groupedWithPrev, groupedWithNext });
     }
     return result;
   }, [messages]);
@@ -124,21 +130,50 @@ export default function ChatDetailScreen({ route, navigation }) {
 
     const isMine  = item.senderId === userId;
     const isEvent = isEventMessage(item.text);
+    const { groupedWithPrev, groupedWithNext } = item;
+
+    // Burbujas agrupadas: radio reducido en el lado del remitente para el grupo medio
+    const bubbleRadius = {
+      borderTopLeftRadius:     radius.lg,
+      borderTopRightRadius:    radius.lg,
+      borderBottomLeftRadius:  radius.lg,
+      borderBottomRightRadius: radius.lg,
+    };
+    if (isMine) {
+      if (groupedWithPrev) bubbleRadius.borderTopRightRadius = 4;
+      if (groupedWithNext) bubbleRadius.borderBottomRightRadius = 4;
+    } else {
+      if (groupedWithPrev) bubbleRadius.borderTopLeftRadius = 4;
+      if (groupedWithNext) bubbleRadius.borderBottomLeftRadius = 4;
+    }
+
+    // Color de burbuja propia: amarillo (action.primary) con texto oscuro — contraste AA
+    const ownBg   = colors['action.primary'];
+    const ownText = colors['text.onAction'];
 
     return (
-      <View style={[styles.msgRow, isMine && styles.msgRowMine]}>
-        {!isMine && <Avatar uri={otherUser.avatar} name={otherUser.name} size={28} style={{ marginRight: space[2] }} />}
+      <View style={[
+        styles.msgRow,
+        isMine && styles.msgRowMine,
+        groupedWithPrev && { marginBottom: 2 },  // espacio mínimo entre burbujas agrupadas
+      ]}>
+        {/* Avatar del otro solo en la última burbuja del grupo */}
+        {!isMine && !groupedWithNext ? (
+          <Avatar uri={otherUser.avatar} name={otherUser.name} size={28} style={{ marginRight: space[2] }} />
+        ) : !isMine ? (
+          <View style={{ width: 28 + space[2] }} />  // espacio reservado para alinear
+        ) : null}
 
         {isEvent ? (() => {
           const ev = parseEventMessage(item.text);
           return (
             <Pressable
-              style={[styles.eventCard, { backgroundColor: colors['bg.raised'], borderLeftColor: colors['nav.selected'] }, isMine && styles.eventCardMine]}
+              style={[styles.eventCard, { backgroundColor: colors['bg.raised'], borderLeftColor: colors['action.primary'] }, isMine && styles.eventCardMine]}
               onPress={() => handleEventPress(ev.eventId)}
             >
               <View style={styles.eventCardHeader}>
-                <Ionicons name="calendar-outline" size={14} color={colors['nav.selected']} />
-                <Text variant="caption" style={{ color: colors['nav.selected'], marginLeft: space[1] }}>Evento compartido</Text>
+                <Ionicons name="calendar-outline" size={14} color={colors['action.primary']} />
+                <Text variant="caption" style={{ color: colors['action.primary'], marginLeft: space[1] }}>Evento compartido</Text>
               </View>
               <Text variant="title" numberOfLines={2} style={{ marginVertical: space[1] }}>{ev.title}</Text>
               {ev.dateTime && (
@@ -147,9 +182,9 @@ export default function ChatDetailScreen({ route, navigation }) {
                   <Text variant="caption" color="text.tertiary">{ev.dateTime}</Text>
                 </View>
               )}
-              <View style={[styles.eventCardBtn, { backgroundColor: `${colors['nav.selected']}20` }]}>
-                <Text variant="label" style={{ color: colors['nav.selected'] }}>Ver evento</Text>
-                <Ionicons name="chevron-forward" size={14} color={colors['nav.selected']} />
+              <View style={[styles.eventCardBtn, { backgroundColor: `${colors['action.primary']}20` }]}>
+                <Text variant="label" style={{ color: colors['action.primary'] }}>Ver evento</Text>
+                <Ionicons name="chevron-forward" size={14} color={colors['action.primary']} />
               </View>
               <Text variant="caption" color="text.tertiary" style={{ alignSelf: 'flex-end', marginTop: space[1] }}>{formatTime(item.timestamp)}</Text>
             </Pressable>
@@ -157,14 +192,15 @@ export default function ChatDetailScreen({ route, navigation }) {
         })() : (
           <View style={[
             styles.bubble,
+            bubbleRadius,
             isMine
-              ? { backgroundColor: colors['nav.selected'], borderBottomRightRadius: 4 }
-              : { backgroundColor: colors['bg.surface'], borderBottomLeftRadius: 4 },
+              ? { backgroundColor: ownBg }
+              : { backgroundColor: colors['bg.surface'] },
           ]}>
-            <Text variant="body" style={{ color: isMine ? colors['bg.base'] : colors['text.primary'] }}>
+            <Text variant="body" style={{ color: isMine ? ownText : colors['text.primary'] }}>
               {item.text}
             </Text>
-            <Text variant="caption" style={{ color: isMine ? `${colors['bg.base']}99` : colors['text.tertiary'], alignSelf: 'flex-end', marginTop: 3 }}>
+            <Text variant="caption" style={{ color: isMine ? `${ownText}99` : colors['text.tertiary'], alignSelf: 'flex-end', marginTop: 3 }}>
               {formatTime(item.timestamp)}
             </Text>
           </View>
