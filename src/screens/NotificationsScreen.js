@@ -26,19 +26,20 @@ import t from '../i18n/es-CR.json';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getNotifIcon(type) {
+// Colores de íconos de notificación usando los valores semánticos de los tokens
+function getNotifIcon(type, colors) {
   switch (type) {
-    case NOTIFICATION_TYPES.LIKE:            return { name: 'heart',               color: '#E1483F' };
-    case NOTIFICATION_TYPES.COMMENT:         return { name: 'chatbubble',           color: '#4AA3FF' };
-    case NOTIFICATION_TYPES.FOLLOW:          return { name: 'person-add',           color: '#8B6BFF' };
-    case NOTIFICATION_TYPES.FOLLOW_REQUEST:  return { name: 'person-add-outline',   color: '#FFC94A' };
-    case NOTIFICATION_TYPES.FOLLOW_ACCEPTED: return { name: 'checkmark-circle',     color: '#2FBF87' };
-    case NOTIFICATION_TYPES.ATTEND:          return { name: 'calendar',             color: '#2FBF87' };
-    case NOTIFICATION_TYPES.POST_LIKE:       return { name: 'heart',               color: '#E1483F' };
-    case NOTIFICATION_TYPES.POST_COMMENT:    return { name: 'chatbubble-ellipses',  color: '#4AA3FF' };
-    case NOTIFICATION_TYPES.NEW_EVENT:       return { name: 'calendar-outline',     color: '#8B6BFF' };
-    case NOTIFICATION_TYPES.NEW_POST:        return { name: 'images-outline',       color: '#2FBF87' };
-    default:                                 return { name: 'notifications',         color: '#9A91AD' };
+    case NOTIFICATION_TYPES.LIKE:            return { name: 'heart',               color: colors['status.urgent'] };
+    case NOTIFICATION_TYPES.COMMENT:         return { name: 'chatbubble',           color: colors['status.info'] };
+    case NOTIFICATION_TYPES.FOLLOW:          return { name: 'person-add',           color: colors['nav.selected'] };
+    case NOTIFICATION_TYPES.FOLLOW_REQUEST:  return { name: 'person-add-outline',   color: colors['action.primary'] };
+    case NOTIFICATION_TYPES.FOLLOW_ACCEPTED: return { name: 'checkmark-circle',     color: colors['status.free'] };
+    case NOTIFICATION_TYPES.ATTEND:          return { name: 'calendar',             color: colors['status.free'] };
+    case NOTIFICATION_TYPES.POST_LIKE:       return { name: 'heart',               color: colors['status.urgent'] };
+    case NOTIFICATION_TYPES.POST_COMMENT:    return { name: 'chatbubble-ellipses',  color: colors['status.info'] };
+    case NOTIFICATION_TYPES.NEW_EVENT:       return { name: 'calendar-outline',     color: colors['nav.selected'] };
+    case NOTIFICATION_TYPES.NEW_POST:        return { name: 'images-outline',       color: colors['status.free'] };
+    default:                                 return { name: 'notifications',         color: colors['text.tertiary'] };
   }
 }
 
@@ -59,7 +60,7 @@ function formatRelTime(dateStr) {
 
 const NotificationItem = memo(function NotificationItem({ item, onPress, onDelete, colors }) {
   const swipeRef = useRef(null);
-  const icon = getNotifIcon(item.type);
+  const icon = getNotifIcon(item.type, colors);
 
   const renderRight = (progress, dragX) => {
     const scale = dragX.interpolate({ inputRange: [-72, 0], outputRange: [1, 0], extrapolate: 'clamp' });

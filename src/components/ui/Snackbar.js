@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radius, space } from '../../theme/tokens';
+import { darkColors, radius, space } from '../../theme/tokens';
 import Text from './Text';
 
 // API imperativa global: showSnackbar({ message, action, actionLabel, duration })
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     left: space[5],
     right: space[5],
     minHeight: 56,
-    backgroundColor: '#171320',
+    backgroundColor: darkColors['bg.base'],
     borderRadius: radius.md,
     flexDirection: 'row',
     alignItems: 'center',
@@ -90,5 +90,5 @@ const styles = StyleSheet.create({
   },
   message: { flex: 1 },
   action:  {},
-  actionText: { color: '#FFC94A' },
+  actionText: { color: darkColors['action.primary'] },
 });
