@@ -33,7 +33,7 @@ export function SegmentedControl({ options, selected, onSelect }) {
           >
             <Text
               variant="label"
-              style={{ color: isActive ? colors['text.primary'] : colors['text.tertiary'] }}
+              style={{ color: isActive ? colors['bg.base'] : colors['text.tertiary'] }}
             >
               {opt.label}
             </Text>
