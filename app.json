@@ -27,12 +27,18 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h"
+            ]
           }
         ],
         "NSCameraUsageDescription": "Necesitamos acceso a tu cámara para tomar fotos de eventos y perfil",
         "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tu galería para subir fotos de eventos y perfil",
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos"
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar eventos cercanos",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
