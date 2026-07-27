@@ -35,10 +35,13 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
+    height: 42,          // fijo — nunca depende del padre (§ 2 FIX_ROUND_2)
+    alignSelf: 'center', // blindaje contra padres con alignItems: stretch
     paddingHorizontal: space[3],
     borderRadius: radius.md,
     borderWidth: 1.5,
     gap: space[1],
+    flexShrink: 0,
+    flexGrow: 0,
   },
 });

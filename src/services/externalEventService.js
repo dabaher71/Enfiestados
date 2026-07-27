@@ -62,9 +62,10 @@ export function normalizeExternalEvent(id, data) {
       lng,
       name: data.locationText || '',
     },
-    // Defaults para que renderListEventCard no rompa si accede a estos campos
+    // category usa la fuente como fallback. isFree NO se asume: si no hay dato, no hay badge
     category:   data.source  || 'Externo',
-    isFree:     true,
+    isFree:     undefined,   // sin dato de precio → TrailingBadge devuelve null
+    price:      undefined,
     likes:      [],
     attendees:  [],
   };
