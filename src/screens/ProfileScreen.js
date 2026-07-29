@@ -23,6 +23,7 @@ import { addPostComment, deletePost, subscribeToUserPosts, togglePostLike } from
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { formatEventDate } from '../lib/format';
 import t from '../i18n/es-CR.json';
 
 const TABS = [
@@ -36,7 +37,8 @@ export default function ProfileScreen({ navigation }) {
   const [user,           setUser]           = useState(null);
   const [events,         setEvents]         = useState([]);
   const [posts,          setPosts]          = useState([]);
-  const [attendingCount, setAttendingCount] = useState(0);
+  const [attendingEvents,setAttendingEvents]= useState([]);
+  const [savedEvents,    setSavedEvents]    = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [tab,            setTab]            = useState('eventos');
 
@@ -54,10 +56,17 @@ export default function ProfileScreen({ navigation }) {
     let unsubPosts;
     try { unsubPosts = subscribeToUserPosts(currentUser.uid, setPosts); } catch {}
 
-    // Conteo de "Voy" en tiempo real
+    // Eventos a los que el usuario va ("Voy"), en tiempo real
     const unsubAttending = onSnapshot(
       query(collection(db, 'events'), where('attendees', 'array-contains', currentUser.uid)),
-      snap => setAttendingCount(snap.size),
+      snap => setAttendingEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => {}
+    );
+
+    // Eventos guardados ("Guardados"), en tiempo real
+    const unsubSaved = onSnapshot(
+      query(collection(db, 'events'), where('savedBy', 'array-contains', currentUser.uid)),
+      snap => setSavedEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       () => {}
     );
 
@@ -67,6 +76,7 @@ export default function ProfileScreen({ navigation }) {
       unsubEvents?.();
       unsubPosts?.();
       unsubAttending?.();
+      unsubSaved?.();
       focusUnsub?.();
     };
   }, []);
@@ -94,6 +104,13 @@ export default function ProfileScreen({ navigation }) {
       expired: events.filter(e =>  isExpired(e)).sort((a,b) => parse(b)-parse(a)),
     };
   }, [events]);
+
+  // § 4.4 — próximo evento al que el usuario va, para la tarjeta "Tu próximo plan"
+  const nextPlan = useMemo(() => {
+    const parse = e => { const [d,m,y] = e.date.split('/'); return new Date(y,m-1,d); };
+    const upcoming = attendingEvents.filter(e => e.date && !isExpired(e)).sort((a,b) => parse(a)-parse(b));
+    return upcoming[0] ?? null;
+  }, [attendingEvents]);
 
   // ── Post handlers ──────────────────────────────────────────────────────────
 
@@ -144,9 +161,9 @@ export default function ProfileScreen({ navigation }) {
   const followerCount = user?.followers?.length ?? 0;
 
   const STATS = [
-    { label: 'Voy',       value: attendingCount, onPress: () => navigation.navigate('MyPlans') },
-    { label: 'Guardados', value: 0,              onPress: () => navigation.navigate('MyPlans') },
-    { label: 'Seguidores',value: followerCount,  onPress: () => {} },
+    { label: 'Voy',       value: attendingEvents.length, onPress: () => navigation.navigate('MyPlans') },
+    { label: 'Guardados', value: savedEvents.length,      onPress: () => navigation.navigate('MyPlans') },
+    { label: 'Seguidores',value: followerCount,           onPress: () => {} },
   ];
 
   return (
@@ -234,6 +251,58 @@ export default function ProfileScreen({ navigation }) {
           {user?.isAdmin && (
             <View style={styles.specialRow}>
               <Button variant="primary" size="sm" label="Panel Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
+            </View>
+          )}
+
+          {/* § 4.4 — Tu próximo plan: tarjeta boleto, va debajo de las acciones */}
+          {nextPlan && (
+            <View style={styles.nextPlanWrap}>
+              <Text variant="overline" color="text.tertiary" style={styles.nextPlanLabel}>Tu próximo plan</Text>
+              <Pressable
+                onPress={() => navigation.navigate('EventDetail', { event: nextPlan })}
+                style={({ pressed }) => [
+                  styles.nextPlanCard,
+                  { backgroundColor: colors['action.primary'], opacity: pressed ? 0.92 : 1 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver tu próximo plan: ${nextPlan.title}`}
+              >
+                <View style={styles.nextPlanRow}>
+                  <View style={[styles.nextPlanThumb, { backgroundColor: colors['bg.surface'] }]}>
+                    {(nextPlan.imageUrl || nextPlan.image) ? (
+                      <Image source={{ uri: nextPlan.imageUrl || nextPlan.image }} style={styles.nextPlanThumbImg} contentFit="cover" />
+                    ) : null}
+                  </View>
+                  <View style={styles.nextPlanInfo}>
+                    <Text variant="overline" color="text.onAction" numberOfLines={1} style={{ opacity: 0.72 }}>
+                      {formatEventDate(nextPlan.date, nextPlan.time)}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={{ fontSize: 19, lineHeight: 23, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.onAction'] }}
+                    >
+                      {nextPlan.title}
+                    </Text>
+                    {(nextPlan.location?.name || nextPlan.locationText) ? (
+                      <Text variant="label" color="text.onAction" numberOfLines={1} style={{ opacity: 0.75 }}>
+                        {nextPlan.location?.name ?? nextPlan.locationText}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.nextPlanDivider}>
+                  <View style={[styles.nextPlanNotch, styles.nextPlanNotchLeft, { backgroundColor: colors['bg.base'] }]} />
+                  <View style={[styles.nextPlanNotch, styles.nextPlanNotchRight, { backgroundColor: colors['bg.base'] }]} />
+                </View>
+
+                <View style={styles.nextPlanFooter}>
+                  <Text variant="label" color="text.onAction">Vas a ir</Text>
+                  <View style={[styles.nextPlanCta, { backgroundColor: colors['bg.base'] }]}>
+                    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['action.primary'] }}>Ver</Text>
+                  </View>
+                </View>
+              </Pressable>
             </View>
           )}
 
@@ -326,13 +395,19 @@ export default function ProfileScreen({ navigation }) {
           </>
         ) : (
           /* ── GUARDADOS (§ 4.3) ─────────────────────────────────── */
-          <EmptyState
-            icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
-            title="Sin guardados todavía"
-            description="Guardá los planes que te gusten y aparecen acá con recordatorio."
-            actionLabel="Explorar eventos"
-            onAction={() => navigation.navigate('Explore')}
-          />
+          savedEvents.length === 0 ? (
+            <EmptyState
+              icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
+              title="Sin guardados todavía"
+              description="Guardá los planes que te gusten y aparecen acá con recordatorio."
+              actionLabel="Explorar eventos"
+              onAction={() => navigation.navigate('Explore')}
+            />
+          ) : (
+            savedEvents.map(ev => (
+              <EventRow key={ev.id} event={ev} trailing="auto" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
+            ))
+          )
         )}
       </ScrollView>
     </SafeAreaView>
@@ -389,6 +464,49 @@ const styles = StyleSheet.create({
     gap: space[2],
     marginTop: space[3],
     flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+
+  // § 4.4 — Tu próximo plan (tarjeta boleto)
+  nextPlanWrap:  { width: '100%', marginTop: space[5], gap: space[2] },
+  nextPlanLabel: { alignSelf: 'flex-start' },
+  nextPlanCard: {
+    width: '100%',
+    borderRadius: radius.lg,
+    padding: space[4],
+    gap: space[3],
+    overflow: 'hidden',
+  },
+  nextPlanRow:  { flexDirection: 'row', alignItems: 'center', gap: space[3] },
+  nextPlanThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  nextPlanThumbImg: { width: '100%', height: '100%' },
+  nextPlanInfo: { flex: 1, gap: 2, alignItems: 'flex-start' },
+  nextPlanDivider: { height: 1, backgroundColor: 'rgba(23,19,31,0.18)' },
+  nextPlanNotch: {
+    position: 'absolute',
+    top: -8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  nextPlanNotchLeft:  { left: -space[4] - 8 },
+  nextPlanNotchRight: { right: -space[4] - 8 },
+  nextPlanFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  nextPlanCta: {
+    height: 38,
+    paddingHorizontal: space[3] + 3,
+    borderRadius: radius.md - 1,
+    alignItems: 'center',
     justifyContent: 'center',
   },
 

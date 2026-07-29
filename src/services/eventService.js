@@ -45,6 +45,7 @@ export const createEvent = async (eventData) => {
     ...eventData,
     likes: [],
     attendees: [],
+    savedBy: [],
     comments: [],
     createdAt: serverTimestamp(),
   });
@@ -78,6 +79,21 @@ export const toggleAttendance = async (eventId, userId) => {
       : [...attendees, userId];
     tx.update(eventRef, { attendees: newAttendees });
     return newAttendees;
+  });
+};
+
+// Transacción atómica — guardar/quitar de "Mis planes" (bookmark, § 4.3)
+export const toggleSaved = async (eventId, userId) => {
+  const eventRef = doc(db, 'events', eventId);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef);
+    if (!snap.exists()) throw new Error('Evento no encontrado');
+    const savedBy = snap.data().savedBy || [];
+    const newSavedBy = savedBy.includes(userId)
+      ? savedBy.filter(id => id !== userId)
+      : [...savedBy, userId];
+    tx.update(eventRef, { savedBy: newSavedBy });
+    return newSavedBy;
   });
 };
 

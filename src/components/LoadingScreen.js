@@ -1,11 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Image, Platform, StyleSheet, Text, View } from 'react-native';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
-
-const AD_UNIT_ID = Platform.select({
-  android: TestIds.BANNER,
-  ios: TestIds.BANNER,
-});
+import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 
 export default function LoadingScreen() {
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -44,16 +38,6 @@ export default function LoadingScreen() {
           <Text style={styles.title}>Enfiestados</Text>
         </View>
         <Text style={styles.subtitle}>Descubre eventos cerca de ti</Text>
-      </Animated.View>
-
-      {/* Anuncio AdMob durante la carga */}
-      <Animated.View style={[styles.adContainer, { opacity: fadeAnim }]}>
-        <Text style={styles.adLabel}>Publicidad</Text>
-        <BannerAd
-          unitId={AD_UNIT_ID}
-          size={BannerAdSize.MEDIUM_RECTANGLE}
-          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-        />
       </Animated.View>
 
       {/* Indicador de carga */}
@@ -95,20 +79,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#888',
-  },
-  adContainer: {
-    alignItems: 'center',
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 20,
-  },
-  adLabel: {
-    color: '#6c5ce7',
-    fontSize: 11,
-    fontWeight: '600',
-    alignSelf: 'flex-start',
-    marginBottom: 8,
   },
   loader: {
     flexDirection: 'row',
