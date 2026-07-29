@@ -675,6 +675,73 @@ async function scrapeEticketFn() {
   return events;
 }
 
+// ── OMTicket ──────────────────────────────────────────────────────────────────
+// Plataforma Ticketplus: cada página de evento trae JSON-LD @type=Event con
+// fecha ISO exacta y geo (lat/lng) reales — no hace falta scrapeParseDateToISO
+// ni scrapeResolveCoords para la fecha/coords (solo como respaldo si faltan).
+// El listado completo sale de sitemap.xml, más confiable que el home (que solo
+// muestra destacados).
+function formatOMDateText(iso) {
+  try {
+    return new Date(iso).toLocaleString("es-CR", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", timeZone: "America/Costa_Rica",
+    });
+  } catch { return iso || ""; }
+}
+
+async function scrapeOMTicketFn() {
+  const BASE = "https://www.omticket.com";
+  let eventUrls = [];
+  try {
+    const xml = await fetchHTML(`${BASE}/sitemap.xml`);
+    const matches = xml.match(/<loc>(https:\/\/www\.omticket\.com\/events\/[^<]+)<\/loc>/g) || [];
+    eventUrls = [...new Set(matches.map((m) => m.replace(/<\/?loc>/g, "")))];
+  } catch (err) {
+    console.error("[OMTicket] Error sitemap:", err.message);
+    return [];
+  }
+
+  const events = [];
+  for (const eventUrl of eventUrls) {
+    try {
+      const html = await fetchHTML(eventUrl);
+      const $ = cheerio.load(html);
+      let data = null;
+      $("script[type=\"application/ld+json\"]").each((_, el) => {
+        try {
+          const parsed = JSON.parse($(el).html());
+          if (parsed["@type"] === "Event") { data = parsed; return false; }
+        } catch {}
+      });
+      if (!data || !data.name) continue;
+
+      const lat = parseFloat(data.location?.geo?.latitude);
+      const lng = parseFloat(data.location?.geo?.longitude);
+      const locationText = data.location?.name || data.location?.address?.addressRegion || "";
+
+      events.push({
+        title:        data.name.trim(),
+        imageUrl:     data.image || "",
+        dateText:     data.startDate ? formatOMDateText(data.startDate) : "",
+        dateISO:      data.startDate ? new Date(data.startDate).toISOString() : null,
+        locationText,
+        description:  data.description || "",
+        eventUrl,
+        source:       "OMTicket",
+        coords: (!isNaN(lat) && !isNaN(lng))
+          ? { lat, lng }
+          : scrapeResolveCoords(locationText),
+      });
+    } catch (err) {
+      console.error(`[OMTicket] Error detalle ${eventUrl}:`, err.message);
+    }
+    await sleep(300);
+  }
+  console.log(`[OMTicket] ${events.length} eventos.`);
+  return events;
+}
+
 // ── Guardar en Firestore ──────────────────────────────────────────────────────
 async function saveScrapedEvents(events) {
   if (!events.length) return;
@@ -721,6 +788,7 @@ exports.scrapeExternalEvents = onSchedule(
       scrapeEventCRFn(),
       scrapeSmartickétFn(),
       scrapeEticketFn(),
+      scrapeOMTicketFn(),
     ]);
     const all = results.flatMap((r) => r.status === "fulfilled" ? r.value : []);
     console.log(`[Scraper] Total extraído: ${all.length} eventos.`);
@@ -744,6 +812,7 @@ exports.triggerScrape = onCall(
       scrapeEventCRFn(),
       scrapeSmartickétFn(),
       scrapeEticketFn(),
+      scrapeOMTicketFn(),
     ]);
     const all = results.flatMap((r) => r.status === "fulfilled" ? r.value : []);
     await saveScrapedEvents(all);
