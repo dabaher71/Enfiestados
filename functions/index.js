@@ -690,6 +690,25 @@ function formatOMDateText(iso) {
   } catch { return iso || ""; }
 }
 
+// La descripción real (con formato) vive en #descripcion .description-content,
+// no en el JSON-LD (que trae una versión corta autogenerada). La app muestra
+// description en un <Text> plano, así que se convierte el HTML a texto simple.
+function htmlDescriptionToText(html) {
+  if (!html) return "";
+  return html
+    .replace(/<img[^>]*>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function scrapeOMTicketFn() {
   const BASE = "https://www.omticket.com";
   let eventUrls = [];
@@ -720,13 +739,17 @@ async function scrapeOMTicketFn() {
       const lng = parseFloat(data.location?.geo?.longitude);
       const locationText = data.location?.name || data.location?.address?.addressRegion || "";
 
+      const richHtml = $("#descripcion .description-content").first().html()
+        || $(".description-content").first().html();
+      const description = htmlDescriptionToText(richHtml) || data.description || "";
+
       events.push({
         title:        data.name.trim(),
         imageUrl:     data.image || "",
         dateText:     data.startDate ? formatOMDateText(data.startDate) : "",
         dateISO:      data.startDate ? new Date(data.startDate).toISOString() : null,
         locationText,
-        description:  data.description || "",
+        description,
         eventUrl,
         source:       "OMTicket",
         coords: (!isNaN(lat) && !isNaN(lng))
