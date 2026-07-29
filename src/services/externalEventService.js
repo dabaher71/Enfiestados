@@ -1,4 +1,4 @@
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, orderBy, query, runTransaction, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 /**
@@ -69,4 +69,41 @@ export function normalizeExternalEvent(id, data) {
     likes:      [],
     attendees:  [],
   };
+}
+
+/**
+ * Trae eventos externos por lista de IDs (lotes de 10 por límite de Firestore 'in').
+ * Usado para mostrar los eventos importados que el usuario guardó.
+ */
+export async function fetchExternalEventsByIds(ids) {
+  if (!ids?.length) return [];
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 10) {
+    batches.push(ids.slice(i, i + 10));
+  }
+  const results = await Promise.all(
+    batches.map(batch =>
+      getDocs(query(collection(db, 'eventos_externos'), where('__name__', 'in', batch)))
+    )
+  );
+  return results.flatMap(snap => snap.docs.map(d => normalizeExternalEvent(d.id, d.data())));
+}
+
+/**
+ * Guarda/quita un evento externo de "Mis planes". eventos_externos es de solo
+ * lectura desde el cliente (se regenera por scraping), así que el estado de
+ * guardado vive en users/{userId}.savedExternalIds — igual patrón que
+ * toggleSaved() para eventos propios, pero del lado del usuario.
+ */
+export async function toggleSavedExternal(userId, eventId) {
+  const userRef = doc(db, 'users', userId);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(userRef);
+    const saved = snap.data()?.savedExternalIds || [];
+    const newSaved = saved.includes(eventId)
+      ? saved.filter(id => id !== eventId)
+      : [...saved, eventId];
+    tx.update(userRef, { savedExternalIds: newSaved });
+    return newSaved;
+  });
 }

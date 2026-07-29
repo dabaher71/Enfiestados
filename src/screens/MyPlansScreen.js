@@ -2,7 +2,7 @@
 // Sesión 5: contenido real en "Voy" (eventos donde asiste el usuario).
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
 import { toggleAttendance } from '../services/eventService';
+import { fetchExternalEventsByIds } from '../services/externalEventService';
 import { recordSignal } from '../services/signalService';
 import { formatEventDate, formatDaysUntil } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
@@ -52,6 +53,17 @@ function hoursUntil(ev) {
   const ts = getEventTs(ev);
   if (ts === Infinity) return Infinity;
   return (ts - Date.now()) / 3600000;
+}
+
+// Eventos importados traen dateISO en vez de date "DD/MM/YYYY" — se convierte
+// acá para que reutilicen getEventTs/isExpired/groupByMonth sin tocarlos.
+function withNativeDateFields(ev) {
+  if (!ev.dateISO) return ev;
+  const d = new Date(ev.dateISO);
+  if (isNaN(d)) return ev;
+  const date = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return { ...ev, date, time };
 }
 
 // Agrupa eventos por mes: "EN JULIO", "EN AGOSTO"...
@@ -167,6 +179,7 @@ export default function MyPlansScreen({ navigation }) {
   const [loading,     setLoading]     = useState(true);
   const [saved,       setSaved]       = useState([]);
   const [savedLoading,setSavedLoading]= useState(true);
+  const [savedExternal, setSavedExternal] = useState([]);
 
   const userId = auth.currentUser?.uid;
 
@@ -205,8 +218,24 @@ export default function MyPlansScreen({ navigation }) {
     return () => unsub();
   }, [userId]);
 
+  // Eventos importados guardados — el estado vive en users/{uid}.savedExternalIds
+  // (eventos_externos es de solo lectura desde el cliente)
+  useEffect(() => {
+    if (!userId) return;
+    const unsub = onSnapshot(doc(db, 'users', userId), async snap => {
+      const ids = snap.data()?.savedExternalIds || [];
+      if (ids.length === 0) { setSavedExternal([]); return; }
+      try {
+        const evs = await fetchExternalEventsByIds(ids);
+        setSavedExternal(evs.map(withNativeDateFields));
+      } catch { setSavedExternal([]); }
+    }, () => {});
+    return () => unsub();
+  }, [userId]);
+
   const groups      = useMemo(() => groupByMonth(attending), [attending]);
-  const savedGroups = useMemo(() => groupByMonth(saved), [saved]);
+  const savedAll    = useMemo(() => [...saved, ...savedExternal].sort((a, b) => getEventTs(a) - getEventTs(b)), [saved, savedExternal]);
+  const savedGroups = useMemo(() => groupByMonth(savedAll), [savedAll]);
 
   const handleMore = (ev) => {
     Alert.alert(ev.title, undefined, [
@@ -277,7 +306,7 @@ export default function MyPlansScreen({ navigation }) {
 
   const renderGuardados = () => {
     if (savedLoading) return <SkeletonList count={3} />;
-    if (saved.length === 0) {
+    if (savedAll.length === 0) {
       return (
         <EmptyState
           icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
@@ -301,7 +330,10 @@ export default function MyPlansScreen({ navigation }) {
                 key={ev.id}
                 event={ev}
                 trailing="auto"
-                onPress={() => navigation.navigate('EventDetail', { event: ev })}
+                onPress={() => navigation.navigate(
+                  ev._isExternal ? 'ExternalEventDetail' : 'EventDetail',
+                  { event: ev }
+                )}
               />
             ))}
           </View>
@@ -332,10 +364,10 @@ export default function MyPlansScreen({ navigation }) {
             </Text>
           </View>
         )}
-        {tab === 'guardados' && saved.length > 0 && (
+        {tab === 'guardados' && savedAll.length > 0 && (
           <View style={[styles.countBadge, { backgroundColor: colors['action.primary'] }]}>
             <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
-              {saved.length}
+              {savedAll.length}
             </Text>
           </View>
         )}
