@@ -183,7 +183,7 @@ export default function EventDetailScreen({ route, navigation }) {
       showSnackbar(
         wasSaved
           ? { message: 'Se quitó de Mis planes' }
-          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MyPlans') }
+          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MainApp', { screen: 'MyPlans' }) }
       );
     } catch {
       setSavedBy(prev => wasSaved ? [...prev, userId] : prev.filter(id => id !== userId));
