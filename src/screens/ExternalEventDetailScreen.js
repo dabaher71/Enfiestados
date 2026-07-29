@@ -101,7 +101,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
       showSnackbar(
         wasSaved
           ? { message: 'Se quitó de Mis planes' }
-          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MyPlans') }
+          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MainApp', { screen: 'MyPlans' }) }
       );
     } catch {
       setIsSaved(wasSaved);
@@ -242,55 +242,59 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
       </ScrollView>
 
       {/* ── 6 · BARRA DE ACCIÓN FIJA ──────────────────────────────────── */}
+      {/* Antes el microcopy vivía en un View absoluto aparte, pegado al mismo
+          bottom:0 que esta barra — con fondo opaco, quedaba pintado ENCIMA
+          de los botones y los tapaba por completo. Ahora todo es un solo
+          contenedor: los botones y el microcopy van en flujo normal adentro. */}
       <View style={[
         styles.actionBar,
         {
           backgroundColor: colors['bg.base'],
           borderTopColor:  colors['border.subtle'],
-          paddingBottom: Math.max(space[4], insets.bottom),
+          paddingBottom: Math.max(space[3], insets.bottom),
         },
         elev[3],
       ]}>
-        {/* Guardar */}
-        <Pressable
-          style={[styles.iconAction, { backgroundColor: isSaved ? `${colors['action.primary']}22` : colors['bg.surface'] }]}
-          onPress={handleSave}
-          accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar evento'}
-        >
-          <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={22} color={isSaved ? colors['action.primary'] : colors['text.primary']} />
-        </Pressable>
+        <View style={styles.actionBarRow}>
+          {/* Guardar */}
+          <Pressable
+            style={[styles.iconAction, { backgroundColor: isSaved ? `${colors['action.primary']}22` : colors['bg.surface'] }]}
+            onPress={handleSave}
+            accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar evento'}
+          >
+            <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={22} color={isSaved ? colors['action.primary'] : colors['text.primary']} />
+          </Pressable>
 
-        {/* Compartir */}
-        <Pressable
-          style={[styles.iconAction, { backgroundColor: colors['bg.surface'] }]}
-          onPress={handleShare}
-          accessibilityLabel="Compartir"
-        >
-          <Ionicons name="share-outline" size={22} color={colors['text.primary']} />
-        </Pressable>
+          {/* Compartir */}
+          <Pressable
+            style={[styles.iconAction, { backgroundColor: colors['bg.surface'] }]}
+            onPress={handleShare}
+            accessibilityLabel="Compartir"
+          >
+            <Ionicons name="share-outline" size={22} color={colors['text.primary']} />
+          </Pressable>
 
-        {/* CTA principal — amarillo, NO violeta */}
-        <Pressable
-          style={[styles.ctaBtn, { backgroundColor: colors['action.primary'] }]}
-          onPress={handleBuy}
-          accessibilityRole="button"
-          accessibilityLabel="Comprar entradas"
-        >
-          <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: colors['text.onAction'] }}>
-            Comprar entradas
-          </Text>
-          <Ionicons name="open-outline" size={18} color={colors['text.onAction']} />
-        </Pressable>
-      </View>
+          {/* CTA principal — amarillo, NO violeta */}
+          <Pressable
+            style={[styles.ctaBtn, { backgroundColor: colors['action.primary'] }]}
+            onPress={handleBuy}
+            accessibilityRole="button"
+            accessibilityLabel="Comprar entradas"
+          >
+            <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: colors['text.onAction'] }}>
+              Comprar entradas
+            </Text>
+            <Ionicons name="open-outline" size={18} color={colors['text.onAction']} />
+          </Pressable>
+        </View>
 
-      {/* Microcopy debajo del CTA */}
-      {domain ? (
-        <View style={[styles.microCopy, { backgroundColor: colors['bg.base'], paddingBottom: Math.max(space[3], insets.bottom) }]}>
-          <Text variant="caption" color="text.tertiary" align="center">
+        {/* Microcopy debajo del CTA */}
+        {domain ? (
+          <Text variant="caption" color="text.tertiary" align="center" style={styles.microCopy}>
             Se abre {domain} · te guardamos el evento
           </Text>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -378,11 +382,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: space[5],
     paddingTop: space[3],
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  actionBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: space[2],
   },
   iconAction: {
@@ -403,11 +409,6 @@ const styles = StyleSheet.create({
     gap: space[2],
   },
   microCopy: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 72,    // queda bajo la action bar
-    paddingHorizontal: space[5],
+    marginTop: space[2],
   },
 });
