@@ -22,8 +22,12 @@ service cloud.firestore {
     // (cuenta privada) se controla a nivel de app en UserProfileScreen.
     match /users/{userId} {
       allow read: if isAuth();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      // isAdmin nunca se toca desde el cliente: es el campo que autorizan
+      // processReportAction/triggerScrape (functions/index.js). Solo se
+      // otorga manualmente por el equipo (Firebase Console / Admin SDK).
+      allow create: if isOwner(userId) && !('isAdmin' in request.resource.data);
+      allow update: if isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']);
       allow delete: if isOwner(userId);
     }
 
@@ -39,9 +43,9 @@ service cloud.firestore {
       allow update: if isAuth() && (
         // El organizador puede editar todo
         resource.data.organizerId == request.auth.uid ||
-        // Otros solo pueden tocar likes, attendees y comments
+        // Otros solo pueden tocar likes, attendees, savedBy y comments
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likes', 'attendees', 'comments'])
+          .hasOnly(['likes', 'attendees', 'savedBy', 'comments'])
       );
       allow delete: if isAuth() && resource.data.organizerId == request.auth.uid;
     }

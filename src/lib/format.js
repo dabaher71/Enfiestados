@@ -67,10 +67,10 @@ function formatTime12(raw) {
 }
 
 // "faltan 5 días" / "Hoy" / "Mañana" / null si ya pasó
-export function formatDaysUntil(dateISO) {
-  if (!dateISO) return null;
-  const d = new Date(dateISO);
-  if (isNaN(d)) return null;
+// Acepta 'DD/MM/YYYY' (formato de evento) o ISO.
+export function formatDaysUntil(rawDate) {
+  const d = parseEventDate(rawDate);
+  if (!d) return null;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const diff = Math.ceil((d - today) / 86400000);
   if (diff < 0)  return null;

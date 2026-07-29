@@ -1,73 +1,118 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  Platform,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// EditEventScreen — Editar evento
+// LÓGICA INTACTA: parseo de fecha/hora, imagen, ubicación, upload, updateDoc.
+// PRESENTACIÓN: tokens del design system, mismos patrones que CreateEventScreen
+// (chips de categoría, MetaRow-like pickers de fecha/hora sin duplicado, SegmentedControl, CTA amarillo).
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useState } from 'react';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import Button from '../components/ui/Button';
+import Input, { TextArea } from '../components/ui/Input';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import Text from '../components/ui/Text';
+
 import { db, storage } from '../config/firebase';
 import { validateImageSize, validateImageMime, isValidWebURL, INPUT_LIMITS } from '../utils/security';
 import { CATEGORIES } from '../constants/categories';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+
+// ─── Formateo de fecha/hora humano (igual que CreateEventScreen) ────────────
+
+const DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+function humanDate(d) {
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+function humanTime(t) {
+  let h = t.getHours(), m = t.getMinutes();
+  const mer = h >= 12 ? 'pm' : 'am';
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2, '0')} ${mer}`;
+}
+function storageDate(d) {
+  return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+}
+function storageTime(t) {
+  return `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`;
+}
+
+// Parsea 'DD/MM/YYYY' y 'HH:MM' del evento existente a Date
+function parseDate(dateStr) {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split('/');
+  if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
+  return new Date();
+}
+function parseTime(timeStr) {
+  if (!timeStr) return new Date();
+  const parts = timeStr.split(':');
+  if (parts.length === 2) {
+    const d = new Date();
+    d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10));
+    return d;
+  }
+  return new Date();
+}
+
+// ─── Componentes inline ──────────────────────────────────────────────────────
+
+function FieldLabel({ label, optional = false, colors }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 }}>
+      <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.secondary'] }}>
+        {label}
+      </Text>
+      {optional && (
+        <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.tertiary'] }}>
+          · opcional
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function Field({ children }) {
+  return <View style={styles.fieldWrap}>{children}</View>;
+}
+
+// ─── EditEventScreen ──────────────────────────────────────────────────────────
 
 export default function EditEventScreen({ route, navigation }) {
   const { event } = route.params;
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  // Parsear fecha y hora del evento
-  const parseDate = (dateStr) => {
-    if (!dateStr) return new Date();
-    const parts = dateStr.split('/');
-    if (parts.length === 3) {
-      return new Date(parts[2], parts[1] - 1, parts[0]);
-    }
-    return new Date();
-  };
-
-  const parseTime = (timeStr) => {
-    if (!timeStr) return new Date();
-    const parts = timeStr.split(':');
-    if (parts.length === 2) {
-      const date = new Date();
-      date.setHours(parseInt(parts[0]), parseInt(parts[1]));
-      return date;
-    }
-    return new Date();
-  };
-
-  const [title, setTitle] = useState(event.title || '');
-  const [description, setDescription] = useState(event.description || '');
-  const [category, setCategory] = useState(event.category || '');
-  const [date, setDate] = useState(parseDate(event.date));
-  const [time, setTime] = useState(parseTime(event.time));
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [locationName, setLocationName] = useState(event.location?.name || '');
-  const [locationCoords, setLocationCoords] = useState(
+  const [title,           setTitle]          = useState(event.title || '');
+  const [description,     setDescription]    = useState(event.description || '');
+  const [category,        setCategory]       = useState(event.category || '');
+  const [date,             setDate]          = useState(parseDate(event.date));
+  const [time,             setTime]          = useState(parseTime(event.time));
+  const [showDatePicker,  setShowDatePicker] = useState(false);
+  const [showTimePicker,  setShowTimePicker] = useState(false);
+  const [locationName,    setLocationName]   = useState(event.location?.name || '');
+  const [locationCoords,  setLocationCoords] = useState(
     event.location?.lat && event.location?.lng
       ? { latitude: event.location.lat, longitude: event.location.lng }
       : null
   );
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [isFree, setIsFree] = useState(event.isFree !== false);
-  const [price, setPrice] = useState(event.price?.toString() || '');
-  const [isVirtual, setIsVirtual] = useState(event.isVirtual || false);
-  const [virtualLink, setVirtualLink] = useState(event.virtualLink || '');
-  const [image, setImage] = useState(event.image || null);
-  const [newImage, setNewImage] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [showMapModal,    setShowMapModal]   = useState(false);
+  const [isFree,          setIsFree]         = useState(event.isFree !== false);
+  const [price,           setPrice]          = useState(event.price?.toString() || '');
+  const [isVirtual,       setIsVirtual]      = useState(event.isVirtual || false);
+  const [virtualLink,     setVirtualLink]    = useState(event.virtualLink || '');
+  const [image,           setImage]          = useState(event.image || null);
+  const [newImage,        setNewImage]       = useState(null);
+  const [loading,         setLoading]        = useState(false);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -75,14 +120,12 @@ export default function EditEventScreen({ route, navigation }) {
       Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [16, 9],
       quality: 0.8,
     });
-
     if (!result.canceled) {
       const asset = result.assets[0];
       if (!validateImageSize(asset)) {
@@ -114,61 +157,19 @@ export default function EditEventScreen({ route, navigation }) {
     return url;
   };
 
-  const formatDate = (date) => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
-
-  const formatTime = (time) => {
-    const hours = time.getHours().toString().padStart(2, '0');
-    const minutes = time.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
-  const onDateChange = (event, selectedDate) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDate(selectedDate);
-    }
-  };
-
-  const onTimeChange = (event, selectedTime) => {
-    setShowTimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setTime(selectedTime);
-    }
-  };
-
-  const handleMapPress = (e) => {
-    setLocationCoords(e.nativeEvent.coordinate);
-  };
-
-  const confirmLocation = () => {
-    if (locationCoords) {
-      setShowMapModal(false);
-    } else {
-      Alert.alert('Error', 'Por favor selecciona un punto en el mapa');
-    }
-  };
-
   const handleSave = async () => {
     if (!title || !category) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
-
     if (!isVirtual && !locationCoords) {
-      Alert.alert('Error', 'Por favor selecciona la ubicación en el mapa');
+      Alert.alert('Error', 'Seleccioná la ubicación en el mapa');
       return;
     }
-
     if (isVirtual && !virtualLink) {
-      Alert.alert('Error', 'Por favor ingresa el link del evento virtual');
+      Alert.alert('Error', 'Ingresá el link del evento virtual');
       return;
     }
-
     if (isVirtual && virtualLink && !isValidWebURL(virtualLink)) {
       Alert.alert('Link inválido', 'El link debe comenzar con https://');
       return;
@@ -177,19 +178,14 @@ export default function EditEventScreen({ route, navigation }) {
     setLoading(true);
     try {
       let imageURL = image;
+      if (newImage) imageURL = await uploadImage(newImage);
 
-      // Subir nueva imagen si se cambió
-      if (newImage) {
-        imageURL = await uploadImage(newImage);
-      }
-
-      // Actualizar evento en Firestore
       await updateDoc(doc(db, 'events', event.id), {
         title,
         description,
         category,
-        date: formatDate(date),
-        time: formatTime(time),
+        date: storageDate(date),
+        time: storageTime(time),
         location: {
           name: locationName,
           lat: locationCoords?.latitude || 0,
@@ -203,564 +199,387 @@ export default function EditEventScreen({ route, navigation }) {
         updatedAt: new Date().toISOString(),
       });
 
-      Alert.alert('¡Éxito!', 'Evento actualizado correctamente', [
-        { text: 'OK', onPress: () => navigation.goBack() }
+      Alert.alert('¡Listo!', 'Evento actualizado', [
+        { text: 'OK', onPress: () => navigation.goBack() },
       ]);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'No se pudo actualizar el evento');
-      console.error(error);
     }
     setLoading(false);
   };
 
   const displayImage = newImage || image;
+  const step2Valid = isVirtual ? virtualLink.trim().length > 0 : locationCoords !== null;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="close" size={28} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Editar Evento</Text>
-          <TouchableOpacity onPress={handleSave} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator color="#6c5ce7" />
-            ) : (
-              <Text style={styles.saveButton}>Guardar</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel="Cerrar">
+          <Ionicons name="close" size={24} color={colors['text.primary']} />
+        </Pressable>
+        <Text variant="title">Editar evento</Text>
+        <Button variant="ghost" size="sm" label="Guardar" onPress={handleSave} loading={loading} />
+      </View>
 
-        <View style={styles.form}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: space[5], paddingBottom: space[16] }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Imagen */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Imagen del evento</Text>
-            <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
+          <Field>
+            <FieldLabel label="Foto o afiche" optional colors={colors} />
+            <Pressable
+              onPress={pickImage}
+              style={[styles.imagePicker, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+              accessibilityRole="button"
+            >
               {displayImage ? (
-                <View style={styles.imagePreviewContainer}>
-                  <Image source={{ uri: displayImage }} style={styles.imagePreview} />
-                  <View style={styles.changeImageOverlay}>
-                    <Ionicons name="camera" size={30} color="#fff" />
-                    <Text style={styles.changeImageText}>Cambiar imagen</Text>
-                  </View>
-                </View>
+                <Image source={{ uri: displayImage }} style={styles.imagePreview} contentFit="cover" />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <Ionicons name="camera" size={40} color="#888" />
-                  <Text style={styles.imagePlaceholderText}>Agregar imagen</Text>
+                  <Ionicons name="image-outline" size={32} color={colors['text.tertiary']} />
+                  <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>Tocar para agregar</Text>
                 </View>
               )}
-            </TouchableOpacity>
-          </View>
+            </Pressable>
+          </Field>
 
           {/* Título */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Título del evento *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Concierto de Jazz"
-              placeholderTextColor="#888"
+          <Field>
+            <Input
+              label="Nombre del evento"
               value={title}
-              onChangeText={setTitle}
+              onChangeText={t => setTitle(t.slice(0, INPUT_LIMITS.EVENT_TITLE))}
+              placeholder="Ej. Festival de la Luz 2026"
             />
-          </View>
+          </Field>
 
           {/* Descripción */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Descripción</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Describe tu evento..."
-              placeholderTextColor="#888"
+          <Field>
+            <TextArea
+              label="Descripción"
               value={description}
               onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
+              placeholder="Contá de qué se trata el evento…"
               maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
             />
-          </View>
+          </Field>
 
-          {/* Categoría */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Categoría *</Text>
-            <View style={styles.categoriesGrid}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryItem,
-                    category === cat.id && styles.categoryItemActive
-                  ]}
-                  onPress={() => setCategory(cat.id)}
-                >
-                  <Ionicons
-                    name={cat.icon}
-                    size={24}
-                    color={category === cat.id ? '#fff' : '#888'}
-                  />
-                  <Text style={[
-                    styles.categoryText,
-                    category === cat.id && styles.categoryTextActive
-                  ]}>
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          {/* Categoría — chips horizontales */}
+          <Field>
+            <FieldLabel label="Categoría" colors={colors} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: space[2], alignItems: 'center' }}>
+              {CATEGORIES.map(cat => {
+                const active = category === cat.id;
+                return (
+                  <Pressable
+                    key={cat.id}
+                    onPress={() => setCategory(cat.id)}
+                    style={[
+                      styles.catChip,
+                      {
+                        backgroundColor: active ? cat.color + '33' : colors['bg.surface'],
+                        borderColor: active ? cat.color : colors['border.strong'],
+                      },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
+                  >
+                    <Ionicons name={cat.icon} size={16} color={active ? cat.color : colors['text.tertiary']} />
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium',
+                      color: active ? cat.color : colors['text.secondary'],
+                    }}>
+                      {cat.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Field>
 
-          {/* Fecha y Hora */}
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
-              <Text style={styles.label}>Fecha *</Text>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Ionicons name="calendar" size={20} color="#6c5ce7" />
-                <Text style={styles.dateButtonText}>{formatDate(date)}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Hora *</Text>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Ionicons name="time" size={20} color="#6c5ce7" />
-                <Text style={styles.dateButtonText}>{formatTime(time)}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          {/* Fecha — un solo control, picker en Modal */}
+          <Field>
+            <FieldLabel label="Fecha" colors={colors} />
+            <Pressable
+              onPress={() => setShowDatePicker(true)}
+              style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors['text.tertiary']} />
+              <Text style={{ flex: 1, fontSize: 16, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.primary'] }}>
+                {humanDate(date)}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
+            </Pressable>
+            {Platform.OS === 'android' && showDatePicker && (
+              <DateTimePicker value={date} mode="date" display="default"
+                onChange={(_, d) => { setShowDatePicker(false); if (d) setDate(d); }} />
+            )}
+          </Field>
 
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onDateChange}
+          {/* Hora */}
+          <Field>
+            <FieldLabel label="Hora" colors={colors} />
+            <Pressable
+              onPress={() => setShowTimePicker(true)}
+              style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="time-outline" size={20} color={colors['text.tertiary']} />
+              <Text style={{ flex: 1, fontSize: 16, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.primary'] }}>
+                {humanTime(time)}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors['text.tertiary']} />
+            </Pressable>
+            {Platform.OS === 'android' && showTimePicker && (
+              <DateTimePicker value={time} mode="time" display="default"
+                onChange={(_, t) => { setShowTimePicker(false); if (t) setTime(t); }} />
+            )}
+          </Field>
+
+          {/* Modalidad — SegmentedControl */}
+          <Field>
+            <FieldLabel label="Modalidad" colors={colors} />
+            <SegmentedControl
+              options={[
+                { label: 'Presencial', value: 'presencial' },
+                { label: 'Virtual',    value: 'virtual' },
+              ]}
+              selected={isVirtual ? 'virtual' : 'presencial'}
+              onSelect={v => setIsVirtual(v === 'virtual')}
             />
-          )}
+          </Field>
 
-          {showTimePicker && (
-            <DateTimePicker
-              value={time}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onTimeChange}
-            />
-          )}
-
-          {/* Virtual o Presencial */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Tipo de evento</Text>
-            <View style={styles.typeToggle}>
-              <TouchableOpacity
-                style={[styles.typeButton, !isVirtual && styles.typeButtonActive]}
-                onPress={() => setIsVirtual(false)}
-              >
-                <Ionicons
-                  name="location"
-                  size={20}
-                  color={!isVirtual ? '#fff' : '#888'}
-                />
-                <Text style={[styles.typeText, !isVirtual && styles.typeTextActive]}>
-                  Presencial
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typeButton, isVirtual && styles.typeButtonActive]}
-                onPress={() => setIsVirtual(true)}
-              >
-                <Ionicons
-                  name="videocam"
-                  size={20}
-                  color={isVirtual ? '#fff' : '#888'}
-                />
-                <Text style={[styles.typeText, isVirtual && styles.typeTextActive]}>
-                  Virtual
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Ubicación o Link Virtual */}
-          {isVirtual ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Link del evento *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="https://zoom.us/..."
-                placeholderTextColor="#888"
-                value={virtualLink}
-                onChangeText={setVirtualLink}
-                autoCapitalize="none"
-              />
-            </View>
-          ) : (
+          {/* Lugar o link virtual */}
+          {!isVirtual ? (
             <>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nombre del lugar</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej: Teatro Nacional"
-                  placeholderTextColor="#888"
+              <Field>
+                <Input
+                  label="Nombre del lugar"
                   value={locationName}
                   onChangeText={setLocationName}
+                  placeholder="Ej. Teatro Nacional"
                 />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Ubicación en el mapa *</Text>
-                <TouchableOpacity
-                  style={styles.mapButton}
+              </Field>
+              <Field>
+                <FieldLabel label="Ubicación en el mapa" colors={colors} />
+                <Pressable
                   onPress={() => setShowMapModal(true)}
+                  style={[styles.mapBtn, { backgroundColor: locationCoords ? colors['status.free.bg'] : colors['bg.surface'], borderColor: locationCoords ? colors['status.free'] : colors['border.strong'] }]}
                 >
-                  {locationCoords ? (
-                    <View style={styles.mapPreview}>
-                      <Ionicons name="checkmark-circle" size={24} color="#00b894" />
-                      <Text style={styles.mapButtonTextSuccess}>
-                        Ubicación seleccionada
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.mapPreview}>
-                      <Ionicons name="map" size={24} color="#6c5ce7" />
-                      <Text style={styles.mapButtonText}>
-                        Seleccionar en el mapa
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+                  <Ionicons name={locationCoords ? 'checkmark-circle' : 'map-outline'} size={20} color={locationCoords ? colors['status.free'] : colors['text.tertiary']} />
+                  <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', color: locationCoords ? colors['status.free'] : colors['text.secondary'] }}>
+                    {locationCoords ? 'Ubicación seleccionada' : 'Tocar para marcar en el mapa'}
+                  </Text>
+                </Pressable>
+              </Field>
             </>
+          ) : (
+            <Field>
+              <Input
+                label="Link de la transmisión"
+                value={virtualLink}
+                onChangeText={setVirtualLink}
+                placeholder="https://meet.google.com/..."
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+            </Field>
           )}
 
-          {/* Precio */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Precio</Text>
-            <View style={styles.priceToggle}>
-              <TouchableOpacity
-                style={[styles.toggleButton, isFree && styles.toggleButtonActive]}
-                onPress={() => setIsFree(true)}
-              >
-                <Text style={[styles.toggleText, isFree && styles.toggleTextActive]}>
-                  Gratis
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleButton, !isFree && styles.toggleButtonActive]}
-                onPress={() => setIsFree(false)}
-              >
-                <Text style={[styles.toggleText, !isFree && styles.toggleTextActive]}>
-                  De pago
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {!isFree && (
-              <TextInput
-                style={[styles.input, { marginTop: 10 }]}
-                placeholder="Precio en colones"
-                placeholderTextColor="#888"
+          {/* Precio — SegmentedControl */}
+          <Field>
+            <FieldLabel label="Entrada" colors={colors} />
+            <SegmentedControl
+              options={[
+                { label: 'Gratis', value: 'gratis' },
+                { label: 'De pago', value: 'pago' },
+              ]}
+              selected={isFree ? 'gratis' : 'pago'}
+              onSelect={v => setIsFree(v === 'gratis')}
+            />
+          </Field>
+
+          {!isFree && (
+            <Field>
+              <Input
+                label="Precio en colones"
                 value={price}
                 onChangeText={setPrice}
+                placeholder="Ej. 5000"
                 keyboardType="numeric"
               />
-            )}
-          </View>
-        </View>
-      </ScrollView>
+            </Field>
+          )}
 
-      {/* Modal del Mapa */}
-      <Modal
-        visible={showMapModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <SafeAreaView style={styles.mapModalContainer}>
-          <View style={styles.mapHeader}>
-            <TouchableOpacity onPress={() => setShowMapModal(false)}>
-              <Ionicons name="close" size={28} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.mapHeaderTitle}>Seleccionar ubicación</Text>
-            <TouchableOpacity onPress={confirmLocation}>
-              <Text style={styles.mapConfirmText}>Listo</Text>
-            </TouchableOpacity>
-          </View>
+          {!step2Valid && (
+            <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[1] }}>
+              {isVirtual ? 'Falta el link del evento virtual' : 'Falta elegir la ubicación en el mapa'}
+            </Text>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
+      {/* Pickers iOS en Modal (sin valor duplicado debajo del campo) */}
+      {Platform.OS === 'ios' && (
+        <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+          <Pressable style={styles.pickerOverlay} onPress={() => setShowDatePicker(false)} />
+          <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
+            <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
+              <Pressable onPress={() => setShowDatePicker(false)} style={{ padding: space[2] }}>
+                <Text variant="label" color="link">Listo</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker value={date} mode="date" display="spinner"
+              onChange={(_, d) => { if (d) setDate(d); }}
+              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+          </View>
+        </Modal>
+      )}
+      {Platform.OS === 'ios' && (
+        <Modal visible={showTimePicker} transparent animationType="slide" onRequestClose={() => setShowTimePicker(false)}>
+          <Pressable style={styles.pickerOverlay} onPress={() => setShowTimePicker(false)} />
+          <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
+            <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
+              <Pressable onPress={() => setShowTimePicker(false)} style={{ padding: space[2] }}>
+                <Text variant="label" color="link">Listo</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker value={time} mode="time" display="spinner"
+              onChange={(_, t) => { if (t) setTime(t); }}
+              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+          </View>
+        </Modal>
+      )}
+
+      {/* Modal de mapa */}
+      <Modal visible={showMapModal} animationType="slide" onRequestClose={() => setShowMapModal(false)}>
+        <View style={{ flex: 1 }}>
           <MapView
-            style={styles.map}
+            style={StyleSheet.absoluteFill}
             initialRegion={{
               latitude: locationCoords?.latitude || 9.9281,
               longitude: locationCoords?.longitude || -84.0907,
               latitudeDelta: 0.05,
               longitudeDelta: 0.05,
             }}
-            onPress={handleMapPress}
+            onPress={e => setLocationCoords(e.nativeEvent.coordinate)}
+            showsUserLocation
           >
-            {locationCoords && (
-              <Marker coordinate={locationCoords}>
-                <View style={styles.markerContainer}>
-                  <Ionicons name="location" size={40} color="#6c5ce7" />
-                </View>
-              </Marker>
-            )}
+            {locationCoords && <Marker coordinate={locationCoords} />}
           </MapView>
-
-          <View style={styles.mapFooter}>
-            <Ionicons name="information-circle" size={20} color="#888" />
-            <Text style={styles.mapFooterText}>
-              Toca en el mapa para seleccionar la ubicación del evento
+          <View style={[styles.mapModalFooter, { backgroundColor: colors['bg.raised'], paddingBottom: insets.bottom + space[3] }]}>
+            <Text variant="caption" color="text.tertiary">
+              {locationCoords ? 'Ubicación seleccionada. Tocá en el mapa para moverla.' : 'Tocá en el mapa para marcar la ubicación'}
             </Text>
+            <Pressable
+              onPress={() => locationCoords ? setShowMapModal(false) : Alert.alert('', 'Seleccioná un punto en el mapa')}
+              style={[styles.ctaBtn, { backgroundColor: locationCoords ? colors['action.primary'] : colors['bg.surface'], marginTop: space[3] }]}
+            >
+              <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', color: locationCoords ? colors['text.onAction'] : colors['text.tertiary'] }}>
+                Confirmar ubicación
+              </Text>
+            </Pressable>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
+  safe: { flex: 1 },
+
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
+    paddingHorizontal: space[5],
+    paddingVertical: space[4],
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  saveButton: {
-    color: '#6c5ce7',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  form: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#fff',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  imagePickerContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+
+  fieldWrap: { marginBottom: space[4] },
+
+  // Imagen
+  imagePicker: {
+    height: 160,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
-  imagePlaceholder: {
-    flex: 1,
-    backgroundColor: '#2d2d44',
-    justifyContent: 'center',
+  imagePreview: { width: '100%', height: '100%' },
+  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  // Chips de categoría
+  chipScroll: { flexGrow: 0, marginTop: 4 },
+  catChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#3d3d5c',
-    borderStyle: 'dashed',
+    height: 46,
+    paddingHorizontal: space[3],
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    gap: space[2],
+    flexShrink: 0,
   },
-  imagePlaceholderText: {
-    color: '#888',
-    fontSize: 16,
-    marginTop: 10,
+
+  // Pickers de fecha/hora
+  pickerRow: {
+    height: 56,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    gap: space[2],
   },
-  imagePreviewContainer: {
-    flex: 1,
-    position: 'relative',
+
+  // Botón de mapa
+  mapBtn: {
+    height: 56,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space[3],
+    gap: space[2],
   },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 12,
+  ctaBtn: {
+    height: 56,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  changeImageOverlay: {
+
+  // Modals de picker iOS
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  pickerSheet: {
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    overflow: 'hidden',
+  },
+  pickerSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: space[5],
+    paddingVertical: space[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+
+  // Modal de mapa
+  mapModalFooter: {
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
-  },
-  changeImageText: {
-    color: '#fff',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -5,
-  },
-  categoryItem: {
-    width: '23%',
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    margin: '1%',
-  },
-  categoryItemActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  categoryText: {
-    color: '#888',
-    fontSize: 11,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  categoryTextActive: {
-    color: '#fff',
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  dateButton: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    marginLeft: 10,
-  },
-  typeToggle: {
-    flexDirection: 'row',
-  },
-  typeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#2d2d44',
-    padding: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    borderRadius: 12,
-  },
-  typeButtonActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  typeText: {
-    color: '#888',
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  typeTextActive: {
-    color: '#fff',
-  },
-  mapButton: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 12,
-    padding: 20,
-  },
-  mapPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapButtonText: {
-    color: '#6c5ce7',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  mapButtonTextSuccess: {
-    color: '#00b894',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  priceToggle: {
-    flexDirection: 'row',
-  },
-  toggleButton: {
-    flex: 1,
-    backgroundColor: '#2d2d44',
-    padding: 14,
-    alignItems: 'center',
-    marginRight: 10,
-    borderRadius: 12,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#6c5ce7',
-  },
-  toggleText: {
-    color: '#888',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  toggleTextActive: {
-    color: '#fff',
-  },
-  mapModalContainer: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
-  mapHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2d2d44',
-  },
-  mapHeaderTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  mapConfirmText: {
-    color: '#6c5ce7',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  map: {
-    flex: 1,
-  },
-  markerContainer: {
-    alignItems: 'center',
-  },
-  mapFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
-    backgroundColor: '#2d2d44',
-  },
-  mapFooterText: {
-    color: '#888',
-    fontSize: 14,
-    marginLeft: 8,
+    padding: space[5],
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
 });

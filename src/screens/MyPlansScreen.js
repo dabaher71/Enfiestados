@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '../components/ui/EmptyState';
@@ -14,7 +14,9 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
-import { formatDateLong, formatDaysUntil, formatTimeShort } from '../lib/format';
+import { toggleAttendance } from '../services/eventService';
+import { recordSignal } from '../services/signalService';
+import { formatEventDate, formatDaysUntil } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
@@ -70,10 +72,9 @@ function groupByMonth(events) {
 
 // ─── TicketCard — tarjeta boleto con gradiente y perforación ─────────────────
 
-function TicketCard({ event, onPress, colors }) {
-  const dateStr  = formatDateLong(event.date);
-  const timeStr  = formatTimeShort(event.time);
-  const daysStr  = formatDaysUntil(event._dateISO ?? null) ?? '';
+function TicketCard({ event, onPress, onMore, colors }) {
+  const dateStr  = formatEventDate(event.date, event.time);
+  const daysStr  = formatDaysUntil(event.date) ?? '';
   const isSoon   = hoursUntil(event) <= 3 && hoursUntil(event) >= 0;
 
   return (
@@ -120,10 +121,14 @@ function TicketCard({ event, onPress, colors }) {
 
         {/* Pie del ticket */}
         <View style={styles.ticketFoot}>
-          <View>
+          <View style={styles.ticketFootDate}>
             <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>FECHA</Text>
-            <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: '#17131F' }}>
-              {dateStr} {timeStr ? `· ${timeStr}` : ''}
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: '#17131F' }}
+            >
+              {dateStr}
             </Text>
           </View>
           {daysStr ? (
@@ -143,6 +148,10 @@ function TicketCard({ event, onPress, colors }) {
             <Ionicons name="share-outline" size={16} color="#7A5500" />
             <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>Compartir</Text>
           </Pressable>
+          <Pressable style={[styles.ticketAction, styles.ticketActionMore]} onPress={onMore} accessibilityLabel="Más opciones">
+            <Ionicons name="ellipsis-horizontal" size={16} color="#7A5500" />
+            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>Más</Text>
+          </Pressable>
         </View>
       </View>
     </Pressable>
@@ -156,6 +165,8 @@ export default function MyPlansScreen({ navigation }) {
   const [tab,         setTab]         = useState('voy');
   const [attending,   setAttending]   = useState([]);
   const [loading,     setLoading]     = useState(true);
+  const [saved,       setSaved]       = useState([]);
+  const [savedLoading,setSavedLoading]= useState(true);
 
   const userId = auth.currentUser?.uid;
 
@@ -177,7 +188,42 @@ export default function MyPlansScreen({ navigation }) {
     return () => unsub();
   }, [userId]);
 
-  const groups = useMemo(() => groupByMonth(attending), [attending]);
+  // Carga eventos guardados por el usuario (bookmarks, § 4.3)
+  useEffect(() => {
+    if (!userId) { setSavedLoading(false); return; }
+    const q = query(
+      collection(db, 'events'),
+      where('savedBy', 'array-contains', userId),
+      orderBy('date', 'asc')
+    );
+    const unsub = onSnapshot(q, snap => {
+      const evs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => getEventTs(a) - getEventTs(b));
+      setSaved(evs);
+      setSavedLoading(false);
+    }, () => setSavedLoading(false));
+    return () => unsub();
+  }, [userId]);
+
+  const groups      = useMemo(() => groupByMonth(attending), [attending]);
+  const savedGroups = useMemo(() => groupByMonth(saved), [saved]);
+
+  const handleMore = (ev) => {
+    Alert.alert(ev.title, undefined, [
+      {
+        text: 'Cancelar asistencia',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await toggleAttendance(ev.id, userId);
+            recordSignal(userId, ev, 'unattend');
+          } catch {}
+        },
+      },
+      { text: 'Ver evento', onPress: () => navigation.navigate('EventDetail', { event: ev }) },
+      { text: 'Cerrar', style: 'cancel' },
+    ]);
+  };
 
   const renderVoy = () => {
     if (loading) return <SkeletonList count={3} />;
@@ -200,6 +246,7 @@ export default function MyPlansScreen({ navigation }) {
           <TicketCard
             event={attending[0]}
             onPress={() => navigation.navigate('EventDetail', { event: attending[0] })}
+            onMore={() => handleMore(attending[0])}
             colors={colors}
           />
         )}
@@ -228,9 +275,44 @@ export default function MyPlansScreen({ navigation }) {
     );
   };
 
+  const renderGuardados = () => {
+    if (savedLoading) return <SkeletonList count={3} />;
+    if (saved.length === 0) {
+      return (
+        <EmptyState
+          icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
+          title={t.myPlans.empty.saved.title}
+          description={t.myPlans.empty.saved.desc}
+          actionLabel={t.myPlans.empty.saved.action}
+          onAction={() => navigation.navigate('Explore')}
+        />
+      );
+    }
+
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
+        {savedGroups.map(group => (
+          <View key={group.key}>
+            <View style={[styles.monthHeader, { borderBottomColor: colors['border.subtle'] }]}>
+              <Text variant="overline" color="text.tertiary">{group.label}</Text>
+            </View>
+            {group.events.map(ev => (
+              <EventRow
+                key={ev.id}
+                event={ev}
+                trailing="auto"
+                onPress={() => navigation.navigate('EventDetail', { event: ev })}
+              />
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    );
+  };
+
   const renderEmpty = (key) => (
     <EmptyState
-      icon={<Ionicons name={key === 'guardados' ? 'bookmark-outline' : 'ticket-outline'} size={28} color={colors['text.tertiary']} />}
+      icon={<Ionicons name="ticket-outline" size={28} color={colors['text.tertiary']} />}
       title={t.myPlans.empty[key]?.title ?? 'Sin contenido'}
       description={t.myPlans.empty[key]?.desc}
       actionLabel={t.myPlans.empty[key]?.action}
@@ -250,6 +332,13 @@ export default function MyPlansScreen({ navigation }) {
             </Text>
           </View>
         )}
+        {tab === 'guardados' && saved.length > 0 && (
+          <View style={[styles.countBadge, { backgroundColor: colors['action.primary'] }]}>
+            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
+              {saved.length}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Tabs */}
@@ -259,7 +348,7 @@ export default function MyPlansScreen({ navigation }) {
 
       {/* Contenido */}
       {tab === 'voy'       ? renderVoy()            : null}
-      {tab === 'guardados' ? renderEmpty('saved')   : null}
+      {tab === 'guardados' ? renderGuardados()      : null}
       {tab === 'entradas'  ? renderEmpty('tickets') : null}
     </SafeAreaView>
   );
@@ -341,11 +430,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: space[4],
     paddingTop: space[3],
     paddingBottom: space[2],
+    gap: space[2],
   },
+  ticketFootDate: { flex: 1, flexShrink: 1 },
   daysChip: {
     paddingHorizontal: space[3],
     paddingVertical: space[1],
     borderRadius: radius.full,
+    flexShrink: 0,
   },
 
   // Acciones del ticket
@@ -361,6 +453,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: space[1],
     paddingVertical: space[3],
+  },
+  ticketActionMore: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(0,0,0,0.15)',
   },
 
   // Grupos por mes

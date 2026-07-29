@@ -21,9 +21,10 @@ import StatusBadge from '../components/ui/StatusBadge';
 import Text from '../components/ui/Text';
 import Sheet from '../components/ui/Sheet';
 
+import { showSnackbar } from '../components/ui/Snackbar';
 import { auth, db } from '../config/firebase';
 import { getOrCreateChat, sendMessage } from '../services/chatService';
-import { deleteEvent, toggleAttendance, toggleLike } from '../services/eventService';
+import { deleteEvent, toggleAttendance, toggleLike, toggleSaved } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
 import { safeOpenURL } from '../utils/security';
@@ -66,6 +67,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
   const [likes,          setLikes]          = useState(event.likes || []);
   const [attendees,      setAttendees]      = useState(event.attendees || []);
+  const [savedBy,        setSavedBy]        = useState(event.savedBy || []);
   const [showOptions,    setShowOptions]    = useState(false);
   const [showShare,      setShowShare]      = useState(false);
   const [showReport,     setShowReport]     = useState(false);
@@ -82,6 +84,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const userId     = auth.currentUser?.uid;
   const isLiked    = likes.includes(userId);
   const isAttending= attendees.includes(userId);
+  const isSaved    = savedBy.includes(userId);
   const isOrganizer= userId === event.organizerId;
   const hasLocation= !!(event.location?.lat && event.location?.lng && event.location.lat !== 0);
   const eventLink  = `https://enfiestados.app/evento/${event.id}`;
@@ -170,6 +173,24 @@ export default function EventDetailScreen({ route, navigation }) {
     } catch {}
   };
 
+  // Guardar/quitar de "Mis planes" — optimista, revierte con snackbar si falla
+  const handleSave = async () => {
+    const wasSaved = isSaved;
+    setSavedBy(prev => wasSaved ? prev.filter(id => id !== userId) : [...prev, userId]);
+    try {
+      const newSavedBy = await toggleSaved(event.id, userId);
+      setSavedBy(newSavedBy);
+      showSnackbar(
+        wasSaved
+          ? { message: 'Se quitó de Mis planes' }
+          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MyPlans') }
+      );
+    } catch {
+      setSavedBy(prev => wasSaved ? [...prev, userId] : prev.filter(id => id !== userId));
+      showSnackbar({ message: 'No se pudo guardar. Intentá de nuevo.' });
+    }
+  };
+
   const handleDelete = () => Alert.alert(
     '¿Eliminar evento?',
     `Esta acción no se puede deshacer. Los ${attendees.length} asistentes recibirán una notificación.`,
@@ -252,6 +273,16 @@ export default function EventDetailScreen({ route, navigation }) {
               accessibilityLabel="Volver"
             >
               <Ionicons name="arrow-back" size={22} color="#fff" />
+            </Pressable>
+
+            {/* Guardar (bookmark) */}
+            <Pressable
+              style={[styles.heroBtn, { top: space[3] + insets.top, right: space[4] + 40 + space[2] }]}
+              onPress={handleSave}
+              accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar en Mis planes'}
+              accessibilityRole="button"
+            >
+              <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={20} color={isSaved ? colors['action.primary'] : '#fff'} />
             </Pressable>
 
             {/* Opciones (···) */}
