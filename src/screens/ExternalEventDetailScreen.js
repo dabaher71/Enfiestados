@@ -4,7 +4,8 @@
 //          "0 likes / 0 asistirán", "Ubicacion" sin tilde, campo en blanco.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import {
   Dimensions, Pressable, ScrollView, Share, StyleSheet, View,
 } from 'react-native';
@@ -12,7 +13,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import StatusBadge from '../components/ui/StatusBadge';
 import Text from '../components/ui/Text';
+import { showSnackbar } from '../components/ui/Snackbar';
 
+import { auth, db } from '../config/firebase';
+import { toggleSavedExternal } from '../services/externalEventService';
 import { safeOpenURL } from '../utils/security';
 import { formatDateLong, formatDaysUntil, formatDomain, formatTimeShort } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
@@ -59,6 +63,17 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { event } = route.params;
   const [descExpanded, setDescExpanded] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  const userId = auth.currentUser?.uid;
+
+  useEffect(() => {
+    if (!userId || !event?.id) return;
+    const unsub = onSnapshot(doc(db, 'users', userId), snap => {
+      setIsSaved((snap.data()?.savedExternalIds || []).includes(event.id));
+    }, () => {});
+    return () => unsub();
+  }, [userId, event?.id]);
 
   if (!event) return null;
 
@@ -75,6 +90,23 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
 
   const handleBuy = () => {
     safeOpenURL(event.eventUrl);
+  };
+
+  const handleSave = async () => {
+    if (!userId) return;
+    const wasSaved = isSaved;
+    setIsSaved(!wasSaved);
+    try {
+      await toggleSavedExternal(userId, event.id);
+      showSnackbar(
+        wasSaved
+          ? { message: 'Se quitó de Mis planes' }
+          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MyPlans') }
+      );
+    } catch {
+      setIsSaved(wasSaved);
+      showSnackbar({ message: 'No se pudo guardar. Intentá de nuevo.' });
+    }
   };
 
   const handleShare = async () => {
@@ -221,11 +253,11 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
       ]}>
         {/* Guardar */}
         <Pressable
-          style={[styles.iconAction, { backgroundColor: colors['bg.surface'] }]}
-          onPress={() => {}}
-          accessibilityLabel="Guardar evento"
+          style={[styles.iconAction, { backgroundColor: isSaved ? `${colors['action.primary']}22` : colors['bg.surface'] }]}
+          onPress={handleSave}
+          accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar evento'}
         >
-          <Ionicons name="bookmark-outline" size={22} color={colors['text.primary']} />
+          <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={22} color={isSaved ? colors['action.primary'] : colors['text.primary']} />
         </Pressable>
 
         {/* Compartir */}

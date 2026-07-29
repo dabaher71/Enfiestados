@@ -19,6 +19,7 @@ import PostCard from '../components/PostCard';
 
 import { auth, db } from '../config/firebase';
 import { subscribeToEvents } from '../services/eventService';
+import { fetchExternalEventsByIds } from '../services/externalEventService';
 import { addPostComment, deletePost, subscribeToUserPosts, togglePostLike } from '../services/postService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { useTheme } from '../theme/ThemeProvider';
@@ -39,6 +40,7 @@ export default function ProfileScreen({ navigation }) {
   const [posts,          setPosts]          = useState([]);
   const [attendingEvents,setAttendingEvents]= useState([]);
   const [savedEvents,    setSavedEvents]    = useState([]);
+  const [savedExternal,  setSavedExternal]  = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [tab,            setTab]            = useState('eventos');
 
@@ -70,6 +72,13 @@ export default function ProfileScreen({ navigation }) {
       () => {}
     );
 
+    // Eventos importados guardados — el estado vive en users/{uid}.savedExternalIds
+    const unsubSavedExternal = onSnapshot(doc(db, 'users', currentUser.uid), async snap => {
+      const ids = snap.data()?.savedExternalIds || [];
+      if (ids.length === 0) { setSavedExternal([]); return; }
+      try { setSavedExternal(await fetchExternalEventsByIds(ids)); } catch { setSavedExternal([]); }
+    }, () => {});
+
     const focusUnsub = navigation.addListener('focus', () => { setLoading(true); loadUser(); });
 
     return () => {
@@ -77,6 +86,7 @@ export default function ProfileScreen({ navigation }) {
       unsubPosts?.();
       unsubAttending?.();
       unsubSaved?.();
+      unsubSavedExternal?.();
       focusUnsub?.();
     };
   }, []);
@@ -162,7 +172,7 @@ export default function ProfileScreen({ navigation }) {
 
   const STATS = [
     { label: 'Voy',       value: attendingEvents.length, onPress: () => navigation.navigate('MyPlans') },
-    { label: 'Guardados', value: savedEvents.length,      onPress: () => navigation.navigate('MyPlans') },
+    { label: 'Guardados', value: savedEvents.length + savedExternal.length, onPress: () => navigation.navigate('MyPlans') },
     { label: 'Seguidores',value: followerCount,           onPress: () => {} },
   ];
 
@@ -395,7 +405,7 @@ export default function ProfileScreen({ navigation }) {
           </>
         ) : (
           /* ── GUARDADOS (§ 4.3) ─────────────────────────────────── */
-          savedEvents.length === 0 ? (
+          savedEvents.length === 0 && savedExternal.length === 0 ? (
             <EmptyState
               icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
               title="Sin guardados todavía"
@@ -404,8 +414,16 @@ export default function ProfileScreen({ navigation }) {
               onAction={() => navigation.navigate('Explore')}
             />
           ) : (
-            savedEvents.map(ev => (
-              <EventRow key={ev.id} event={ev} trailing="auto" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
+            [...savedEvents, ...savedExternal].map(ev => (
+              <EventRow
+                key={ev.id}
+                event={ev}
+                trailing="auto"
+                onPress={() => navigation.navigate(
+                  ev._isExternal ? 'ExternalEventDetail' : 'EventDetail',
+                  { event: ev }
+                )}
+              />
             ))
           )
         )}
