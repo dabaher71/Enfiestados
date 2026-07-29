@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useEffect } from 'react';
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { recordClick, recordImpression } from '../services/adService';
+import { safeOpenURL } from '../utils/security';
 
 const CTA_ICONS = {
   'Ver más': 'arrow-forward',
@@ -21,7 +22,7 @@ function InternalAdCard({ ad, onEventPress }) {
     if (ad.type === 'event' && ad.eventId && onEventPress) {
       onEventPress(ad.eventId);
     } else if (ad.targetUrl) {
-      Linking.openURL(ad.targetUrl).catch(() => {});
+      safeOpenURL(ad.targetUrl);
     }
   };
 

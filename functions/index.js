@@ -131,11 +131,26 @@ exports.computePersonalizedFeeds = onSchedule(
 // ─── Función callable: forzar regeneración del feed de un usuario ─────────────
 // La app puede llamarla cuando el usuario hace pull-to-refresh.
 
+const REFRESH_COOLDOWN_MS = 60 * 1000;
+
 exports.refreshMyFeed = onCall(
   { timeoutSeconds: 30 },
   async (request) => {
     const userId = request.auth?.uid;
     if (!userId) throw new HttpsError("unauthenticated", "Debes estar autenticado");
+
+    // Cooldown: evita que un script llame esta función en loop (cada corrida
+    // lee hasta 5000 eventos) para inflar el costo de Firestore/Functions.
+    const feedRef = db.collection("feeds").doc(userId);
+    const existingFeed = await feedRef.get();
+    const lastUpdatedAt = existingFeed.exists ? existingFeed.data().updatedAt : null;
+    if (lastUpdatedAt) {
+      const msSinceLastRefresh = Date.now() - lastUpdatedAt.toMillis();
+      if (msSinceLastRefresh < REFRESH_COOLDOWN_MS) {
+        const waitSeconds = Math.ceil((REFRESH_COOLDOWN_MS - msSinceLastRefresh) / 1000);
+        throw new HttpsError("resource-exhausted", `Esperá ${waitSeconds}s antes de refrescar de nuevo`);
+      }
+    }
 
     const [userDoc, eventsSnap, hiddenSnap] = await Promise.all([
       db.collection("users").doc(userId).get(),
@@ -152,7 +167,7 @@ exports.refreshMyFeed = onCall(
 
     const rankedIds = scoreEvents(allEvents, interestVector, hiddenIds, followingIds);
 
-    await db.collection("feeds").doc(userId).set({
+    await feedRef.set({
       eventIds: rankedIds,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
