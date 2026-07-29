@@ -15,6 +15,18 @@ service cloud.firestore {
     function isBlocked(data) {
       return request.auth.uid in data.get('usuariosBloqueados', []);
     }
+    function isAdminUser() {
+      return isAuth() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+    }
+    // Solo permite agregar o quitar EXACTAMENTE el propio uid de un array —
+    // evita que cualquiera vacíe o manipule likes/attendees/savedBy ajenos.
+    function isUidToggle(oldList, newList, uid) {
+      let added = newList.toSet().difference(oldList.toSet());
+      let removed = oldList.toSet().difference(newList.toSet());
+      return added.size() + removed.size() == 1 &&
+        added.hasOnly([uid]) && removed.hasOnly([uid]);
+    }
 
     // ── users ─────────────────────────────────────────────────────────────────
     // Cualquier usuario autenticado puede leer perfiles (necesario para mostrar
@@ -26,8 +38,15 @@ service cloud.firestore {
       // processReportAction/triggerScrape (functions/index.js). Solo se
       // otorga manualmente por el equipo (Firebase Console / Admin SDK).
       allow create: if isOwner(userId) && !('isAdmin' in request.resource.data);
-      allow update: if isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']);
+      allow update: if (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin'])
+      ) || (
+        // Admin: solo puede tocar adCredits (addCredits() en adService.js),
+        // nada más del perfil ajeno.
+        isAdminUser() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adCredits'])
+      );
       allow delete: if isOwner(userId);
     }
 
@@ -43,9 +62,30 @@ service cloud.firestore {
       allow update: if isAuth() && (
         // El organizador puede editar todo
         resource.data.organizerId == request.auth.uid ||
-        // Otros solo pueden tocar likes, attendees, savedBy y comments
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likes', 'attendees', 'savedBy', 'comments'])
+        // Otros solo pueden tocar UN campo social por escritura, y solo
+        // agregar/quitar su propio uid (o su propio comentario)
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
+          isUidToggle(resource.data.get('likes', []), request.resource.data.likes, request.auth.uid)
+        ) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendees']) &&
+          isUidToggle(resource.data.get('attendees', []), request.resource.data.attendees, request.auth.uid)
+        ) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['savedBy']) &&
+          isUidToggle(resource.data.get('savedBy', []), request.resource.data.savedBy, request.auth.uid)
+        ) ||
+        (
+          // Comentarios: no se puede validar el autor de un elemento individual
+          // en rules, pero al menos se bloquea el vaciado masivo — solo se
+          // permite crecer o achicarse de a un comentario por escritura.
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) &&
+          (
+            request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 ||
+            request.resource.data.comments.size() == resource.data.get('comments', []).size() - 1
+          )
+        )
       );
       allow delete: if isAuth() && resource.data.organizerId == request.auth.uid;
     }
@@ -72,8 +112,15 @@ service cloud.firestore {
 
     // ── chats ─────────────────────────────────────────────────────────────────
     match /chats/{chatId} {
-      allow read, update: if isAuth() &&
+      allow read: if isAuth() &&
         request.auth.uid in resource.data.participants;
+      // Un participante solo puede tocar el preview del último mensaje y su
+      // propio estado de leído — no puede reescribir 'participants' ni nada más.
+      allow update: if isAuth() &&
+        request.auth.uid in resource.data.participants &&
+        request.resource.data.participants == resource.data.participants &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['lastMessage', 'lastMessageTime', 'unreadFor']);
       allow create: if isAuth() &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.participants.size() == 2 &&
@@ -141,19 +188,24 @@ service cloud.firestore {
       // Solo anunciantes pueden crear (verificado a nivel app; admin aprueba)
       allow create: if isVerified() &&
         request.resource.data.advertiserId == request.auth.uid &&
-        request.resource.data.status == 'pending';
-      // Solo el dueño puede pausar/reactivar (status: active/paused)
-      allow update: if isAuth() && (
+        request.resource.data.status == 'pending' &&
+        (!('targetUrl' in request.resource.data) || request.resource.data.targetUrl.matches('^https://.*'));
+      // Admin: acceso total (aprobar, rechazar, etc.)
+      allow update: if isAdminUser() || (
+        // El dueño SOLO puede pausar/reactivar un anuncio YA aprobado —
+        // no puede pasar de 'pending' a 'active' por su cuenta (antes sí podía,
+        // porque la regla vieja solo miraba qué campos cambiaban, no los valores).
         resource.data.advertiserId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'updatedAt'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+        resource.data.status in ['active', 'paused'] &&
+        request.resource.data.status in ['active', 'paused']
       ) || (
         // TODO: migrar a Cloud Function para prevenir inflación de métricas
         isAuth() &&
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['impressions', 'clicks'])
       );
-      allow delete: if false;
+      allow delete: if isAdminUser();
     }
 
     // ── advertiserRequests ────────────────────────────────────────────────────
@@ -161,8 +213,11 @@ service cloud.firestore {
       allow create: if isVerified() &&
         request.resource.data.userId == request.auth.uid &&
         request.resource.data.status == 'pending';
-      allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      allow update, delete: if false; // solo admin via app
+      allow read: if isAuth() && (resource.data.userId == request.auth.uid || isAdminUser());
+      // approveAdvertiserRequest/rejectAdvertiserRequest (adService.js) solo tocan 'status'.
+      allow update: if isAdminUser() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if isAdminUser();
     }
 
     // ── notifications ─────────────────────────────────────────────────────────
