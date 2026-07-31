@@ -19,7 +19,7 @@
 | Perfil propio "Mi mochila" | `screens/ProfileScreen.js` | listo | § 4.4 "Tu próximo plan" implementado |
 | Perfil público | `screens/UserProfileScreen.js` | parcial | Tokens ok; no re-auditado a fondo esta ronda |
 | Editar perfil | `screens/EditProfileScreen.js` | listo | |
-| Alertas | `screens/NotificationsScreen.js` | parcial | Tokens ok; contenido real (mockup `10a`) sin confirmar esta ronda |
+| Alertas | `screens/NotificationsScreen.js` | listo | Verificado con datos reales: 4 tipos, agrupado por día, corte a fecha absoluta a los 7 días, nombre/título largos, leído/no leído |
 | Config. de alertas | `screens/NotificationsSettingsScreen.js` | listo | |
 | Mensajes (lista chats) | `screens/ChatsScreen.js` | parcial | Tokens ok; contenido real (mockup `10b`) sin confirmar esta ronda |
 | Mensajes (nueva, separada) | `screens/MessagesScreen.js` | parcial | Existe; contenido real sin confirmar esta ronda |
@@ -57,7 +57,7 @@ No hay componentes del design system pendientes de crear.
 
 **Deuda real restante en `src/components`:**
 - `components/InternalAdCard.js` — activo (se renderiza en Home), estaba 100% en paleta vieja. Migrado en FIX_ROUND_4 § 10.1.
-- `components/CommentsSection.js` — parcialmente auditado (nombre/hora de comentario ya usan tokens); todavía tiene hex suelto sin revisar (trash icon, empty state, fondos de reply).
+- `components/CommentsSection.js` — parcialmente auditado (nombre/hora de comentario ya usan tokens; `formatDate` local ya no se queda pegado en "Nd" para siempre — cae a fecha absoluta a los 7 días). Todavía tiene hex suelto sin revisar (trash icon, empty state, fondos de reply).
 - `components/PostCard.js`, `PostDetailModal.js` — solo se les agregó `hitSlop` en sus botones <44px; el resto del archivo no se auditó por hex hardcodeado.
 
 ---
@@ -76,5 +76,6 @@ Antes de dar estos por migrados: `grep -rn "#[0-9A-Fa-f]\{6\}" src/components/<a
 
 - [ ] Pantalla "Búsqueda dedicada" (recientes/sugerencias) — no existe
 - [ ] Flujo de bienvenida/onboarding (`8a`–`8d`) — no existe, solo el paso de intereses
-- [ ] Confirmar contenido real de Alertas/Mensajes/Chat (mockups `10a`/`10b`/`10c`) — **Alertas es la próxima sesión**
+- [x] Confirmar contenido real de Alertas (mockup `10a`) — verificado con datos reales
+- [ ] Confirmar contenido real de Mensajes/Chat (mockups `10b`/`10c`) — próxima sesión
 - [ ] Auditar hex hardcodeado en `CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`

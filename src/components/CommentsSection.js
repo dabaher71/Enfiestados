@@ -167,11 +167,14 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     );
   }, [userId, organizerId, eventId]);
 
+  // FIX_ROUND_4 § F: no tenía tope — un comentario de hace 400 días mostraba
+  // "400d" para siempre. A los 7 días pasa a fecha absoluta, igual que
+  // formatRelTime en NotificationsScreen.js.
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
     const diff = now - date;
-    
+
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
@@ -179,7 +182,8 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     if (minutes < 1) return 'Ahora';
     if (minutes < 60) return `${minutes}m`;
     if (hours < 24) return `${hours}h`;
-    return `${days}d`;
+    if (days < 7) return `${days}d`;
+    return date.toLocaleDateString('es-CR');
   };
 
   const renderComment = useCallback(({ item }) => {
