@@ -103,7 +103,7 @@ function TextBox({ value, onChangeText, placeholder, multiline, maxLength, keybo
 // ─── CreateEventScreen ────────────────────────────────────────────────────────
 
 export default function CreateEventScreen({ navigation }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [step,            setStep]           = useState(1);
@@ -601,7 +601,7 @@ export default function CreateEventScreen({ navigation }) {
             </View>
             <DateTimePicker value={date} mode="date" display="spinner" minimumDate={new Date()}
               onChange={(_, d) => { if (d) setDate(d); }}
-              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+              themeVariant={isDark ? 'dark' : 'light'} />
           </View>
         </Modal>
       )}
@@ -616,7 +616,7 @@ export default function CreateEventScreen({ navigation }) {
             </View>
             <DateTimePicker value={time} mode="time" display="spinner"
               onChange={(_, t) => { if (t) setTime(t); }}
-              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+              themeVariant={isDark ? 'dark' : 'light'} />
           </View>
         </Modal>
       )}

@@ -1,9 +1,17 @@
+// InternalAdCard — anuncio interno en el feed
+// FIX_ROUND_4 § 10.1: componente activo (se renderiza en Home) que había
+// quedado fuera de la migración a tokens — mismo violeta-como-botón que ya
+// se corrigió en el módulo de anuncios en la ronda 3.
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { recordClick, recordImpression } from '../services/adService';
 import { safeOpenURL } from '../utils/security';
+import Button from './ui/Button';
+import Text from './ui/Text';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
 
 const CTA_ICONS = {
   'Ver más': 'arrow-forward',
@@ -13,6 +21,8 @@ const CTA_ICONS = {
 };
 
 function InternalAdCard({ ad, onEventPress }) {
+  const { colors } = useTheme();
+
   useEffect(() => {
     if (ad.id !== 'preview') recordImpression(ad.id);
   }, [ad.id]);
@@ -27,11 +37,11 @@ function InternalAdCard({ ad, onEventPress }) {
   };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors['bg.surface'] }]}>
       {ad.image ? (
         <Image
           source={{ uri: ad.image }}
-          style={styles.image}
+          style={[styles.image, { backgroundColor: colors['bg.raised'] }]}
           contentFit="cover"
           transition={200}
         />
@@ -39,27 +49,31 @@ function InternalAdCard({ ad, onEventPress }) {
 
       <View style={styles.body}>
         <View style={styles.sponsoredRow}>
-          <Ionicons name="megaphone" size={13} color="#6c5ce7" />
-          <Text style={styles.sponsoredText}>Publicidad</Text>
-          <View style={styles.dot} />
-          <Text style={styles.advertiserName} numberOfLines={1}>
+          <Ionicons name="megaphone" size={13} color={colors['nav.selected']} />
+          <Text variant="caption" style={{ color: colors['nav.selected'], fontFamily: 'PlusJakartaSans_600SemiBold' }}>
+            Publicidad
+          </Text>
+          <View style={[styles.dot, { backgroundColor: colors['text.tertiary'] }]} />
+          <Text variant="caption" color="text.tertiary" numberOfLines={1} style={{ flex: 1 }}>
             {ad.advertiserName}
           </Text>
         </View>
 
-        <Text style={styles.title} numberOfLines={2}>{ad.title}</Text>
+        <Text variant="title" numberOfLines={2} style={styles.title}>{ad.title}</Text>
         {ad.description ? (
-          <Text style={styles.description} numberOfLines={2}>{ad.description}</Text>
+          <Text variant="body" color="text.secondary" numberOfLines={2} style={styles.description}>
+            {ad.description}
+          </Text>
         ) : null}
 
-        <TouchableOpacity style={styles.ctaButton} onPress={handleCTA} activeOpacity={0.85}>
-          <Text style={styles.ctaText}>{ad.ctaLabel || 'Ver más'}</Text>
-          <Ionicons
-            name={CTA_ICONS[ad.ctaLabel] || 'arrow-forward'}
-            size={16}
-            color="#fff"
-          />
-        </TouchableOpacity>
+        <Button
+          variant="primary"
+          size="md"
+          label={ad.ctaLabel || 'Ver más'}
+          trailingIcon={<Ionicons name={CTA_ICONS[ad.ctaLabel] || 'arrow-forward'} size={16} color={colors['text.onAction']} />}
+          onPress={handleCTA}
+          style={styles.ctaButton}
+        />
       </View>
     </View>
   );
@@ -69,10 +83,9 @@ export default memo(InternalAdCard);
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#2d2d44',
-    borderRadius: 20,
-    marginHorizontal: 15,
-    marginBottom: 15,
+    borderRadius: radius.lg,
+    marginHorizontal: space[4],
+    marginBottom: space[4],
     overflow: 'hidden',
     elevation: 3,
     shadowColor: '#000',
@@ -83,61 +96,29 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: 200,
-    backgroundColor: '#1a1a2e',
   },
   body: {
-    padding: 15,
+    padding: space[4],
   },
   sponsoredRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 5,
-  },
-  sponsoredText: {
-    color: '#6c5ce7',
-    fontSize: 12,
-    fontWeight: '600',
+    marginBottom: space[2],
+    gap: space[1],
   },
   dot: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: '#555',
-  },
-  advertiserName: {
-    color: '#888',
-    fontSize: 12,
-    flex: 1,
   },
   title: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: 'bold',
-    lineHeight: 23,
-    marginBottom: 6,
+    marginBottom: space[2],
   },
   description: {
-    color: '#aaa',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 14,
+    marginBottom: space[4],
   },
   ctaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6c5ce7',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    gap: 8,
     alignSelf: 'flex-start',
     minWidth: 130,
-  },
-  ctaText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
   },
 });
