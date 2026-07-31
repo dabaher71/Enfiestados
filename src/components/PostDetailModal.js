@@ -2,16 +2,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { memo, useCallback, useState } from 'react';
-import { Image } from 'expo-image';
 import {
   Alert, KeyboardAvoidingView, Modal, Platform,
   Pressable, ScrollView, StyleSheet, TextInput, View,
 } from 'react-native';
 import ImageViewerModal from './ImageViewerModal';
 import Avatar from './ui/Avatar';
+import MediaCarousel from './ui/MediaCarousel';
 import ReportModal from './ReportModal';
 import Text from './ui/Text';
-import { toDate } from '../lib/format';
+import { getImages, toDate } from '../lib/format';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -36,6 +36,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
   const [showReport,     setShowReport]     = useState(false);
   const [showImageViewer,setShowImageViewer]= useState(false);
   const [showMenu,       setShowMenu]       = useState(false);
+  const [imgIndex,       setImgIndex]       = useState(0);
 
   const isLiked = post?.likes?.includes(currentUserId);
   const isOwner = post?.userId === currentUserId;
@@ -65,6 +66,8 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
 
   if (!post) return null;
 
+  const images = getImages(post);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.overlay} onPress={onClose} />
@@ -76,11 +79,15 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
           {/* Imagen — aspectRatio 4:3, no altura fija */}
-          {post.image ? (
-            <Pressable onPress={() => setShowImageViewer(true)} activeOpacity={0.9}>
-              <Image source={{ uri: post.image }} style={styles.image} contentFit="cover" transition={200} />
-            </Pressable>
-          ) : null}
+          {images.length > 0 && (
+            <MediaCarousel
+              images={images}
+              aspectRatio={4 / 3}
+              onPress={() => setShowImageViewer(true)}
+              onIndexChange={setImgIndex}
+              labelPrefix="de la publicación"
+            />
+          )}
 
           <View style={styles.content}>
             {/* Header: avatar + nombre + tiempo + menú ··· */}
@@ -191,7 +198,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
       </KeyboardAvoidingView>
 
       <ReportModal visible={showReport} onClose={() => setShowReport(false)} targetType="post" targetId={post.id} />
-      <ImageViewerModal uri={post.image} visible={showImageViewer} onClose={() => setShowImageViewer(false)} />
+      <ImageViewerModal uri={images[imgIndex]} visible={showImageViewer} onClose={() => setShowImageViewer(false)} />
     </Modal>
   );
 }
@@ -202,7 +209,6 @@ const styles = StyleSheet.create({
   overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet:     { maxHeight: '92%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, overflow: 'hidden' },
   handleBar: { width: 40, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: space[3], marginBottom: space[2] },
-  image:     { width: '100%', aspectRatio: 4/3 },
   content:   { padding: space[5] },
   header:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space[4], position: 'relative' },
   userInfo:  { flexDirection: 'row', alignItems: 'center', flex: 1 },
