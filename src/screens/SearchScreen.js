@@ -14,7 +14,7 @@ import NativeAdCard from '../components/NativeAdCard';
 import Button from '../components/ui/Button';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
-import EventRow from '../components/ui/EventRow';
+import EventCardLarge from '../components/ui/EventCardLarge';
 import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 import Sheet from '../components/ui/Sheet';
@@ -288,7 +288,7 @@ export default function SearchScreen({ navigation }) {
 
   const renderListItem = useCallback(({ item }) => {
     if (item._isAd) return <NativeAdCard />;
-    return <EventRow event={item} trailing="auto" onPress={() => handleCardPress(item)} />;
+    return <EventCardLarge event={item} variant="compact" onPress={() => handleCardPress(item)} />;
   }, [handleCardPress]);
 
   const listDataWithAds = useMemo(() => {
