@@ -107,3 +107,12 @@ Nota: las reglas de Firestore (`firestore.rules`) siguen permitiendo `likes`/`at
 de seguridad. Un cliente que llame a Firestore directo (no la app) podría saltárselo. Pendiente si se
 quiere cerrar del todo: reemplazar `isAuth()` por un helper `isReal()` (excluye
 `sign_in_provider == 'anonymous'`) en esas rutas de `events`/`posts`.
+
+**Crear cuenta desde invitado — `linkWithCredential`.** `RegisterScreen.js` y
+`services/googleAuthService.js` usan `linkWithCredential` (no `createUserWithEmailAndPassword`/
+`signInWithCredential` directo) cuando `auth.currentUser?.isAnonymous` — conserva el uid, así que lo
+que el invitado ya guardó/confirmó (`savedBy`/`attendees` escritos con ese uid) sigue siendo suyo
+después de crear la cuenta. Si el correo/cuenta de Google ya pertenece a otra cuenta real
+(`auth/credential-already-in-use` / `auth/email-already-in-use`), se cae a iniciar sesión con esa
+cuenta y se avisa ("Ya tenés una cuenta... Entramos con esa") — los datos de la sesión de invitado se
+descartan ahí, pero a propósito y avisado, no en silencio.
