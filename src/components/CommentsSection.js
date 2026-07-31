@@ -17,6 +17,7 @@ import { auth, db } from '../config/firebase';
 import { addComment, deleteComment } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
+import { toDate } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
 
 const MAX_COMMENT_LENGTH = 500;
@@ -171,7 +172,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
   // "400d" para siempre. A los 7 días pasa a fecha absoluta, igual que
   // formatRelTime en NotificationsScreen.js.
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
+    const date = toDate(dateString);
     const now = new Date();
     const diff = now - date;
 

@@ -10,13 +10,14 @@ import ImageViewerModal from './ImageViewerModal';
 import Avatar from './ui/Avatar';
 import ReportModal from './ReportModal';
 import Text from './ui/Text';
+import { toDate } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
 // "hace 2 h" / "hace 5 meses" — nunca "157d"
 function timeAgo(date) {
   if (!date) return '';
-  const d    = date.toDate ? date.toDate() : new Date(date);
+  const d    = toDate(date);
   const diff = Math.floor((Date.now() - d) / 1000);
   if (diff < 60)       return 'Ahora';
   if (diff < 3600)     return `hace ${Math.floor(diff / 60)} min`;
