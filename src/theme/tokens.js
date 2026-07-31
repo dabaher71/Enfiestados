@@ -9,6 +9,9 @@ const _dark = {
   'bg.surface':     '#211C2C',
   'bg.raised':      '#2C2639',
   'bg.overlay':     'rgba(11,9,16,0.62)',
+  // Track de SegmentedControl — antes isDark ? 'rgba(255,255,255,.07)' : bg.surface
+  // escrito a mano en cada pantalla (§ 10.1: mismo patrón que barrimos).
+  'bg.track':       'rgba(255,255,255,0.07)',
 
   'border.subtle':  'rgba(255,255,255,0.09)',
   'border.strong':  'rgba(255,255,255,0.16)',
@@ -40,6 +43,7 @@ const _light = {
   'bg.surface':     '#F4F0E9',
   'bg.raised':      '#FFFFFF',
   'bg.overlay':     'rgba(23,19,32,0.45)',
+  'bg.track':       '#F4F0E9',
 
   'border.subtle':  'rgba(23,19,32,0.10)',
   'border.strong':  '#E0D9CD',
