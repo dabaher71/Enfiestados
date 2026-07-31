@@ -3,11 +3,8 @@
 // PRESENTACIÓN: 3 pasos, chips de categorías, fechas humanas, CTA amarillo, sin asteriscos.
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { doc, getDoc } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, KeyboardAvoidingView, Modal, Platform,
@@ -16,16 +13,17 @@ import {
 import MapView, { Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import EventRow from '../components/ui/EventRow';
+import EventCardLarge from '../components/ui/EventCardLarge';
+import ImageGridPicker from '../components/ui/ImageGridPicker';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import Text from '../components/ui/Text';
 
-import { auth, db, storage } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 import { createEvent } from '../services/eventService';
 import { CATEGORIES } from '../constants/categories';
 import {
-  isValidWebURL, validateImageSize, validatePrice, INPUT_LIMITS,
+  isValidWebURL, validatePrice, INPUT_LIMITS,
 } from '../utils/security';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -110,7 +108,8 @@ export default function CreateEventScreen({ navigation }) {
   const [title,           setTitle]          = useState('');
   const [description,     setDescription]    = useState('');
   const [category,        setCategory]       = useState('');
-  const [image,           setImage]          = useState(null);
+  const [images,          setImages]         = useState([]); // URLs ya subidas — ImageGridPicker sube en cuanto se eligen
+  const [imagesUploading, setImagesUploading]= useState(false);
   const [date,            setDate]           = useState(new Date());
   const [time,            setTime]           = useState(new Date());
   const [showDatePicker,  setShowDatePicker] = useState(false);
@@ -123,7 +122,6 @@ export default function CreateEventScreen({ navigation }) {
   const [isFree,          setIsFree]         = useState(true);
   const [price,           setPrice]          = useState('');
   const [loading,         setLoading]        = useState(false);
-  const [uploadingImage,  setUploadingImage] = useState(false);
   const [currentLocation, setCurrentLocation]= useState({ latitude: 9.9281, longitude: -84.0907, latitudeDelta: 0.05, longitudeDelta: 0.05 });
 
   useEffect(() => {
@@ -141,54 +139,7 @@ export default function CreateEventScreen({ navigation }) {
   const step2Valid = isVirtual
     ? virtualLink.trim().length > 0
     : locationCoords !== null;
-  const step3Valid = isFree || (validatePrice(price) !== null);
-
-  // ── Lógica de imagen ──────────────────────────────────────────────────────
-
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.8,
-    });
-    if (!result.canceled) {
-      if (!validateImageSize(result.assets[0])) { Alert.alert('Imagen grande', 'La imagen debe ser menor a 5MB'); return; }
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu cámara'); return; }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
-    if (!result.canceled) {
-      if (!validateImageSize(result.assets[0])) { Alert.alert('Imagen grande', 'La imagen debe ser menor a 5MB'); return; }
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const showImageOptions = () => Alert.alert('Agregar imagen', 'Elegí una opción', [
-    { text: 'Tomar foto',       onPress: takePhoto },
-    { text: 'Elegir de galería', onPress: pickImage },
-    { text: 'Cancelar', style: 'cancel' },
-  ]);
-
-  const uploadImage = async (uri) => {
-    const blob = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = () => resolve(xhr.response);
-      xhr.onerror = () => reject(new Error('Error al leer imagen'));
-      xhr.responseType = 'blob';
-      xhr.open('GET', uri, true);
-      xhr.send(null);
-    });
-    const filename = `events/${auth.currentUser?.uid}/${Date.now()}.jpg`;
-    const storageRef = ref(storage, filename);
-    await uploadBytes(storageRef, blob);
-    const url = await getDownloadURL(storageRef);
-    blob.close();
-    return url;
-  };
+  const step3Valid = (isFree || (validatePrice(price) !== null)) && !imagesUploading;
 
   // ── Publicar evento ────────────────────────────────────────────────────────
 
@@ -200,9 +151,6 @@ export default function CreateEventScreen({ navigation }) {
     setLoading(true);
     try {
       const user = auth.currentUser;
-      let imageURL = '';
-      if (image) { setUploadingImage(true); imageURL = await uploadImage(image); setUploadingImage(false); }
-
       const eventData = {
         title: title.trim(),
         description: description.trim(),
@@ -221,7 +169,8 @@ export default function CreateEventScreen({ navigation }) {
         organizerId: user.uid,
         organizerName: user.displayName || user.email.split('@')[0],
         organizerAvatar: user.photoURL || '',
-        image: imageURL,
+        images,
+        image: images[0] || '', // back-compat: consumidores viejos leen 'image' (FIX_ROUND_5 § 6)
         capacity: 0,
         hasParking: false,
       };
@@ -268,7 +217,9 @@ export default function CreateEventScreen({ navigation }) {
   ]);
 
   const stepTitles = ['¿Qué vas a organizar?', '¿Cuándo y dónde?', '¿Cuánto cuesta?'];
-  const continueLabel = step === 3 ? (loading ? (uploadingImage ? 'Subiendo imagen…' : 'Publicando…') : 'Publicar') : 'Continuar';
+  const continueLabel = step === 3
+    ? (loading ? 'Publicando…' : (imagesUploading ? 'Subiendo imágenes…' : 'Publicar'))
+    : 'Continuar';
   const stepIsValid = [step1Valid, step2Valid, step3Valid][step - 1];
 
   return (
@@ -314,23 +265,10 @@ export default function CreateEventScreen({ navigation }) {
           {/* ── PASO 1: Qué ─────────────────────────────────────────── */}
           {step === 1 && (
             <>
-              {/* Imagen — opcional */}
+              {/* Imágenes — opcional, hasta 10, reordenables (FIX_ROUND_5 § 5) */}
               <Field>
                 <FieldLabel label="Foto o afiche" optional colors={colors} />
-                <Pressable
-                  onPress={showImageOptions}
-                  style={[styles.imagePicker, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
-                  accessibilityRole="button"
-                >
-                  {image ? (
-                    <Image source={{ uri: image }} style={styles.imagePreview} contentFit="cover" />
-                  ) : (
-                    <View style={styles.imagePlaceholder}>
-                      <Ionicons name="image-outline" size={32} color={colors['text.tertiary']} />
-                      <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>Tocar para agregar</Text>
-                    </View>
-                  )}
-                </Pressable>
+                <ImageGridPicker onUploadedChange={setImages} onBusyChange={setImagesUploading} />
               </Field>
 
               {/* Título */}
@@ -522,27 +460,27 @@ export default function CreateEventScreen({ navigation }) {
                 </Field>
               )}
 
-              {/* Vista previa real del EventRow */}
+              {/* Vista previa real de EventCardLarge — la card que se usa en el feed */}
               <View style={[styles.previewSection, { borderColor: colors['border.subtle'] }]}>
                 <Text variant="overline" color="text.tertiary" style={{ paddingHorizontal: space[5], paddingBottom: space[2] }}>
                   ASÍ SE VE EN EL FEED
                 </Text>
-                <View style={{ borderRadius: radius.lg, overflow: 'hidden', marginHorizontal: space[5], backgroundColor: colors['bg.surface'] }}>
-                  <EventRow
-                    event={{
-                      title: title || 'Nombre del evento',
-                      category: category || '',
-                      date: storageDate(date),
-                      time: storageTime(time),
-                      image: image || null,
-                      isFree,
-                      price: isFree ? 0 : (parseInt(price) || undefined),
-                      location: { name: locationName || (isVirtual ? 'Evento virtual' : 'Sin ubicación') },
-                    }}
-                    trailing="auto"
-                    onPress={() => {}}
-                  />
-                </View>
+                <EventCardLarge
+                  event={{
+                    title: title || 'Nombre del evento',
+                    category: category || '',
+                    date: storageDate(date),
+                    time: storageTime(time),
+                    images,
+                    isFree,
+                    price: isFree ? 0 : (parseInt(price) || undefined),
+                    location: { name: locationName || (isVirtual ? 'Evento virtual' : 'Sin ubicación') },
+                    attendees: [],
+                    savedBy: [],
+                  }}
+                  variant="large"
+                  onPress={() => {}}
+                />
               </View>
             </>
           )}
@@ -692,16 +630,6 @@ const styles = StyleSheet.create({
     paddingTop: space[3],
     textAlignVertical: 'top',
   },
-
-  // Imagen picker
-  imagePicker: {
-    height: 160,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-  },
-  imagePreview: { width: '100%', height: '100%' },
-  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Chips de categoría — horizontal, 46px
   chipScroll: { flexGrow: 0, marginTop: 4 },
