@@ -413,7 +413,7 @@ function HomeHeader({ colors, navigation, unread, location }) {
         >
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
-            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
               {location || 'Costa Rica'}
             </Text>
             <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />
@@ -440,7 +440,7 @@ function HomeHeader({ colors, navigation, unread, location }) {
         accessibilityLabel="Crear evento"
       >
         <Ionicons name="add" size={15} color={colors['text.onAction']} />
-        <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
+        <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
           Crear
         </Text>
       </Pressable>

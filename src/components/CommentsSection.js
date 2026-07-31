@@ -205,9 +205,9 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         </TouchableOpacity>
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
-            <Text style={styles.commentUser}>{item.userName || item.name || 'Usuario'}</Text>
+            <Text style={[styles.commentUser, { color: colors['text.primary'] }]}>{item.userName || item.name || 'Usuario'}</Text>
             <View style={styles.commentHeaderRight}>
-              <Text style={styles.commentTime}>{formatDate(item.createdAt)}</Text>
+              <Text style={[styles.commentTime, { color: colors['text.tertiary'] }]}>{formatDate(item.createdAt)}</Text>
               {canDelete && (
                 <TouchableOpacity
                   onPress={() => handleDelete(item)}
@@ -329,13 +329,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   commentUser: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
   },
   commentTime: {
-    color: '#888',
-    fontSize: 12,
+    fontSize: 14,
   },
   deleteButton: {
     padding: 4,

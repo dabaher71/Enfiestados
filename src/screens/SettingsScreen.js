@@ -77,7 +77,7 @@ export default function SettingsScreen({ navigation }) {
           {label}
         </Text>
         {subtitle ? (
-          <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'], marginTop: 1 }}>
+          <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'], marginTop: 1 }}>
             {subtitle}
           </Text>
         ) : null}

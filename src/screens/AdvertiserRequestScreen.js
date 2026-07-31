@@ -119,7 +119,7 @@ export default function AdvertiserRequestScreen({ navigation }) {
                     ]}
                   >
                     <Text style={{
-                      fontSize: 13,
+                      fontSize: 14,
                       fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium',
                       color: active ? colors['text.onAction'] : colors['text.secondary'],
                     }}>
