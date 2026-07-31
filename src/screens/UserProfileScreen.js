@@ -20,6 +20,7 @@ import { auth, db } from '../config/firebase';
 import { getOrCreateChat } from '../services/chatService';
 import { subscribeToEvents } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
+import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 
@@ -67,6 +68,7 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleFollow = async () => {
+    if (!requireAccount(navigation, 'Creá una cuenta para seguir a otros usuarios.')) return;
     try {
       const userRef    = doc(db, 'users', userId);
       const currentRef = doc(db, 'users', currentUserId);
@@ -96,6 +98,7 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleMessage = async () => {
+    if (!requireAccount(navigation, 'Creá una cuenta para enviar mensajes.')) return;
     try {
       const chat = await getOrCreateChat(currentUserId, userId);
       navigation.navigate('ChatDetail', { chatId: chat.id, otherUserId: userId, otherUserName: user.name, otherUserAvatar: user.avatar });

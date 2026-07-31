@@ -1,6 +1,6 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../config/firebase';
@@ -31,11 +31,15 @@ import OrganizerPanelScreen from '../screens/OrganizerPanelScreen';
 import DevCatalogScreen from '../screens/DevCatalogScreen';
 
 const Stack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
 
 export default function AppNavigator() {
   const [user, setUser] = useState(undefined);      // undefined = cargando auth
   const [hasInterests, setHasInterests] = useState(undefined); // undefined = cargando Firestore
   const unsubscribeRef = useRef(null);
+  // null = todavía no sabemos; true/false = si el currentUser anterior era anónimo.
+  // Sirve para detectar la transición invitado → cuenta real (ver abajo).
+  const wasAnonymousRef = useRef(null);
 
   useEffect(() => {
     if (!auth) {
@@ -44,27 +48,49 @@ export default function AppNavigator() {
       return;
     }
     unsubscribeRef.current = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser ?? null);
-      if (currentUser) {
-        // Usuarios anónimos ("Ver eventos sin registrarse") van directo a MainApp
-        if (currentUser.isAnonymous) {
-          setHasInterests(true);
-          return;
-        }
-
-        updateDoc(doc(db, 'users', currentUser.uid), {
-          lastActive: serverTimestamp(),
-        }).catch(() => {});
-
+      if (!currentUser) {
+        // § 8a — sin muro de login: en vez de mostrar el formulario, se entra
+        // como invitado (Firebase Auth anónimo) directo al feed. Login/Register
+        // quedan para cuando el invitado intente guardar/asistir/comentar/etc.
+        // (ver requireAccount) o si esto falla (sin conexión).
         try {
-          const snap = await getDoc(doc(db, 'users', currentUser.uid));
-          const interests = snap.data()?.interests ?? [];
-          setHasInterests(interests.length > 0);
+          await signInAnonymously(auth);
         } catch {
+          setUser(null);
           setHasInterests(true);
         }
-      } else {
+        return; // signInAnonymously exitoso vuelve a disparar este callback
+      }
+
+      const wasAnonymous = wasAnonymousRef.current;
+      wasAnonymousRef.current = currentUser.isAnonymous;
+      setUser(currentUser);
+
+      if (currentUser.isAnonymous) {
         setHasInterests(true);
+        return;
+      }
+
+      updateDoc(doc(db, 'users', currentUser.uid), {
+        lastActive: serverTimestamp(),
+      }).catch(() => {});
+
+      let interests = [];
+      try {
+        const snap = await getDoc(doc(db, 'users', currentUser.uid));
+        interests = snap.data()?.interests ?? [];
+      } catch {}
+      setHasInterests(interests.length > 0);
+
+      // El invitado acaba de crear cuenta / iniciar sesión real: el Stack ya
+      // estaba montado en el árbol autenticado (mismo set de pantallas que
+      // cuando era anónimo), así que initialRouteName no se vuelve a evaluar.
+      // Hay que llevarlo a mano a MainApp o a Interests según corresponda.
+      if (wasAnonymous === true && navigationRef.isReady()) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: interests.length > 0 ? 'MainApp' : 'Interests' }],
+        });
       }
     });
     return () => unsubscribeRef.current?.();
@@ -77,7 +103,7 @@ export default function AppNavigator() {
 
   return (
     <ErrorBoundary>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <Stack.Navigator
           screenOptions={{ headerShown: false }}
           initialRouteName={user ? (hasInterests ? 'MainApp' : 'Interests') : 'Login'}
@@ -113,13 +139,14 @@ export default function AppNavigator() {
                 options={{ presentation: 'modal', gestureEnabled: true }}
               />
             </>
-          ) : (
-            <>
-              <Stack.Screen name="Login" component={LoginScreen} />
-              <Stack.Screen name="Register" component={RegisterScreen} />
-              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            </>
-          )}
+          ) : null}
+          {/* Login/Register/ForgotPassword: pantalla inicial si signInAnonymously
+              falla (sin red), y destino de "Crear cuenta" cuando un invitado
+              anónimo intenta guardar/asistir/comentar (ver requireAccount) —
+              por eso quedan registradas también dentro del árbol autenticado. */}
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </ErrorBoundary>

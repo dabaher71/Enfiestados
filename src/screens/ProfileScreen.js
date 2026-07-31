@@ -163,6 +163,32 @@ export default function ProfileScreen({ navigation }) {
     );
   }
 
+  // Invitado (§ 8a) — nunca tiene doc en users/, así que el perfil real
+  // (nombre, @handle, stats) no existe todavía. Mostrar la mochila vacía
+  // rompería (handle "@undefined", etc.); en su lugar, la puerta de entrada
+  // a crear cuenta — el resto de la app ya lo manda acá con requireAccount.
+  if (currentUser.isAnonymous) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+        <View style={styles.topBar}>
+          <Text variant="h2">Perfil</Text>
+        </View>
+        <EmptyState
+          icon={<Ionicons name="person-circle-outline" size={28} color={colors['text.tertiary']} />}
+          title="Todavía no tenés cuenta"
+          description="Creá una cuenta gratis para guardar eventos, organizar los tuyos y armar tu mochila."
+          actionLabel="Crear cuenta"
+          onAction={() => navigation.navigate('Register')}
+        />
+        <Pressable onPress={() => navigation.navigate('Login')} style={styles.guestLoginLink} accessibilityRole="link">
+          <Text variant="body" color="text.secondary" align="center">
+            ¿Ya tenés cuenta? <Text variant="bodyStrong" color="link">Iniciá sesión</Text>
+          </Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
   // Handle del usuario (primera parte del email o displayName como slug)
   const handle = user?.handle
     || (currentUser.displayName?.toLowerCase().replace(/\s+/g, '') )
@@ -443,6 +469,7 @@ const styles = StyleSheet.create({
     paddingVertical: space[4],
   },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  guestLoginLink: { paddingVertical: space[4], alignSelf: 'center' },
 
   // Portada — § 4.1: overlay semitransparente, NO banda sólida
   cover:        { height: 150, position: 'relative' },

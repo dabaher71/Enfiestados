@@ -25,6 +25,7 @@ import Text from '../components/ui/Text';
 import { auth, db, functions } from '../config/firebase';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { formatDaySeparator } from '../lib/format';
+import { requireAccount } from '../lib/requireAccount';
 import { fetchActiveAds } from '../services/adService';
 import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
 import { registerForPushNotifications } from '../services/pushNotificationService';
@@ -436,7 +437,10 @@ function HomeHeader({ colors, navigation, unread, location }) {
 
       {/* Botón "Crear" — amarillo con texto */}
       <Pressable
-        onPress={() => navigation.navigate('CreateEvent')}
+        onPress={() => {
+          if (!requireAccount(navigation, 'Creá una cuenta para organizar un evento.')) return;
+          navigation.navigate('CreateEvent');
+        }}
         style={[styles.createChip, { backgroundColor: colors['action.primary'] }]}
         hitSlop={4}
         accessibilityLabel="Crear evento"

@@ -17,6 +17,7 @@ import { showSnackbar } from '../components/ui/Snackbar';
 
 import { auth, db } from '../config/firebase';
 import { toggleSavedExternal } from '../services/externalEventService';
+import { requireAccount } from '../lib/requireAccount';
 import { safeOpenURL } from '../utils/security';
 import { formatDateLong, formatDaysUntil, formatDomain, formatTimeShort } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
@@ -94,6 +95,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
 
   const handleSave = async () => {
     if (!userId) return;
+    if (!requireAccount(navigation, 'Creá una cuenta para guardar este evento en Mis planes.')) return;
     const wasSaved = isSaved;
     setIsSaved(!wasSaved);
     try {

@@ -29,6 +29,7 @@ import { createNotification, NOTIFICATION_TYPES } from '../services/notification
 import { recordSignal } from '../services/signalService';
 import { safeOpenURL } from '../utils/security';
 import { formatDateLong, formatTimeShort } from '../lib/format';
+import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { elev, radius, space } from '../theme/tokens';
 
@@ -140,6 +141,7 @@ export default function EventDetailScreen({ route, navigation }) {
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleLike = async () => {
+    if (!requireAccount(navigation, 'Creá una cuenta para dar like a este evento.')) return;
     try {
       const newLikes = await toggleLike(event.id, userId);
       setLikes(newLikes);
@@ -157,6 +159,7 @@ export default function EventDetailScreen({ route, navigation }) {
   };
 
   const handleAttend = async () => {
+    if (!requireAccount(navigation, 'Creá una cuenta para confirmar tu asistencia.')) return;
     try {
       const newAttendees = await toggleAttendance(event.id, userId);
       setAttendees(newAttendees);
@@ -175,6 +178,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
   // Guardar/quitar de "Mis planes" — optimista, revierte con snackbar si falla
   const handleSave = async () => {
+    if (!requireAccount(navigation, 'Creá una cuenta para guardar este evento en Mis planes.')) return;
     const wasSaved = isSaved;
     setSavedBy(prev => wasSaved ? prev.filter(id => id !== userId) : [...prev, userId]);
     try {
