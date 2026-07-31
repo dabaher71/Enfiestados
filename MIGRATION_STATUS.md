@@ -11,9 +11,9 @@
 
 | Pantalla | Archivo | Estado | Nota |
 |---|---|---|---|
-| Inicio / feed | `screens/HomeScreen.js` | listo | Chips migrados a `Chip` (FIX_ROUND_4 § 2) |
-| Explorar (lista + mapa) | `screens/SearchScreen.js` | listo | Mapa con estilo claro/oscuro por tokens (§ 8) |
-| Detalle de evento propio | `screens/EventDetailScreen.js` | listo | Guardar, snackbar, navegación a Mis Planes corregida |
+| Inicio / feed | `screens/HomeScreen.js` | listo | FIX_ROUND_5: card grande (`EventCardLarge` variant="large") con carrusel, mitigaciones de densidad § 3 (chips y header se compactan al scrollear) |
+| Explorar (lista + mapa) | `screens/SearchScreen.js` | listo | FIX_ROUND_5 § 4: lista usa `EventCardLarge` variant="compact". Mapa con estilo claro/oscuro por tokens (§ 8) |
+| Detalle de evento propio | `screens/EventDetailScreen.js` | listo | FIX_ROUND_5: hero con `MediaCarousel`. Guardar, snackbar, navegación a Mis Planes corregida |
 | Detalle de evento importado | `screens/ExternalEventDetailScreen.js` | listo | Bug de layout (botones tapados) y guardado de importados arreglados |
 | Mis planes | `screens/MyPlansScreen.js` | listo | Ticket con contraste AA (§ 7), guarda nativos + importados |
 | Perfil propio "Mi mochila" | `screens/ProfileScreen.js` | listo | § 4.4 "Tu próximo plan" implementado |
@@ -23,9 +23,9 @@
 | Config. de alertas | `screens/NotificationsSettingsScreen.js` | listo | |
 | Mensajes (lista chats) | `screens/MessagesScreen.js` | listo | Bug real corregido: no resolvía nombre/avatar del otro participante (esos campos no existen en el doc de chat), toda fila mostraba "Usuario" y avatar vacío. `ChatsScreen.js` (duplicado sin uso, nada navegaba a él) borrado. |
 | Chat | `screens/ChatDetailScreen.js` | listo | Verificado con datos reales: burbujas agrupadas, separador por día, tarjeta de evento compartido, no leído |
-| Crear evento | `screens/CreateEventScreen.js` | listo | Wizard 3 pasos, `themeVariant` corregido |
-| Editar evento | `screens/EditEventScreen.js` | listo | Migrado completo ronda 3 sesión final |
-| Crear publicación | `screens/CreatePostScreen.js` | parcial | Tokens ok; no re-auditada a fondo esta ronda |
+| Crear evento | `screens/CreateEventScreen.js` | listo | Wizard 3 pasos. FIX_ROUND_5 § 5: paso 1 sube varias imágenes (`ImageGridPicker`, hasta 10, reordenables) |
+| Editar evento | `screens/EditEventScreen.js` | listo | FIX_ROUND_5 § 5: mismo `ImageGridPicker` que crear evento |
+| Crear publicación | `screens/CreatePostScreen.js` | parcial | Tokens ok; sigue con una sola imagen (no se tocó esta ronda). No re-auditada a fondo |
 | Configuración | `screens/SettingsScreen.js` | listo | Cápsula `rgba(255,255,255,.07)` corregida (§ 10.1) |
 | Login | `screens/LoginScreen.js` | listo | Ya no es un muro: al abrir la app sin sesión se entra directo como invitado (Firebase Auth anónimo) al feed real, sin pasar por esta pantalla |
 | Registro | `screens/RegisterScreen.js` | listo | |
@@ -45,7 +45,9 @@
 
 ## 2. Componentes reutilizables — `src/components/ui/`
 
-Los 19+ componentes del design system existen y están en uso real: `Avatar`, `Button`, `Chip`, `EmptyState`, `EventRow`, `Input` (+ `TextArea`, `SearchField`), `MetaRow`, `SegmentedControl` (+ `UnderlineTabs`), `Sheet`, `Skeleton` (+ `SkeletonEventRow`, `SkeletonList`), `Snackbar`, `StatusBadge`, `Text`.
+Los componentes del design system existen y están en uso real: `Avatar`, `Button`, `Chip`, `EmptyState`, `EventRow`, `Input` (+ `TextArea`, `SearchField`), `MetaRow`, `SegmentedControl` (+ `UnderlineTabs`), `Sheet`, `Skeleton` (+ `SkeletonEventRow`, `SkeletonList`), `Snackbar`, `StatusBadge`, `Text`.
+
+**FIX_ROUND_5** — tres componentes nuevos: `MediaCarousel` (carrusel de imágenes, compartido por `EventCardLarge`, `EventDetailScreen` y `PostDetailModal`), `EventCardLarge` (card grande de Inicio/Explorar, variants `large`/`compact` — reemplaza a `EventRow` SOLO ahí, `EventRow` sigue viva en Mis planes/Perfil/Búsqueda), `ImageGridPicker` (subida múltiple con reorden, compartido por Crear y Editar evento).
 
 No hay componentes del design system pendientes de crear.
 
@@ -82,6 +84,7 @@ Antes de dar estos por migrados: `grep -rn "#[0-9A-Fa-f]\{6\}" src/components/<a
 - [x] Confirmar contenido real de Alertas (mockup `10a`) — verificado con datos reales
 - [x] Confirmar contenido real de Mensajes/Chat (mockups `10b`/`10c`) — verificado con datos reales, bug de nombre/avatar corregido
 - [ ] Auditar hex hardcodeado en `CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`
+- [ ] FIX_ROUND_5: card grande + carrusel construidos y verificados por código (lectura del componente, no por correr la app — no hubo simulador/dispositivo esta sesión). Pendiente confirmar en dispositivo real: el swipe horizontal del carrusel no le gana el scroll vertical al feed, el drag-to-reorder de `ImageGridPicker` no choca con el `ScrollView` que lo contiene, y los dos temas (claro/oscuro) se ven bien
 
 ## 5. Sin muro de login (`8a`) — cómo funciona
 
