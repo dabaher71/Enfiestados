@@ -1,6 +1,13 @@
 // Utilidades de formato — fuente única de verdad para fechas y precios.
 // Ninguna pantalla debe formatear fechas por su cuenta (§ 3 del design system).
 
+// Normaliza createdAt: llega como Firestore Timestamp real (escrito por
+// Cloud Functions, ej. serverTimestamp()) o como string ISO (escrito por
+// el cliente). new Date(Timestamp) no parsea → "Invalid Date" si no se
+// distingue. Usar SIEMPRE esto en vez de new Date(campo) directo sobre
+// createdAt/lastMessageTime de Firestore.
+export const toDate = (v) => (v?.toDate ? v.toDate() : new Date(v));
+
 const DAYS_ES      = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const DAYS_FULL_ES = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const MONTHS_ES    = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];

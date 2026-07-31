@@ -20,6 +20,7 @@ import { UnderlineTabs } from '../components/ui/SegmentedControl';
 
 import { auth, db } from '../config/firebase';
 import { createNotification, deleteNotification, markAllAsRead, markAsRead, NOTIFICATION_TYPES, subscribeToNotifications } from '../services/notificationService';
+import { toDate } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
@@ -42,11 +43,6 @@ function getNotifIcon(type, colors) {
     default:                                 return { name: 'notifications',         color: colors['text.tertiary'] };
   }
 }
-
-// createdAt puede llegar como Firestore Timestamp (suscripción en vivo) o
-// como string ISO (notificaciones sembradas a mano) — normalizar acá una
-// sola vez evita el "Invalid Date" cuando new Date(Timestamp) no parsea.
-const toDate = (v) => (v?.toDate ? v.toDate() : new Date(v));
 
 function formatRelTime(dateStr) {
   if (!dateStr) return '';

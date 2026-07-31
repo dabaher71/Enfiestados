@@ -9,13 +9,14 @@ import PostDetailModal from './PostDetailModal';
 import Avatar from './ui/Avatar';
 import ReportModal from './ReportModal';
 import Text from './ui/Text';
+import { toDate } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
 // "hace 2 h" · "hace 5 meses" · "hace 3 años" — nunca "157d"
 function timeAgo(date) {
   if (!date) return '';
-  const postDate = date.toDate ? date.toDate() : new Date(date);
+  const postDate = toDate(date);
   const diff = Math.floor((Date.now() - postDate) / 1000);
   if (diff < 60)       return 'Ahora';
   if (diff < 3600)     return `hace ${Math.floor(diff / 60)} min`;
