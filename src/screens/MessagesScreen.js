@@ -95,7 +95,7 @@ export default function MessagesScreen({ navigation }) {
           title="Sin conversaciones"
           description="Cuando compartás un evento con alguien, la charla aparece acá."
           actionLabel="Explorar eventos"
-          onAction={() => navigation.navigate('Home')}
+          onAction={() => navigation.navigate('MainApp', { screen: 'Home' })}
         />
       ) : (
         <FlatList
