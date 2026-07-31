@@ -100,6 +100,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
           <Pressable
             onPress={() => setShowMenu(v => !v)}
             style={styles.menuBtn}
+            hitSlop={4}
             accessibilityLabel="Más opciones"
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={colors['text.tertiary']} />

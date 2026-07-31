@@ -108,6 +108,7 @@ export default function AdvertiserRequestScreen({ navigation }) {
                   <Pressable
                     key={type}
                     onPress={() => setBusinessType(type)}
+                    hitSlop={1}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: active }}
                     style={[

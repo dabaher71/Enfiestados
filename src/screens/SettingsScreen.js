@@ -127,6 +127,7 @@ export default function SettingsScreen({ navigation }) {
                 <Pressable
                   key={opt.value}
                   onPress={() => setThemeMode(opt.value)}
+                  hitSlop={4}
                   style={[
                     styles.themeBtn,
                     mode === opt.value && { backgroundColor: colors['action.primary'] },

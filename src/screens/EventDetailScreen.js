@@ -270,6 +270,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <Pressable
               style={[styles.heroBtn, { top: space[3] + insets.top, left: space[4] }]}
               onPress={() => navigation.goBack()}
+              hitSlop={2}
               accessibilityLabel="Volver"
             >
               <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -279,6 +280,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <Pressable
               style={[styles.heroBtn, { top: space[3] + insets.top, right: space[4] + 40 + space[2] }]}
               onPress={handleSave}
+              hitSlop={2}
               accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar en Mis planes'}
               accessibilityRole="button"
             >
@@ -289,6 +291,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <Pressable
               style={[styles.heroBtn, { top: space[3] + insets.top, right: space[4] }]}
               onPress={() => setShowOptions(v => !v)}
+              hitSlop={2}
               accessibilityLabel="Opciones"
             >
               <Ionicons name="ellipsis-vertical" size={22} color="#fff" />

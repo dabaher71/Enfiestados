@@ -425,6 +425,7 @@ function HomeHeader({ colors, navigation, unread, location }) {
       <Pressable
         onPress={() => navigation.navigate('Messages')}
         style={styles.iconBtn}
+        hitSlop={2}
         accessibilityLabel="Mensajes"
       >
         <Ionicons name="chatbubble-outline" size={22} color={colors['text.primary']} />
@@ -437,6 +438,7 @@ function HomeHeader({ colors, navigation, unread, location }) {
       <Pressable
         onPress={() => navigation.navigate('CreateEvent')}
         style={[styles.createChip, { backgroundColor: colors['action.primary'] }]}
+        hitSlop={4}
         accessibilityLabel="Crear evento"
       >
         <Ionicons name="add" size={15} color={colors['text.onAction']} />

@@ -200,6 +200,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         <TouchableOpacity
           onPress={() => commentUserId && onUserPress?.(commentUserId)}
           activeOpacity={0.8}
+          hitSlop={4}
         >
           <Avatar uri={item.userAvatar} name={item.userName} size={36} style={styles.commentAvatar} />
         </TouchableOpacity>

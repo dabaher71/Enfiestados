@@ -44,7 +44,7 @@ export function normalizeExternalEvent(id, data) {
   return {
     id,
     _isExternal: true,
-    // Campos que usa ExternalEventSearchCard y ExternalEventCard
+    // Campos que usa EventRow / ExternalEventDetailScreen
     title:        data.title        || '',
     imageUrl:     data.imageUrl     || '',
     dateText:     data.dateText     || '',

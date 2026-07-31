@@ -114,6 +114,7 @@ export default function CreateAdScreen({ navigation }) {
   const Chip = ({ label, active, onPress }) => (
     <Pressable
       onPress={onPress}
+      hitSlop={1}
       accessibilityRole="radio"
       accessibilityState={{ checked: active }}
       style={[styles.chip, { backgroundColor: active ? colors['action.primary'] : colors['bg.surface'], borderColor: active ? colors['action.primary'] : colors['border.strong'] }]}

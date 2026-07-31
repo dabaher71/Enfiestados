@@ -165,6 +165,7 @@ export default function UserProfileScreen({ route, navigation }) {
           <Pressable
             onPress={() => navigation.goBack()}
             style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
+            hitSlop={2}
             accessibilityLabel="Volver"
           >
             <Ionicons name="arrow-back" size={22} color="#fff" />
