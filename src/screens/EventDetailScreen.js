@@ -3,11 +3,10 @@
 // PRESENTACIÓN: diseño 4a/4b — bloque único de datos, CTA amarillo, sin ceros, sin tilde faltante.
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { Image } from 'expo-image';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, FlatList, KeyboardAvoidingView, Platform, Pressable,
+  Alert, Dimensions, FlatList, KeyboardAvoidingView, Platform, Pressable,
   ScrollView, Share, StyleSheet, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +16,7 @@ import CommentsSection from '../components/CommentsSection';
 import ImageViewerModal from '../components/ImageViewerModal';
 import ReportModal from '../components/ReportModal';
 import Avatar from '../components/ui/Avatar';
+import MediaCarousel from '../components/ui/MediaCarousel';
 import StatusBadge from '../components/ui/StatusBadge';
 import Text from '../components/ui/Text';
 import Sheet from '../components/ui/Sheet';
@@ -28,10 +28,14 @@ import { deleteEvent, toggleAttendance, toggleLike, toggleSaved } from '../servi
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
 import { safeOpenURL } from '../utils/security';
-import { formatDateLong, formatTimeShort } from '../lib/format';
+import { formatDateLong, formatTimeShort, getImages } from '../lib/format';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { elev, radius, space } from '../theme/tokens';
+
+// El hero medía 260px de alto a ancho completo — MediaCarousel trabaja con
+// aspectRatio, no con alto fijo, así que se deriva uno equivalente.
+const HERO_ASPECT = Dimensions.get('window').width / 260;
 
 // ─── MetaRow con ícono en cápsula ────────────────────────────────────────────
 
@@ -73,6 +77,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [showShare,      setShowShare]      = useState(false);
   const [showReport,     setShowReport]     = useState(false);
   const [showImgViewer,  setShowImgViewer]  = useState(false);
+  const [heroIndex,      setHeroIndex]      = useState(0);
   const [chats,          setChats]          = useState([]);
   const [loadingChats,   setLoadingChats]   = useState(false);
   const [organizerAvatar,setOrganizerAvatar]= useState(event.organizerAvatar || '');
@@ -89,6 +94,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const isOrganizer= userId === event.organizerId;
   const hasLocation= !!(event.location?.lat && event.location?.lng && event.location.lat !== 0);
   const eventLink  = `https://enfiestados.app/evento/${event.id}`;
+  const images     = getImages(event);
 
   // Datos formateados
   const dateLabel  = formatDateLong(event.date);
@@ -258,15 +264,13 @@ export default function EventDetailScreen({ route, navigation }) {
 
           {/* ── HERO ─────────────────────────────────────────────────────── */}
           <View style={styles.hero}>
-            <Pressable onPress={() => event.image && setShowImgViewer(true)} activeOpacity={0.9}>
-              {event.image ? (
-                <Image source={{ uri: event.image }} style={styles.heroImg} contentFit="cover" transition={200} />
-              ) : (
-                <View style={[styles.heroImg, styles.heroPlaceholder, { backgroundColor: colors['bg.surface'] }]}>
-                  <Ionicons name="image-outline" size={40} color={colors['text.tertiary']} />
-                </View>
-              )}
-            </Pressable>
+            <MediaCarousel
+              images={images}
+              aspectRatio={HERO_ASPECT}
+              onPress={() => images.length > 0 && setShowImgViewer(true)}
+              onIndexChange={setHeroIndex}
+              labelPrefix={event.title ? `del evento ${event.title}` : ''}
+            />
             {/* Gradiente superior para que la barra de estado sea legible (§ 1.3) */}
             <View style={[styles.heroTopGradient, { height: insets.top + 60 }]} pointerEvents="none" />
 
@@ -606,7 +610,7 @@ export default function EventDetailScreen({ route, navigation }) {
       </Sheet>
 
       <ReportModal visible={showReport} onClose={() => setShowReport(false)} targetType="event" targetId={event.id} />
-      <ImageViewerModal uri={event.image} visible={showImgViewer} onClose={() => setShowImgViewer(false)} />
+      <ImageViewerModal uri={images[heroIndex]} visible={showImgViewer} onClose={() => setShowImgViewer(false)} />
     </View>
   );
 }
@@ -616,8 +620,6 @@ const styles = StyleSheet.create({
 
   // Hero
   hero: { position: 'relative' },
-  heroImg: { width: '100%', height: 260 },
-  heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   // Overlay superior para legibilidad de status bar (§ 1.3)
   // Simula gradiente: oscuro arriba, transparente abajo
   heroTopGradient: {
