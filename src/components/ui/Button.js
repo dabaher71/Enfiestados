@@ -49,7 +49,9 @@ export default function Button({
   };
 
   const variantStyle = getVariantStyle(variant, colors, disabled);
-  const height = SIZE_H[size] ?? SIZE_H.md;
+  // size también acepta un número — FIX_ROUND_5 § 4: variant="compact" de
+  // EventCardLarge necesita 46, que no es ninguno de los tamaños con nombre.
+  const height = typeof size === 'number' ? size : (SIZE_H[size] ?? SIZE_H.md);
   const isIcon = variant === 'icon' || size === 'icon';
 
   return (

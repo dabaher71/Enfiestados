@@ -54,11 +54,31 @@ export function formatRelative(rawDate) {
   return formatEventDate(rawDate);
 }
 
+// { day, month } para el badge de fecha de EventCardLarge — "19" / "AGO"
+export function formatDateBadge(rawDate) {
+  const d = parseEventDate(rawDate);
+  if (!d) return null;
+  return { day: d.getDate(), month: MONTHS_ES[d.getMonth()].toUpperCase() };
+}
+
 // "₡8.000" | "Gratis" | "Desde ₡12.000"
 export function formatPrice(price, isFree, prefix) {
   if (isFree || price === 0) return 'Gratis';
   const formatted = `₡${Number(price).toLocaleString('es-CR')}`;
   return prefix ? `Desde ${formatted}` : formatted;
+}
+
+// "Hoy · 8:00 pm" si es hoy; si no, "Sáb 8 ago · 8:00 pm" (formatEventDate).
+// FIX_ROUND_5 § 1 — fila de fecha de EventCardLarge.
+export function formatCardDate(rawDate, rawTime) {
+  const d = parseEventDate(rawDate);
+  if (!d) return rawDate ?? '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (d.toDateString() === today.toDateString()) {
+    const time = rawTime ? ` · ${formatTime12(rawTime)}` : '';
+    return `Hoy${time}`;
+  }
+  return formatEventDate(rawDate, rawTime);
 }
 
 // "1:37 pm" desde "13:37" o "1:37 PM"
@@ -84,6 +104,16 @@ export function formatDaysUntil(rawDate) {
   if (diff === 0) return 'Hoy';
   if (diff === 1) return 'Mañana';
   return `faltan ${diff} días`;
+}
+
+// getImages — FIX_ROUND_5 § 6. Lectura retrocompatible del carrusel de un
+// evento: usa images[] si existe: si no, cae al campo de una sola imagen
+// (nativos escriben 'image', importados escriben 'imageUrl'). Un solo
+// helper — no repartir el ?.length ? por las pantallas.
+export function getImages(ev) {
+  if (ev?.images?.length) return ev.images;
+  const single = ev?.imageUrl || ev?.image;
+  return single ? [single] : [];
 }
 
 // Extrae dominio legible de una URL: "smarticket.net"
