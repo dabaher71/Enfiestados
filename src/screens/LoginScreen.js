@@ -56,7 +56,10 @@ export default function LoginScreen({ navigation }) {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
-      await signInWithGoogle();
+      const { mergedWithExisting } = await signInWithGoogle();
+      if (mergedWithExisting) {
+        Alert.alert('Ya tenés una cuenta', 'Ya existía una cuenta con esa cuenta de Google. Entramos con esa.');
+      }
     } catch (error) {
       if (error.code !== 'SIGN_IN_CANCELLED') {
         Alert.alert('Error', 'No se pudo iniciar sesión con Google. Intentá de nuevo.');

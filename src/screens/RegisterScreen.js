@@ -2,7 +2,10 @@
 // LÓGICA INTACTA: Firebase Auth, Firestore profile, email verification, Google.
 // PRESENTACIÓN: design system v1.1 — Input, Button, tokens.
 import { Ionicons } from '@expo/vector-icons';
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword, EmailAuthProvider, linkWithCredential,
+  sendEmailVerification, signInWithEmailAndPassword, updateProfile,
+} from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -23,8 +26,25 @@ function getFriendlyError(code) {
     case 'auth/weak-password':          return 'La contraseña es muy débil. Usá al menos 6 caracteres';
     case 'auth/network-request-failed': return 'Sin conexión. Verificá tu red e intentá de nuevo';
     case 'auth/too-many-requests':      return 'Demasiados intentos. Esperá unos minutos';
+    // Ya existe una cuenta con ese correo y la contraseña que escribió no es
+    // la de esa cuenta (pasa después de intentar el link → sign-in de abajo).
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':     return 'Ya existe una cuenta con ese correo, pero la contraseña no coincide. ¿Olvidaste tu contraseña?';
     default:                            return 'Ocurrió un error inesperado. Intentá de nuevo';
   }
+}
+
+// Perfil que espera el resto de la app (Profile, EditProfile, etc.) — el
+// mismo shape tanto si el uid es nuevo como si viene de un link de invitado.
+function newProfileDoc(user, trimName, trimEmail) {
+  return {
+    uid: user.uid, name: trimName, email: trimEmail,
+    avatar: user.photoURL ?? '', coverImage: '', bio: '', location: '',
+    interests: [], followers: [], following: [], followRequests: [],
+    eventsOrganized: [], eventsAttending: [],
+    perfilPublico: true, verificado: false, usuariosBloqueados: [],
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  };
 }
 
 export default function RegisterScreen({ navigation }) {
@@ -59,18 +79,40 @@ export default function RegisterScreen({ navigation }) {
     setErrors({});
     setLoading(true);
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, trimEmail, password);
-      await updateProfile(user, { displayName: trimName });
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid, name: trimName, email: trimEmail,
-        avatar: '', coverImage: '', bio: '', location: '',
-        interests: [], followers: [], following: [], followRequests: [],
-        eventsOrganized: [], eventsAttending: [],
-        perfilPublico: true, verificado: false, usuariosBloqueados: [],
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      });
-      await sendEmailVerification(user);
-      Alert.alert('¡Cuenta creada!', `Hola ${trimName}, te enviamos un correo de verificación. Revisá tu bandeja antes de iniciar sesión.`);
+      // Invitado (§ 8a) creando cuenta real: linkWithCredential conserva el
+      // uid anónimo — así los eventos que ya guardó/confirmó como invitado
+      // (savedBy/attendees quedaron escritos con ESE uid) no se pierden.
+      // createUserWithEmailAndPassword crearía un uid nuevo y los huerfanaría.
+      const anonUser = auth.currentUser?.isAnonymous ? auth.currentUser : null;
+      let user;
+      let mergedIntoExisting = false;
+
+      if (anonUser) {
+        try {
+          const cred = EmailAuthProvider.credential(trimEmail, password);
+          user = (await linkWithCredential(anonUser, cred)).user;
+        } catch (e) {
+          if (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use') {
+            // Ya hay una cuenta real con ese correo — entramos con esa. Los
+            // datos de la sesión de invitado se descartan, pero avisando.
+            user = (await signInWithEmailAndPassword(auth, trimEmail, password)).user;
+            mergedIntoExisting = true;
+          } else {
+            throw e;
+          }
+        }
+      } else {
+        user = (await createUserWithEmailAndPassword(auth, trimEmail, password)).user;
+      }
+
+      if (mergedIntoExisting) {
+        Alert.alert('Ya tenés una cuenta', `Ya existía una cuenta con ${trimEmail}. Entramos con esa.`);
+      } else {
+        await updateProfile(user, { displayName: trimName });
+        await setDoc(doc(db, 'users', user.uid), newProfileDoc(user, trimName, trimEmail));
+        await sendEmailVerification(user);
+        Alert.alert('¡Cuenta creada!', `Hola ${trimName}, te enviamos un correo de verificación. Revisá tu bandeja antes de iniciar sesión.`);
+      }
     } catch (e) {
       setError('email', getFriendlyError(e.code));
     }
@@ -79,7 +121,12 @@ export default function RegisterScreen({ navigation }) {
 
   const handleGoogle = async () => {
     setGoogleLoading(true);
-    try { await signInWithGoogle(); }
+    try {
+      const { mergedWithExisting } = await signInWithGoogle();
+      if (mergedWithExisting) {
+        Alert.alert('Ya tenés una cuenta', 'Ya existía una cuenta con esa cuenta de Google. Entramos con esa.');
+      }
+    }
     catch (e) { if (e.code !== 'SIGN_IN_CANCELLED') Alert.alert('Error', 'No se pudo continuar con Google.'); }
     setGoogleLoading(false);
   };
