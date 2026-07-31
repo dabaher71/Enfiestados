@@ -1,5 +1,6 @@
 // PostDetailModal — § 19a: detalle de publicación con tokens, tiempo relativo, stats legibles.
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { memo, useCallback, useState } from 'react';
 import { Image } from 'expo-image';
 import {
@@ -11,6 +12,7 @@ import Avatar from './ui/Avatar';
 import ReportModal from './ReportModal';
 import Text from './ui/Text';
 import { toDate } from '../lib/format';
+import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
@@ -29,6 +31,7 @@ function timeAgo(date) {
 
 function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComment, onDelete, onUserPress }) {
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const [commentText,    setCommentText]    = useState('');
   const [showReport,     setShowReport]     = useState(false);
   const [showImageViewer,setShowImageViewer]= useState(false);
@@ -49,11 +52,15 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
 
   const handleComment = useCallback(() => {
     if (!commentText.trim()) return;
+    if (!requireAccount(navigation, 'Creá una cuenta para comentar.')) return;
     onComment?.(post.id, commentText.trim());
     setCommentText('');
-  }, [commentText, post?.id, onComment]);
+  }, [navigation, commentText, post?.id, onComment]);
 
-  const handleLike = useCallback(() => onLike?.(post.id), [post?.id, onLike]);
+  const handleLike = useCallback(() => {
+    if (!requireAccount(navigation, 'Creá una cuenta para dar like.')) return;
+    onLike?.(post.id);
+  }, [navigation, post?.id, onLike]);
   const handleUserPress = useCallback(() => { onClose(); onUserPress?.(post.userId); }, [post?.userId, onUserPress, onClose]);
 
   if (!post) return null;

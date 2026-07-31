@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
@@ -18,6 +19,7 @@ import { addComment, deleteComment } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
 import { toDate } from '../lib/format';
+import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 
 const MAX_COMMENT_LENGTH = 500;
@@ -25,6 +27,7 @@ const COMMENT_COOLDOWN_MS = 5000;
 
 export default function CommentsSection({ eventId, comments: initialComments, organizerId, event, onUserPress }) {
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const [comments, setComments] = useState(initialComments || []);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -97,6 +100,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
 
   const handleSubmit = async () => {
     if (!newComment.trim()) return;
+    if (!requireAccount(navigation, 'Creá una cuenta para comentar.')) return;
 
     const now = Date.now();
     if (now - lastCommentTime.current < COMMENT_COOLDOWN_MS) {

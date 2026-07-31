@@ -2,6 +2,7 @@
 // FIX_ROUND_1 § 5.5: text.primary para nombre, tiempo relativo humano,
 // stats ocultos cuando son 0, eliminar detrás del "···", bg.surface + radius.lg.
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { memo, useCallback, useState } from 'react';
 import { Image } from 'expo-image';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -10,6 +11,7 @@ import Avatar from './ui/Avatar';
 import ReportModal from './ReportModal';
 import Text from './ui/Text';
 import { toDate } from '../lib/format';
+import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
@@ -28,6 +30,7 @@ function timeAgo(date) {
 
 function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPress }) {
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const [showComments, setShowComments] = useState(false);
   const [commentText,  setCommentText]  = useState('');
   const [showReport,   setShowReport]   = useState(false);
@@ -47,11 +50,17 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
     ]);
   }, [post.id, onDelete]);
 
+  const handleLike = useCallback(() => {
+    if (!requireAccount(navigation, 'Creá una cuenta para dar like.')) return;
+    onLike?.(post.id);
+  }, [navigation, post.id, onLike]);
+
   const handleComment = useCallback(() => {
     if (!commentText.trim()) return;
+    if (!requireAccount(navigation, 'Creá una cuenta para comentar.')) return;
     onComment?.(post.id, commentText.trim());
     setCommentText('');
-  }, [commentText, post.id, onComment]);
+  }, [navigation, commentText, post.id, onComment]);
 
   return (
     <Pressable
@@ -131,7 +140,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
 
         {/* Acciones — stats solo si > 0 */}
         <View style={[styles.actions, { borderTopColor: colors['border.subtle'] }]}>
-          <Pressable style={styles.actionBtn} onPress={() => onLike?.(post.id)} accessibilityRole="button" accessibilityLabel={isLiked ? 'Quitar like' : 'Dar like'}>
+          <Pressable style={styles.actionBtn} onPress={handleLike} accessibilityRole="button" accessibilityLabel={isLiked ? 'Quitar like' : 'Dar like'}>
             <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={20} color={isLiked ? colors['status.urgent'] : colors['text.tertiary']} />
             {likeCount > 0 && (
               <Text variant="caption" style={{ color: isLiked ? colors['status.urgent'] : colors['text.tertiary'], marginLeft: 4 }}>
