@@ -360,7 +360,7 @@ export default function SearchScreen({ navigation }) {
       </View>
 
       {/* ── SEGMENTED CON TEXTO "Lista | Mapa" ──────────────────────────── */}
-      <View style={[styles.segRow, { flexShrink: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : colors['bg.surface'] }]}>
+      <View style={[styles.segRow, { flexShrink: 0, backgroundColor: colors['bg.track'] }]}>
         {[
           { value: 'list', icon: 'list-outline',    label: 'Lista' },
           { value: 'map',  icon: 'map-outline',     label: 'Mapa'  },
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // SegmentedControl con texto — backgroundColor se aplica inline (isDark)
+  // SegmentedControl con texto — backgroundColor se aplica inline (bg.track)
   segRow: {
     flexDirection: 'row',
     marginHorizontal: space[5],

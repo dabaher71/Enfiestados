@@ -17,7 +17,7 @@ export function SegmentedControl({ options, selected, onSelect }) {
 
   return (
     <View style={[styles.container, {
-      backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : colors['bg.surface'],
+      backgroundColor: colors['bg.track'],
     }]}>
       {options.map(opt => {
         const isActive = opt.value === selected;
