@@ -351,7 +351,7 @@ export default function SearchScreen({ navigation }) {
           />
           {activeFilterCount > 0 && (
             <View style={[styles.filterBadge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]}>
-              <Text style={{ fontSize: 9, fontFamily: 'PlusJakartaSans_700Bold', color: '#fff' }}>
+              <Text variant="badgeNum" style={{ color: '#fff' }}>
                 {activeFilterCount}
               </Text>
             </View>
@@ -603,9 +603,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',

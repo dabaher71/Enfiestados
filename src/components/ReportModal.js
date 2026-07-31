@@ -89,7 +89,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
               </View>
               <Text
                 variant="body"
-                style={{ flex: 1, color: isSelected ? '#7A5500' : colors['text.primary'] }}
+                style={{ flex: 1, color: isSelected ? colors['text.onAction'] : colors['text.primary'] }}
               >
                 {reason.label}
               </Text>

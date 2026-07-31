@@ -49,7 +49,7 @@ export function SegmentedControl({ options, selected, onSelect }) {
             </Text>
             {opt.badge > 0 && (
               <View style={[styles.segmentBadge, { backgroundColor: colors['status.urgent'] }]}>
-                <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_700Bold', color: '#fff' }}>
+                <Text variant="badgeNum" style={{ color: '#fff' }}>
                   {opt.badge}
                 </Text>
               </View>
