@@ -7,7 +7,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Pressable, RefreshControl, SectionList,
+  Animated, Pressable, RefreshControl, SectionList,
   ScrollView, StyleSheet, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +17,7 @@ import NativeAdCard from '../components/NativeAdCard';
 import Button from '../components/ui/Button';
 import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
-import EventRow from '../components/ui/EventRow';
+import EventCardLarge from '../components/ui/EventCardLarge';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { SkeletonEventRow, SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
@@ -123,6 +123,13 @@ const FILTERS = [
   { label: t.home.filters.free,    value: 'free' },
 ];
 
+// Alto natural de la fila de chips (paddingVertical space[3]*2 + Chip 44px) —
+// § 3.2: la Animated.View que la envuelve necesita un alto de arranque fijo.
+const CHIPS_ROW_HEIGHT = 68;
+
+// Fallback de HomeHeader cuando no hay scroll que compactarlo (loading/error).
+const STATIC_ZERO = new Animated.Value(0);
+
 // ─── DaySeparator — sticky, fondo opaco ──────────────────────────────────────
 
 function DaySeparator({ section }) {
@@ -166,11 +173,41 @@ export default function HomeScreen({ navigation }) {
   const [hiddenIds,      setHiddenIds]      = useState(new Set());
   const [internalAds,    setInternalAds]    = useState([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [savedExternalIds, setSavedExternalIds] = useState(new Set());
 
   const visibleSinceRef   = useRef({});
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
   const userId = auth.currentUser?.uid;
   const { data: externalEvents } = useExternalEvents();
+
+  // § 3.2/3.3 — mitigaciones de densidad de la card grande: header y chips
+  // se compactan al pasar los primeros 80px y vuelven al hacer scroll hacia
+  // arriba. El índice se decide por dirección (dy), no solo por posición.
+  const [chromeCollapsed, setChromeCollapsed] = useState(false);
+  const chromeCollapsedRef = useRef(false);
+  const collapseAnim = useRef(new Animated.Value(0)).current;
+  const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    Animated.timing(collapseAnim, {
+      toValue: chromeCollapsed ? 1 : 0,
+      duration: 180,
+      useNativeDriver: false, // anima height/padding, no soporta el driver nativo
+    }).start();
+  }, [chromeCollapsed, collapseAnim]);
+
+  const handleFeedScroll = useCallback((e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const dy = y - lastScrollYRef.current;
+    if (y > 80 && dy > 2 && !chromeCollapsedRef.current) {
+      chromeCollapsedRef.current = true;
+      setChromeCollapsed(true);
+    } else if (dy < -2 && chromeCollapsedRef.current) {
+      chromeCollapsedRef.current = false;
+      setChromeCollapsed(false);
+    }
+    lastScrollYRef.current = y;
+  }, []);
 
   useEffect(() => {
     loadUserFollowing();
@@ -198,6 +235,7 @@ export default function HomeScreen({ navigation }) {
         setInterestVector(data.interestVector || {});
         setUserInterests(data.interests || []);
         setUserLocation(data.location || '');
+        setSavedExternalIds(new Set(data.savedExternalIds || []));
         const ads = await fetchActiveAds({ province: data.location, interests: data.interests });
         setInternalAds(ads);
       }
@@ -292,13 +330,14 @@ export default function HomeScreen({ navigation }) {
     // Eventos externos → sheet dedicado. Eventos nativos → detalle de la app.
     const route = item._isExternal ? 'ExternalEventDetail' : 'EventDetail';
     return (
-      <EventRow
+      <EventCardLarge
         event={item}
-        trailing="auto"
+        variant="large"
+        savedExternalIds={savedExternalIds}
         onPress={() => navigation.navigate(route, { event: item })}
       />
     );
-  }, [navigation]);
+  }, [navigation, savedExternalIds]);
 
   const renderSectionHeader = useCallback(({ section }) => (
     <DaySeparator section={section} />
@@ -351,14 +390,22 @@ export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
 
-      {/* 1 · HEADER — flexShrink 0 */}
-      <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} />
+      {/* 1 · HEADER — flexShrink 0, se compacta a 44px al scrollear (§ 3.3) */}
+      <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} collapseAnim={collapseAnim} />
 
       {/* 2 · SEGMENTED — flexShrink 0 */}
       <HomeTabs activeTab={activeTab} onSelect={setActiveTab} />
 
-      {/* 3 · CHIPS — flexShrink 0, chips de 42px */}
-      <HomeChips active={timeFilter} onSelect={f => setTimeFilter(prev => prev === f ? null : f)} />
+      {/* 3 · CHIPS — flexShrink 0, se oculta al scrollear y reaparece al subir (§ 3.2) */}
+      <Animated.View
+        style={{
+          height: collapseAnim.interpolate({ inputRange: [0, 1], outputRange: [CHIPS_ROW_HEIGHT, 0] }),
+          opacity: collapseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+          overflow: 'hidden',
+        }}
+      >
+        <HomeChips active={timeFilter} onSelect={f => setTimeFilter(prev => prev === f ? null : f)} />
+      </Animated.View>
 
       {/* 4 · FEED — único bloque que crece */}
       {displayedEvents.length === 0 ? (
@@ -380,6 +427,8 @@ export default function HomeScreen({ navigation }) {
           ListFooterComponent={<ListFooter />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
+          onScroll={handleFeedScroll}
+          scrollEventThrottle={32}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -397,9 +446,19 @@ export default function HomeScreen({ navigation }) {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
-function HomeHeader({ colors, navigation, unread, location }) {
+// § 3.3: header + wordmark + ubicación colapsan a una fila de 44px al
+// scrollear. collapseAnim es opcional (las pantallas de loading/error lo
+// omiten y quedan siempre expandidas — no scrollean).
+function HomeHeader({ colors, navigation, unread, location, collapseAnim }) {
+  const anim = collapseAnim ?? STATIC_ZERO;
   return (
-    <View style={[styles.header, { flexShrink: 0 }]}>
+    <Animated.View style={[
+      styles.header,
+      {
+        flexShrink: 0,
+        paddingVertical: anim.interpolate({ inputRange: [0, 1], outputRange: [space[2], 2] }),
+      },
+    ]}>
       <Image source={require('../../assets/images/logo.png')} style={styles.logo} contentFit="cover" />
 
       {/* Título + ubicación */}
@@ -407,19 +466,25 @@ function HomeHeader({ colors, navigation, unread, location }) {
         <Text style={{ fontFamily: 'BricolageGrotesque_700Bold', fontSize: 17, color: colors['text.primary'] }}>
           Enfiestados
         </Text>
-        <Pressable
-          onPress={() => {}}
-          accessibilityRole="button"
-          accessibilityLabel="Cambiar ubicación"
-        >
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
-            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
-              {location || 'Costa Rica'}
-            </Text>
-            <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />
-          </View>
-        </Pressable>
+        <Animated.View style={{
+          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+          height: anim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }),
+          overflow: 'hidden',
+        }}>
+          <Pressable
+            onPress={() => {}}
+            accessibilityRole="button"
+            accessibilityLabel="Cambiar ubicación"
+          >
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
+              <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
+                {location || 'Costa Rica'}
+              </Text>
+              <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />
+            </View>
+          </Pressable>
+        </Animated.View>
       </View>
 
       {/* Mensajes con badge */}
@@ -450,7 +515,7 @@ function HomeHeader({ colors, navigation, unread, location }) {
           Crear
         </Text>
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }
 
