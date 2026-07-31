@@ -102,23 +102,27 @@ function TicketCard({ event, onPress, onMore, colors }) {
       )}
 
       {/* Tarjeta con gradiente amarillo */}
-      <View style={[styles.ticket, { backgroundColor: '#FFC94A' }]}>
+      {/* FIX_ROUND_4 § 7: #7A5500 sobre #FFC94A daba 4.35:1 (falla AA) — se
+          reemplaza por text.onAction (11.4:1, ya definido en tokens). Los
+          labels de acción/fecha suben a 14px: es el contenido que el usuario
+          necesita leer de un vistazo en la pantalla que sostiene la comisión. */}
+      <View style={[styles.ticket, { backgroundColor: colors['action.primary'] }]}>
         <View style={styles.ticketBody}>
           {event.image ? (
             <Image source={{ uri: event.image }} style={styles.ticketThumb} contentFit="cover" />
           ) : (
-            <View style={[styles.ticketThumb, styles.ticketThumbEmpty, { backgroundColor: '#F2A93B' }]}>
-              <Ionicons name="calendar" size={24} color="#17131F" />
+            <View style={[styles.ticketThumb, styles.ticketThumbEmpty, { backgroundColor: colors['action.primary.pressed'] }]}>
+              <Ionicons name="calendar" size={24} color={colors['text.onAction']} />
             </View>
           )}
           <View style={{ flex: 1, gap: 3 }}>
-            <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_800ExtraBold', letterSpacing: 1, color: '#7A5500' }}>
+            <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_800ExtraBold', letterSpacing: 1, color: colors['text.onAction'] }}>
               {event.category?.toUpperCase() ?? ''}
             </Text>
-            <Text style={{ fontSize: 19, fontFamily: 'BricolageGrotesque_700Bold', color: '#17131F', lineHeight: 24 }} numberOfLines={2}>
+            <Text style={{ fontSize: 19, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.onAction'], lineHeight: 24 }} numberOfLines={2}>
               {event.title}
             </Text>
-            <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_500Medium', color: '#7A5500' }} numberOfLines={1}>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.onAction'] }} numberOfLines={1}>
               {event.location?.name || ''}
             </Text>
           </View>
@@ -134,18 +138,18 @@ function TicketCard({ event, onPress, onMore, colors }) {
         {/* Pie del ticket */}
         <View style={styles.ticketFoot}>
           <View style={styles.ticketFootDate}>
-            <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>FECHA</Text>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>FECHA</Text>
             <Text
               numberOfLines={1}
               ellipsizeMode="tail"
-              style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_700Bold', color: '#17131F' }}
+              style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}
             >
               {dateStr}
             </Text>
           </View>
           {daysStr ? (
-            <View style={[styles.daysChip, { backgroundColor: '#F2A93B' }]}>
-              <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold', color: '#17131F' }}>{daysStr}</Text>
+            <View style={[styles.daysChip, { backgroundColor: colors['action.primary.pressed'] }]}>
+              <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>{daysStr}</Text>
             </View>
           ) : null}
         </View>
@@ -153,16 +157,16 @@ function TicketCard({ event, onPress, onMore, colors }) {
         {/* Acciones del ticket */}
         <View style={styles.ticketActions}>
           <Pressable style={styles.ticketAction} onPress={() => {}} accessibilityLabel="Cómo llegar">
-            <Ionicons name="navigate-outline" size={16} color="#7A5500" />
-            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>Cómo llegar</Text>
+            <Ionicons name="navigate-outline" size={16} color={colors['text.onAction']} />
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Cómo llegar</Text>
           </Pressable>
           <Pressable style={styles.ticketAction} onPress={() => {}} accessibilityLabel="Compartir">
-            <Ionicons name="share-outline" size={16} color="#7A5500" />
-            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>Compartir</Text>
+            <Ionicons name="share-outline" size={16} color={colors['text.onAction']} />
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Compartir</Text>
           </Pressable>
           <Pressable style={[styles.ticketAction, styles.ticketActionMore]} onPress={onMore} accessibilityLabel="Más opciones">
-            <Ionicons name="ellipsis-horizontal" size={16} color="#7A5500" />
-            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#7A5500' }}>Más</Text>
+            <Ionicons name="ellipsis-horizontal" size={16} color={colors['text.onAction']} />
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Más</Text>
           </Pressable>
         </View>
       </View>
