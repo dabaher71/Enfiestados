@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import InternalAdCard from '../components/InternalAdCard';
 import NativeAdCard from '../components/NativeAdCard';
 import Button from '../components/ui/Button';
+import Chip from '../components/ui/Chip';
 import EmptyState from '../components/ui/EmptyState';
 import EventRow from '../components/ui/EventRow';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
@@ -460,6 +461,7 @@ function HomeChips({ active, onSelect }) {
   // ── FIX_ROUND_2 § 2 ──
   // ScrollView: style.flexGrow=0 y style.flexShrink=0 → la fila NO crece
   // contentContainerStyle.alignItems='center' → los chips NO se estiran
+  // FIX_ROUND_4 § 2: Chip (tokens) en vez de colores de un solo tema a mano
   return (
     <ScrollView
       horizontal
@@ -467,32 +469,14 @@ function HomeChips({ active, onSelect }) {
       style={styles.chipsScroll}          // flexGrow:0 flexShrink:0
       contentContainerStyle={styles.chipsContent}  // alignItems:'center'
     >
-      {FILTERS.map(f => {
-        const isSelected = f.value === active;
-        return (
-          <Pressable
-            key={f.value}
-            onPress={() => onSelect(f.value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected }}
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: isSelected ? '#FFC94A' : 'rgba(255,255,255,0.07)',
-                borderColor:     isSelected ? '#FFC94A' : 'rgba(255,255,255,0.16)',
-              },
-            ]}
-          >
-            <Text style={{
-              fontSize: 14,
-              fontFamily: 'PlusJakartaSans_700Bold',
-              color: isSelected ? '#17131F' : '#C6BFD6',
-            }}>
-              {f.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {FILTERS.map(f => (
+        <Chip
+          key={f.value}
+          label={f.label}
+          selected={f.value === active}
+          onPress={() => onSelect(f.value)}
+        />
+      ))}
     </ScrollView>
   );
 }
@@ -558,16 +542,6 @@ const styles = StyleSheet.create({
     gap: space[2],
     paddingHorizontal: space[5],
     paddingVertical: space[3],
-  },
-  filterChip: {
-    height: 42,             // fijo, según § 2
-    alignSelf: 'center',
-    paddingHorizontal: space[3],
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    flexShrink: 0,
-    flexGrow: 0,
   },
 
   // Separador de día

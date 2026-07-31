@@ -44,14 +44,16 @@ export default function SettingsScreen({ navigation }) {
     <Text variant="overline" color="text.tertiary" style={styles.sectionTitle}>{label}</Text>
   );
 
-  // Cápsula neutra: fondo rgba(255,255,255,.07), icono text.secondary.
+  // Cápsula neutra: fondo bg.surface, icono text.secondary.
   // Excepción: destructive → fondo status.urgent al 14%, icono coral.
+  // FIX_ROUND_4 § 10.1: rgba(255,255,255,.07) fijo se rompía en tema claro
+  // (blanco sobre blanco) — mismo bug que los chips y el segmented control.
   const IconCapsule = ({ icon, destructive = false }) => (
     <View style={[
       styles.iconCapsule,
       { backgroundColor: destructive
           ? `${colors['status.urgent']}24`
-          : 'rgba(255,255,255,0.07)' },
+          : colors['bg.surface'] },
     ]}>
       <Ionicons
         name={icon}

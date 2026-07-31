@@ -34,7 +34,7 @@ const MONTHS  = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','no
 function humanDate(d) { return `${DAYS_ES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
 
 export default function CreateAdScreen({ navigation }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [step,        setStep]        = useState(0);
@@ -349,7 +349,7 @@ export default function CreateAdScreen({ navigation }) {
               </View>
               <DateTimePicker value={startDate} mode="date" display="spinner" minimumDate={new Date()}
                 onChange={(_, d) => { if (d) setStartDate(d); }}
-                themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+                themeVariant={isDark ? 'dark' : 'light'} />
             </View>
           </Modal>
         )}

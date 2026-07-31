@@ -89,7 +89,7 @@ function Field({ children }) {
 
 export default function EditEventScreen({ route, navigation }) {
   const { event } = route.params;
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [title,           setTitle]          = useState(event.title || '');
@@ -437,7 +437,7 @@ export default function EditEventScreen({ route, navigation }) {
             </View>
             <DateTimePicker value={date} mode="date" display="spinner"
               onChange={(_, d) => { if (d) setDate(d); }}
-              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+              themeVariant={isDark ? 'dark' : 'light'} />
           </View>
         </Modal>
       )}
@@ -452,7 +452,7 @@ export default function EditEventScreen({ route, navigation }) {
             </View>
             <DateTimePicker value={time} mode="time" display="spinner"
               onChange={(_, t) => { if (t) setTime(t); }}
-              themeVariant={colors['bg.base'] === '#17131F' ? 'dark' : 'light'} />
+              themeVariant={isDark ? 'dark' : 'light'} />
           </View>
         </Modal>
       )}
