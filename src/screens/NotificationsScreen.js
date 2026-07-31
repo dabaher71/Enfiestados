@@ -43,9 +43,14 @@ function getNotifIcon(type, colors) {
   }
 }
 
+// createdAt puede llegar como Firestore Timestamp (suscripción en vivo) o
+// como string ISO (notificaciones sembradas a mano) — normalizar acá una
+// sola vez evita el "Invalid Date" cuando new Date(Timestamp) no parsea.
+const toDate = (v) => (v?.toDate ? v.toDate() : new Date(v));
+
 function formatRelTime(dateStr) {
   if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr);
+  const diff = Date.now() - toDate(dateStr);
   const m = Math.floor(diff / 60000);
   const h = Math.floor(diff / 3600000);
   const d = Math.floor(diff / 86400000);
@@ -53,7 +58,7 @@ function formatRelTime(dateStr) {
   if (m < 60) return `${m}m`;
   if (h < 24) return `${h}h`;
   if (d < 7)  return `${d}d`;
-  return new Date(dateStr).toLocaleDateString('es-CR');
+  return toDate(dateStr).toLocaleDateString('es-CR');
 }
 
 // ─── NotificationItem ─────────────────────────────────────────────────────────
@@ -245,7 +250,7 @@ export default function NotificationsScreen({ navigation }) {
     regular.forEach(n => {
       const ts = n.createdAt;
       if (!ts) { result.push(n); return; }
-      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      const d = toDate(ts);
       const today = new Date(); today.setHours(0,0,0,0);
       const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
       let label;

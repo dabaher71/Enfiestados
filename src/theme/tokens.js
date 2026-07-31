@@ -105,6 +105,10 @@ const font = {
   caption:     { fontFamily: 'PlusJakartaSans_500Medium',     fontSize: 14, lineHeight: 20, letterSpacing: 0 },
   overline:    { fontFamily: 'PlusJakartaSans_800ExtraBold',  fontSize: 12, lineHeight: 16, letterSpacing: 1.2, textTransform: 'uppercase' },
   tabLabel:    { fontFamily: 'PlusJakartaSans_600SemiBold',   fontSize: 11.5, lineHeight: 14, letterSpacing: 0 },
+  // Número dentro de un badge circular chico (contador de filtros, de tab).
+  // FIX_ROUND_4 § 6b: 9px estaba por debajo del propio mínimo del sistema
+  // (tabLabel = 11.5) — declarado como token en vez de fontSize inline.
+  badgeNum:    { fontFamily: 'PlusJakartaSans_700Bold',        fontSize: 11,   lineHeight: 13, letterSpacing: 0 },
 };
 
 // ─── Elevación ────────────────────────────────────────────────────────────────
