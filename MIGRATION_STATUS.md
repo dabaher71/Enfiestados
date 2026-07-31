@@ -1,191 +1,78 @@
 # MIGRATION_STATUS.md — Enfiestados UX Redesign
 
-> Fase actual: **COMPLETADO — Fases 0–7 implementadas**
-> Fuente de verdad: `UX_DESIGN_SYSTEM.md` v1.1 · Julio 2026
+> Reescrito contra el código real (no capturas) el 31 jul 2026, tras FIX_ROUND_4.
+> Regla de este archivo: **listo** = migrado a tokens/componentes `ui/` y sin gap conocido de contenido.
+> **parcial** = algo concreto falta (se dice qué). **pendiente** = no existe o sigue en diseño viejo.
+> Actualizalo en el mismo commit que toca la pantalla — no al final de la sesión.
 
 ---
 
 ## 1. Mapa de pantallas
 
-| Pantalla | Archivo | Componentes que usa | Estado |
+| Pantalla | Archivo | Estado | Nota |
 |---|---|---|---|
-| Home / feed | `screens/HomeScreen.js` | EventCard, InternalAdCard, NativeAdCard, SkeletonLoader | pendiente |
-| Explorar (lista + mapa) | `screens/SearchScreen.js` | EventCard, ExternalEventSearchCard, CustomMarker (inline) | pendiente |
-| Detalle de evento propio | `screens/EventDetailScreen.js` | CommentsSection, ImageViewerModal, ReportModal, UserAvatar | pendiente |
-| Detalle de evento importado | `components/ExternalEventDetailModal.js` | — | pendiente |
-| Perfil propio "Mi mochila" | `screens/ProfileScreen.js` | EventCard, PostCard, UserAvatar | pendiente |
-| Perfil público | `screens/UserProfileScreen.js` | EventCard, ReportModal, UserAvatar | pendiente |
-| Alertas | `screens/NotificationsScreen.js` | — | pendiente |
-| Mensajes (lista chats) | `screens/ChatsScreen.js` | UserAvatar | pendiente |
-| Chat | `screens/ChatDetailScreen.js` | UserAvatar | pendiente |
-| Crear evento | `screens/CreateEventScreen.js` | — | pendiente |
-| Editar evento | `screens/EditEventScreen.js` | — | pendiente |
-| Configuración | `screens/SettingsScreen.js` | — | pendiente |
-| Editar perfil | `screens/EditProfileScreen.js` | UserAvatar | pendiente |
-| Login | `screens/LoginScreen.js` | — | pendiente |
-| Registro | `screens/RegisterScreen.js` | — | pendiente |
-| Recuperar contraseña | `screens/ForgotPasswordScreen.js` | — | pendiente |
-| Onboarding gustos | `screens/InterestsScreen.js` | — | pendiente |
-| Panel de anuncios | `screens/AdCenterScreen.js` | InternalAdCard | pendiente |
-| Crear anuncio | `screens/CreateAdScreen.js` | — | pendiente |
-| Solicitud anunciante | `screens/AdvertiserRequestScreen.js` | — | pendiente |
-| Panel admin | `screens/AdminScreen.js` | — | pendiente |
-| **Mis planes** *(nuevo)* | no existe | — | **pendiente crear** |
-| **MessagesScreen** *(nuevo)* | no existe | — | **pendiente crear** |
-| **Búsqueda dedicada** *(nuevo)* | no existe | — | **pendiente crear** |
+| Inicio / feed | `screens/HomeScreen.js` | listo | Chips migrados a `Chip` (FIX_ROUND_4 § 2) |
+| Explorar (lista + mapa) | `screens/SearchScreen.js` | listo | Mapa con estilo claro/oscuro por tokens (§ 8) |
+| Detalle de evento propio | `screens/EventDetailScreen.js` | listo | Guardar, snackbar, navegación a Mis Planes corregida |
+| Detalle de evento importado | `screens/ExternalEventDetailScreen.js` | listo | Bug de layout (botones tapados) y guardado de importados arreglados |
+| Mis planes | `screens/MyPlansScreen.js` | listo | Ticket con contraste AA (§ 7), guarda nativos + importados |
+| Perfil propio "Mi mochila" | `screens/ProfileScreen.js` | listo | § 4.4 "Tu próximo plan" implementado |
+| Perfil público | `screens/UserProfileScreen.js` | parcial | Tokens ok; no re-auditado a fondo esta ronda |
+| Editar perfil | `screens/EditProfileScreen.js` | listo | |
+| Alertas | `screens/NotificationsScreen.js` | parcial | Tokens ok; contenido real (mockup `10a`) sin confirmar esta ronda |
+| Config. de alertas | `screens/NotificationsSettingsScreen.js` | listo | |
+| Mensajes (lista chats) | `screens/ChatsScreen.js` | parcial | Tokens ok; contenido real (mockup `10b`) sin confirmar esta ronda |
+| Mensajes (nueva, separada) | `screens/MessagesScreen.js` | parcial | Existe; contenido real sin confirmar esta ronda |
+| Chat | `screens/ChatDetailScreen.js` | parcial | Tokens ok; contenido real (mockup `10c`) sin confirmar esta ronda |
+| Crear evento | `screens/CreateEventScreen.js` | listo | Wizard 3 pasos, `themeVariant` corregido |
+| Editar evento | `screens/EditEventScreen.js` | listo | Migrado completo ronda 3 sesión final |
+| Crear publicación | `screens/CreatePostScreen.js` | parcial | Tokens ok; no re-auditada a fondo esta ronda |
+| Configuración | `screens/SettingsScreen.js` | listo | Cápsula `rgba(255,255,255,.07)` corregida (§ 10.1) |
+| Login | `screens/LoginScreen.js` | listo | |
+| Registro | `screens/RegisterScreen.js` | listo | |
+| Recuperar contraseña | `screens/ForgotPasswordScreen.js` | listo | |
+| Onboarding gustos | `screens/InterestsScreen.js` | listo | Es el paso de intereses, no la bienvenida completa (ver § 4) |
+| Panel admin | `screens/AdminScreen.js` | listo | Migrado completo — FIX_ROUND_4 § 1 |
+| Panel de anuncios | `screens/AdCenterScreen.js` | listo | |
+| Crear anuncio | `screens/CreateAdScreen.js` | listo | `themeVariant` y `fontSize` corregidos |
+| Solicitud anunciante | `screens/AdvertiserRequestScreen.js` | listo | |
+| Panel de organizador | `screens/OrganizerPanelScreen.js` | listo | |
+| Búsqueda dedicada (recientes/sugerencias) | no existe | pendiente | Hoy vive dentro de Explorar; una pantalla propia sigue sin construir |
+| Bienvenida / onboarding (`8a`–`8d`) | no existe | pendiente | Solo existe el paso de intereses (`InterestsScreen`) |
+
+`DevCatalogScreen.js` es herramienta interna de desarrollo (`__DEV__` only) — fuera de este inventario.
 
 ---
 
-## 2. Componentes reutilizables existentes
+## 2. Componentes reutilizables — `src/components/ui/`
 
-| Componente | Archivo | Equivalente en Design System | Observaciones |
-|---|---|---|---|
-| `EventCard` | `components/EventCard.js` | `EventCardHero` + parcial `EventRow` | No implementa los 4 estados; estilos hardcodeados |
-| `ExternalEventCard` | `components/ExternalEventCard.js` | `EventRow` | Duplica lógica de EventCard para externos |
-| `ExternalEventSearchCard` | `components/ExternalEventSearchCard.js` | `EventRow` | Tercer componente para el mismo objeto evento |
-| `PostCard` | `components/PostCard.js` | — | Fuera del scope del rediseño de eventos |
-| `CommentsSection` | `components/CommentsSection.js` | — | Reutilizable, limpiar estilos |
-| `SkeletonLoader` | `components/SkeletonLoader.js` | `Skeleton` / `SkeletonList` | Solo un tipo de skeleton, necesita variantes |
-| `UserAvatar` | `components/UserAvatar.js` | `Avatar` | Falta: iniciales sobre gradiente, tamaños múltiples |
-| `InternalAdCard` | `components/InternalAdCard.js` | `SponsoredCard` | Implementación correcta, adaptar tokens |
-| `NativeAdCard` | `components/NativeAdCard.js` | — | AdMob externo, mantener |
-| `ReportModal` | `components/ReportModal.js` | `Sheet` + `Dialog` | Adaptar a bottom sheet del sistema |
-| `LoadingScreen` | `components/LoadingScreen.js` | — | Splash, mantener |
-| `ErrorBoundary` | `components/ErrorBoundary.js` | — | Infraestructura, mantener |
-| `ImageViewerModal` | `components/ImageViewerModal.js` | — | Mantener |
-| `PostDetailModal` | `components/PostDetailModal.js` | — | Fuera del scope |
+Los 19+ componentes del design system existen y están en uso real: `Avatar`, `Button`, `Chip`, `EmptyState`, `EventRow`, `Input` (+ `TextArea`, `SearchField`), `MetaRow`, `SegmentedControl` (+ `UnderlineTabs`), `Sheet`, `Skeleton` (+ `SkeletonEventRow`, `SkeletonList`), `Snackbar`, `StatusBadge`, `Text`.
 
-**Componentes del Design System que NO existen aún:**
-`Button`, `Chip`, `StatusBadge`, `Input`, `TextArea`, `SearchField`, `Switch`, `Checkbox`, `Radio`, `Avatar` (completo), `AvatarStack`, `SegmentedControl`, `Tabs`, `EmptyState`, `Snackbar`, `Sheet`, `Dialog`, `StepProgress`, `ProgressBar`, `Slider`, `EventRow`, `EventCardHero`, `MetaRow`, `ActionBar`, `PersonRow`, `Text` (tipado con variantes)
+No hay componentes del design system pendientes de crear.
+
+**Deuda de componentes fuera de `ui/`** (no bloquea nada, pero es trabajo real):
+- `components/EventCard.js`, `ExternalEventCard.js`, `ExternalEventSearchCard.js`, `ExternalEventDetailModal.js` — **código muerto**: ninguna pantalla activa los importa (`EventRow` + `EventDetailScreen`/`ExternalEventDetailScreen` los reemplazaron). Candidatos a borrar, no a migrar.
+- `components/InternalAdCard.js` — activo (se renderiza en Home), estaba 100% en paleta vieja. Migrado en FIX_ROUND_4 § 10.1.
+- `components/CommentsSection.js`, `PostCard.js`, `PostDetailModal.js` — no auditados a fondo en esta ronda; puede haber hex hardcodeado suelto (ver § 3).
 
 ---
 
-## 3. Sistema de navegación actual
+## 3. Verificación pendiente — deuda no confirmada esta ronda
 
-- **Stack:** `@react-navigation/native-stack` v7
-- **Tabs:** `@react-navigation/bottom-tabs` — 5 destinos: Inicio · Buscar · Crear · Alertas · Perfil
-- **Diferencias con Design System:**
-  - Tab "Buscar" → debe ser "Explorar"
-  - Tab "Crear" (botón `+` central sin etiqueta) → **prohibido** por § 5.1; pasa a flujo modal desde header
-  - Tab "Alertas" → correcto
-  - Falta tab "Mis planes" *(nuevo)*
-  - Mensajes vive en Alertas → debe ser pantalla propia con icono en header de Inicio
+Estos archivos no se tocaron en FIX_ROUND_4 y no están garantizados libres de hex hardcodeado o `fontSize` chico. El sweep de esta ronda cubrió `src/screens` a fondo y `src/components` solo para los patrones específicos reportados (no un barrido completo):
 
----
+- `components/CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`
 
-## 4. Sistema de estilos actual
+`SkeletonLoader.js` y `UserAvatar.js` son **código muerto confirmado** (cero imports activos — reemplazados por `ui/Skeleton` y `ui/Avatar`). Van a la lista de borrado, no de auditoría.
 
-- **Sin design tokens.** Todos los valores están hardcodeados en `StyleSheet.create` al fondo de cada archivo.
-- **Sin theme provider.** No existe soporte de tema claro/oscuro.
-- **Sin fuentes personalizadas.** Se usa la fuente del sistema.
-- **Paleta actual** (lo que se usará para mapear a tokens):
-
-| Color actual | Ocurrencias | Token destino |
-|---|---|---|
-| `#fff` | 182 | `color.text.primary` (oscuro) / `color.bg.raised` (claro) |
-| `#2d2d44` | 120 | `color.bg.raised` |
-| `#6c5ce7` | 119 | `color.nav.selected` (violeta — mapear a `#8B6BFF`) |
-| `#888` | 105 | `color.text.tertiary` |
-| `#1a1a2e` | 56 | `color.bg.base` (mapear a `#17131F`) |
-| `#aaa` | 21 | `color.text.tertiary` |
-| `#00b894` | 20 | `color.status.free` (mapear a `#2FBF87`) |
-| `#3d3d5c` | 17 | `color.bg.surface` |
-| `#e74c3c` | 12 | `color.status.urgent` (mapear a `#E1483F`) |
-| `#fdcb6e` | 9 | `color.action.primary` (amarillo — mapear a `#FFC94A`) |
+Antes de dar estos por migrados: `grep -rn "#[0-9A-Fa-f]\{6\}" src/components/<archivo>`.
 
 ---
 
-## 5. Colores hardcodeados por archivo (top 20)
+## 4. Pendientes globales
 
-### Screens
-| Archivo | Ocurrencias hex |
-|---|---|
-| `SearchScreen.js` | 62 |
-| `EventDetailScreen.js` | 47 |
-| `NotificationsScreen.js` | 45 |
-| `CreateEventScreen.js` | 37 |
-| `EditEventScreen.js` | 36 |
-| `ProfileScreen.js` | 35 |
-| `CreateAdScreen.js` | 32 |
-| `AdminScreen.js` | 28 |
-| `UserProfileScreen.js` | 25 |
-| `AdCenterScreen.js` | 25 |
-| `RegisterScreen.js` | 20 |
-| `AdvertiserRequestScreen.js` | 20 |
-| `EditProfileScreen.js` | 18 |
-| `LoginScreen.js` | 17 |
-| `ChatDetailScreen.js` | 17 |
-| `InterestsScreen.js` | 14 |
-| `ForgotPasswordScreen.js` | 13 |
-| `HomeScreen.js` | 12 |
-| `SettingsScreen.js` | 11 |
-| `ChatsScreen.js` | 11 |
-
-### Components
-| Archivo | Ocurrencias hex |
-|---|---|
-| `PostDetailModal.js` | 20 |
-| `EventCard.js` | 16 |
-| `PostCard.js` | 14 |
-| `ExternalEventDetailModal.js` | 12 |
-| `ExternalEventCard.js` | 11 |
-| `CommentsSection.js` | 11 |
-| `ReportModal.js` | 10 |
-| `InternalAdCard.js` | 10 |
-| `ExternalEventSearchCard.js` | 10 |
-
-**Total ocurrencias hex en `src/`:** ~900+
-
----
-
-## 6. Tamaños de fuente hardcodeados
-
-| fontSize | Ocurrencias | Token destino |
-|---|---|---|
-| 14 | 57 | `caption` |
-| 16 | 47 | `subtitle` |
-| 13 | 41 | `caption` / `label` |
-| 15 | 29 | `label` |
-| 18 | 28 | entre `subtitle` y `h3` |
-| 12 | 28 | `overline` |
-| 11 | 23 | `tabLabel` |
-| 20 | 8 | `h3` |
-| 10 | 6 | ⚠️ por debajo del mínimo de 14 px |
-| 28 | 5 | `h1` |
-| 24 | 5 | `h2` |
-| 22 | 4 | entre `h2` y `h3` — no en escala |
-| 9 | 3 | ⚠️ muy por debajo del mínimo |
-| 36 | 1 | `display` |
-| 32 | 1 | entre `display` y `h1` — no en escala |
-
-**Tamaños fuera de la escala del Design System:** 9, 10, 18, 22, 26, 32 px
-
----
-
-## 7. Problemas críticos detectados (sin tocar código)
-
-1. **3 componentes distintos para el mismo objeto evento** (`EventCard`, `ExternalEventCard`, `ExternalEventSearchCard`) — viola la regla "un solo lugar para el evento" (§ 10 y § 19.2).
-2. **Ningún archivo implementa los 4 estados** (cargando, vacío, error, contenido) — viola § 13.
-3. **~900 valores hex hardcodeados** sin sistema de tokens — viola regla absoluta #3 del brief.
-4. **Botón "+" central sin etiqueta** en barra inferior — patrón prohibido #2 de § 17.
-5. **Sin soporte de tema claro** — el Design System define ambos.
-6. **Sin fuentes Bricolage Grotesque ni Plus Jakarta Sans** — tipografía actual es la del sistema.
-7. **Fechas en formato máquina** (`08/08/2026`) en múltiples pantallas — patrón prohibido #10.
-8. **Métricas en cero** presentadas como dato ("0 likes") — patrón prohibido #6.
-9. **Tab "Mis planes" no existe** — es el destino que sostiene el modelo de comisión.
-10. **Mensajes dentro de Alertas** — debe ser pantalla independiente con acceso desde header.
-
----
-
-## 8. Pendientes globales de código (no de diseño)
-
-- [ ] Instalar fuentes `Bricolage Grotesque` y `Plus Jakarta Sans` (`expo-font`)
-- [ ] Crear `theme/tokens.js` con todos los tokens de § 6
-- [ ] Crear `theme/ThemeProvider.js` con soporte claro/oscuro/sistema
-- [ ] Crear `i18n/es-CR.json` para todo el copy
-- [ ] Migrar los 3 componentes de evento a `EventRow` + `EventCardHero`
-- [ ] Implementar los 4 estados en cada pantalla
-- [ ] Crear pantalla "Mis planes" (nueva)
-- [ ] Crear pantalla "Mensajes" (nueva, separada de Alertas)
-- [ ] Crear pantalla "Búsqueda dedicada" (nueva)
-- [ ] Reestructurar navegación (quitar "+" central, agregar "Mis planes")
+- [ ] Pantalla "Búsqueda dedicada" (recientes/sugerencias) — no existe
+- [ ] Flujo de bienvenida/onboarding (`8a`–`8d`) — no existe, solo el paso de intereses
+- [ ] Confirmar contenido real de Alertas/Mensajes/Chat (mockups `10a`/`10b`/`10c`)
+- [ ] Borrar código muerto: `EventCard.js`, `ExternalEventCard.js`, `ExternalEventSearchCard.js`, `ExternalEventDetailModal.js`, `SkeletonLoader.js`, `UserAvatar.js`
+- [ ] Auditar hex hardcodeado en `CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`
