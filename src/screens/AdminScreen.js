@@ -1,15 +1,16 @@
+// AdminScreen — Panel de administración
+// LÓGICA INTACTA: reportes, aprobación de anuncios/solicitudes, búsqueda de usuarios.
+// PRESENTACIÓN: FIX_ROUND_4 § 1 — tokens completos, SegmentedControl, Button, StatusBadge.
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
-  Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,9 +26,19 @@ import {
   rejectAdvertiserRequest,
 } from '../services/adService';
 
-const TABS = ['Reportes', 'Anuncios', 'Solicitudes', 'Usuarios'];
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { SkeletonList } from '../components/ui/Skeleton';
+import StatusBadge from '../components/ui/StatusBadge';
+import Text from '../components/ui/Text';
+import { useTheme } from '../theme/ThemeProvider';
+import { radius, space } from '../theme/tokens';
+
+const TAB_LABELS = ['Reportes', 'Anuncios', 'Solicitudes', 'Usuarios'];
 
 export default function AdminScreen({ navigation }) {
+  const { colors } = useTheme();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -120,7 +131,7 @@ export default function AdminScreen({ navigation }) {
       const q = query(
         collection(db, 'users'),
         where('name', '>=', userSearch.trim()),
-        where('name', '<=', userSearch.trim() + '\uf8ff'),
+        where('name', '<=', userSearch.trim() + ''),
         limit(10)
       );
       const snap = await getDocs(q);
@@ -130,43 +141,35 @@ export default function AdminScreen({ navigation }) {
     }
   };
 
+  const TABS = TAB_LABELS.map((label, i) => ({
+    label,
+    value: i,
+    badge: i === 0 ? reports.length : i === 1 ? pendingAds.length : i === 2 ? adRequests.length : 0,
+  }));
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ActivityIndicator color="#6c5ce7" style={{ marginTop: 60 }} />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors['bg.base'] }]} edges={['top']}>
+        <View style={styles.header}>
+          <Text variant="h2">Panel Admin</Text>
+        </View>
+        <SkeletonList count={4} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors['bg.base'] }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Panel Admin</Text>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Volver">
+          <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
+        </Pressable>
+        <Text variant="h2">Panel Admin</Text>
       </View>
 
-      {/* Tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContent}>
-        {TABS.map((t, i) => {
-          const badge = i === 0 ? reports.length : i === 1 ? pendingAds.length : i === 2 ? adRequests.length : 0;
-          return (
-            <TouchableOpacity
-              key={t}
-              style={[styles.tab, tab === i && styles.tabActive]}
-              onPress={() => setTab(i)}
-            >
-              <Text style={[styles.tabText, tab === i && styles.tabTextActive]}>{t}</Text>
-              {badge > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{badge}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.tabsWrap}>
+        <SegmentedControl options={TABS} selected={tab} onSelect={setTab} />
+      </View>
 
       <FlatList
         data={
@@ -179,23 +182,23 @@ export default function AdminScreen({ navigation }) {
         contentContainerStyle={styles.list}
         refreshControl={
           tab < 3 ? (
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAll(); }} tintColor="#6c5ce7" />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAll(); }} tintColor={colors['nav.selected']} />
           ) : undefined
         }
         ListHeaderComponent={tab === 3 ? (
           <View style={styles.searchRow}>
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'], color: colors['text.primary'] }]}
               placeholder="Buscar usuario por nombre..."
-              placeholderTextColor="#555"
+              placeholderTextColor={colors['text.tertiary']}
               value={userSearch}
               onChangeText={setUserSearch}
               onSubmitEditing={searchUsers}
               returnKeyType="search"
             />
-            <TouchableOpacity style={styles.searchBtn} onPress={searchUsers}>
-              {searching ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="search" size={20} color="#fff" />}
-            </TouchableOpacity>
+            <Pressable style={[styles.searchBtn, { backgroundColor: colors['action.primary'] }]} onPress={searchUsers} accessibilityLabel="Buscar">
+              {searching ? <ActivityIndicator size="small" color={colors['text.onAction']} /> : <Ionicons name="search" size={20} color={colors['text.onAction']} />}
+            </Pressable>
           </View>
         ) : null}
         renderItem={({ item }) => {
@@ -205,12 +208,10 @@ export default function AdminScreen({ navigation }) {
           return <UserItem item={item} navigation={navigation} />;
         }}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="checkmark-circle-outline" size={50} color="#3d3d54" />
-            <Text style={styles.emptyText}>
-              {tab === 3 ? 'Buscá un usuario arriba' : 'Todo al día'}
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Ionicons name="checkmark-circle-outline" size={28} color={colors['text.tertiary']} />}
+            title={tab === 3 ? 'Buscá un usuario arriba' : 'Todo al día'}
+          />
         }
       />
     </SafeAreaView>
@@ -218,125 +219,92 @@ export default function AdminScreen({ navigation }) {
 }
 
 function ReportItem({ item, onAction }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors['bg.surface'] }]}>
       <View style={styles.cardRow}>
-        <View style={styles.typePill}>
-          <Text style={styles.typePillText}>{item.targetType}</Text>
-        </View>
-        <Text style={styles.cardMeta}>{item.reason}</Text>
+        <StatusBadge label={item.targetType} variant="neutral" />
+        <Text variant="caption" color="text.secondary">{item.reason}</Text>
       </View>
-      <Text style={styles.cardId} numberOfLines={1}>ID: {item.targetId}</Text>
+      <Text variant="caption" color="text.tertiary" numberOfLines={1} style={styles.cardId}>ID: {item.targetId}</Text>
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={[styles.actionBtn, styles.dismissBtn]} onPress={() => onAction(item.id, item.targetId, item.targetType, 'dismiss')}>
-          <Text style={styles.actionBtnText}>Desestimar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.warnBtn]} onPress={() => onAction(item.id, item.targetId, item.targetType, 'warn')}>
-          <Text style={styles.actionBtnText}>Advertir</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => onAction(item.id, item.targetId, item.targetType, 'delete_content')}>
-          <Text style={styles.actionBtnText}>Eliminar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.banBtn]} onPress={() => onAction(item.id, item.targetId, item.targetType, 'ban')}>
-          <Text style={styles.actionBtnText}>Ban</Text>
-        </TouchableOpacity>
+        <Button variant="secondary" size="sm" label="Desestimar" onPress={() => onAction(item.id, item.targetId, item.targetType, 'dismiss')} />
+        <Button variant="secondary" size="sm" label="Advertir" onPress={() => onAction(item.id, item.targetId, item.targetType, 'warn')} />
+        <Button variant="destructive" size="sm" label="Eliminar" onPress={() => onAction(item.id, item.targetId, item.targetType, 'delete_content')} />
+        <Button variant="destructive" size="sm" label="Ban" onPress={() => onAction(item.id, item.targetId, item.targetType, 'ban')} />
       </View>
     </View>
   );
 }
 
 function AdItem({ item, onApprove, onReject }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{item.title}</Text>
-      <Text style={styles.cardMeta}>{item.advertiserName} · {item.type === 'event' ? 'Evento' : 'Externo'}</Text>
-      {item.description ? <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text> : null}
+    <View style={[styles.card, { backgroundColor: colors['bg.surface'] }]}>
+      <Text variant="title">{item.title}</Text>
+      <Text variant="caption" color="text.tertiary" style={styles.cardMeta}>
+        {item.advertiserName} · {item.type === 'event' ? 'Evento' : 'Externo'}
+      </Text>
+      {item.description ? (
+        <Text variant="caption" color="text.secondary" numberOfLines={2} style={styles.cardDesc}>{item.description}</Text>
+      ) : null}
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={[styles.actionBtn, styles.approveBtn]} onPress={() => onApprove(item.id)}>
-          <Ionicons name="checkmark" size={16} color="#fff" />
-          <Text style={styles.actionBtnText}>Aprobar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.banBtn]} onPress={() => onReject(item.id)}>
-          <Ionicons name="close" size={16} color="#fff" />
-          <Text style={styles.actionBtnText}>Rechazar</Text>
-        </TouchableOpacity>
+        <Button variant="primary" size="sm" label="Aprobar" leadingIcon={<Ionicons name="checkmark" size={16} color={colors['text.onAction']} />} onPress={() => onApprove(item.id)} />
+        <Button variant="destructive" size="sm" label="Rechazar" leadingIcon={<Ionicons name="close" size={16} color={colors['status.urgent']} />} onPress={() => onReject(item.id)} />
       </View>
     </View>
   );
 }
 
 function RequestItem({ item, onApprove, onReject }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{item.businessName}</Text>
-      <Text style={styles.cardMeta}>{item.businessType} · {item.contact}</Text>
+    <View style={[styles.card, { backgroundColor: colors['bg.surface'] }]}>
+      <Text variant="title">{item.businessName}</Text>
+      <Text variant="caption" color="text.tertiary" style={styles.cardMeta}>{item.businessType} · {item.contact}</Text>
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={[styles.actionBtn, styles.approveBtn]} onPress={() => onApprove(item)}>
-          <Ionicons name="checkmark" size={16} color="#fff" />
-          <Text style={styles.actionBtnText}>Aprobar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, styles.banBtn]} onPress={() => onReject(item.id)}>
-          <Ionicons name="close" size={16} color="#fff" />
-          <Text style={styles.actionBtnText}>Rechazar</Text>
-        </TouchableOpacity>
+        <Button variant="primary" size="sm" label="Aprobar" leadingIcon={<Ionicons name="checkmark" size={16} color={colors['text.onAction']} />} onPress={() => onApprove(item)} />
+        <Button variant="destructive" size="sm" label="Rechazar" leadingIcon={<Ionicons name="close" size={16} color={colors['status.urgent']} />} onPress={() => onReject(item.id)} />
       </View>
     </View>
   );
 }
 
 function UserItem({ item, navigation }) {
+  const { colors } = useTheme();
   return (
-    <TouchableOpacity
-      style={styles.card}
+    <Pressable
+      style={[styles.card, { backgroundColor: colors['bg.surface'] }]}
       onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
     >
-      <Text style={styles.cardTitle}>{item.name}</Text>
-      <Text style={styles.cardMeta}>{item.email}</Text>
+      <Text variant="title">{item.name}</Text>
+      <Text variant="caption" color="text.tertiary" style={styles.cardMeta}>{item.email}</Text>
       <View style={styles.userBadges}>
-        {item.isAdmin && <View style={[styles.userBadge, { backgroundColor: '#6c5ce7' }]}><Text style={styles.userBadgeText}>Admin</Text></View>}
-        {item.isAdvertiser && <View style={[styles.userBadge, { backgroundColor: '#00b894' }]}><Text style={styles.userBadgeText}>Anunciante</Text></View>}
-        {item.banned && <View style={[styles.userBadge, { backgroundColor: '#e17055' }]}><Text style={styles.userBadgeText}>Baneado</Text></View>}
+        {item.isAdmin && <StatusBadge label="Admin" variant="promo" />}
+        {item.isAdvertiser && <StatusBadge label="Anunciante" variant="free" />}
+        {item.banned && <StatusBadge label="Baneado" variant="urgent" />}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, gap: 15 },
-  backBtn: { padding: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  tabsScroll: { flexGrow: 0, marginBottom: 8 },
-  tabsContent: { paddingHorizontal: 15, gap: 8, paddingVertical: 4 },
-  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#2d2d44', gap: 6 },
-  tabActive: { backgroundColor: '#6c5ce7' },
-  tabText: { color: '#888', fontWeight: '600', fontSize: 13 },
-  tabTextActive: { color: '#fff' },
-  badge: { backgroundColor: '#e74c3c', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  list: { paddingHorizontal: 15, paddingBottom: 30 },
-  card: { backgroundColor: '#2d2d44', borderRadius: 14, padding: 14, marginBottom: 10 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  typePill: { backgroundColor: '#3d3d54', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  typePillText: { color: '#aaa', fontSize: 11, fontWeight: '600' },
-  cardTitle: { color: '#fff', fontWeight: 'bold', fontSize: 15, marginBottom: 4 },
-  cardMeta: { color: '#888', fontSize: 13 },
-  cardDesc: { color: '#aaa', fontSize: 13, marginTop: 4 },
-  cardId: { color: '#555', fontSize: 11, marginBottom: 10 },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, gap: 4 },
-  actionBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  dismissBtn: { backgroundColor: '#636e72' },
-  warnBtn: { backgroundColor: '#fdcb6e' },
-  deleteBtn: { backgroundColor: '#e17055' },
-  banBtn: { backgroundColor: '#d63031' },
-  approveBtn: { backgroundColor: '#00b894' },
-  userBadges: { flexDirection: 'row', gap: 6, marginTop: 8 },
-  userBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  userBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
-  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  searchInput: { flex: 1, backgroundColor: '#2d2d44', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: '#fff', fontSize: 14 },
-  searchBtn: { backgroundColor: '#6c5ce7', borderRadius: 12, width: 46, justifyContent: 'center', alignItems: 'center' },
-  empty: { alignItems: 'center', paddingTop: 50, gap: 12 },
-  emptyText: { color: '#555', fontSize: 14 },
+  container: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingTop: space[1], paddingBottom: space[3], gap: space[3] },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -space[2] },
+  tabsWrap: { paddingHorizontal: space[5], marginBottom: space[2] },
+
+  list: { paddingHorizontal: space[5], paddingBottom: space[8] },
+  card: { borderRadius: radius.lg, padding: space[4], marginBottom: space[3] },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: space[3], marginBottom: space[2] },
+  cardMeta: { marginTop: 2 },
+  cardDesc: { marginTop: space[1] },
+  cardId: { marginBottom: space[2] },
+  actionsRow: { flexDirection: 'row', gap: space[2], marginTop: space[3], flexWrap: 'wrap' },
+
+  userBadges: { flexDirection: 'row', gap: space[2], marginTop: space[2] },
+
+  searchRow: { flexDirection: 'row', gap: space[2], marginBottom: space[4] },
+  searchInput: { flex: 1, height: 48, borderRadius: radius.md, borderWidth: 1.5, paddingHorizontal: space[3], fontSize: 15, fontFamily: 'PlusJakartaSans_400Regular' },
+  searchBtn: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });

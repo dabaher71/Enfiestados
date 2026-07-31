@@ -47,6 +47,13 @@ export function SegmentedControl({ options, selected, onSelect }) {
             >
               {opt.label}
             </Text>
+            {opt.badge > 0 && (
+              <View style={[styles.segmentBadge, { backgroundColor: colors['status.urgent'] }]}>
+                <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_700Bold', color: '#fff' }}>
+                  {opt.badge}
+                </Text>
+              </View>
+            )}
           </Pressable>
         );
       })}
@@ -97,10 +104,20 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    height: 40,
+    height: 44,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: space[1],
     borderRadius: radius.sm,
+  },
+  segmentBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   underlineContainer: {
     flexDirection: 'row',
