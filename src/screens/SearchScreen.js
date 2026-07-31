@@ -372,6 +372,7 @@ export default function SearchScreen({ navigation }) {
               onPress={() => setViewMode(opt.value)}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
+              hitSlop={2}
               style={[
                 styles.segItem,
                 { backgroundColor: active ? colors['bg.raised'] : 'transparent' },

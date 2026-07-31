@@ -50,20 +50,23 @@ Los 19+ componentes del design system existen y están en uso real: `Avatar`, `B
 
 No hay componentes del design system pendientes de crear.
 
-**Deuda de componentes fuera de `ui/`** (no bloquea nada, pero es trabajo real):
-- `components/EventCard.js`, `ExternalEventCard.js`, `ExternalEventSearchCard.js`, `ExternalEventDetailModal.js` — **código muerto**: ninguna pantalla activa los importa (`EventRow` + `EventDetailScreen`/`ExternalEventDetailScreen` los reemplazaron). Candidatos a borrar, no a migrar.
+**Código muerto — borrado.** `EventCard.js`, `ExternalEventCard.js`, `ExternalEventSearchCard.js`,
+`ExternalEventDetailModal.js`, `SkeletonLoader.js`, `UserAvatar.js` tenían cero imports activos
+(verificado con grep en todo `src/`, no solo por nombre de archivo) — reemplazados hace tiempo por
+`EventRow`/`ExternalEventDetailScreen`/`ui/Skeleton`/`ui/Avatar`. Borrados, no migrados.
+
+**Deuda real restante en `src/components`:**
 - `components/InternalAdCard.js` — activo (se renderiza en Home), estaba 100% en paleta vieja. Migrado en FIX_ROUND_4 § 10.1.
-- `components/CommentsSection.js`, `PostCard.js`, `PostDetailModal.js` — no auditados a fondo en esta ronda; puede haber hex hardcodeado suelto (ver § 3).
+- `components/CommentsSection.js` — parcialmente auditado (nombre/hora de comentario ya usan tokens); todavía tiene hex suelto sin revisar (trash icon, empty state, fondos de reply).
+- `components/PostCard.js`, `PostDetailModal.js` — solo se les agregó `hitSlop` en sus botones <44px; el resto del archivo no se auditó por hex hardcodeado.
 
 ---
 
 ## 3. Verificación pendiente — deuda no confirmada esta ronda
 
-Estos archivos no se tocaron en FIX_ROUND_4 y no están garantizados libres de hex hardcodeado o `fontSize` chico. El sweep de esta ronda cubrió `src/screens` a fondo y `src/components` solo para los patrones específicos reportados (no un barrido completo):
+Estos archivos activos no se auditaron a fondo por hex hardcodeado en FIX_ROUND_4 (el sweep cubrió `src/screens` completo; en `src/components` solo los patrones específicos reportados + el código muerto, ya borrado):
 
 - `components/CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`
-
-`SkeletonLoader.js` y `UserAvatar.js` son **código muerto confirmado** (cero imports activos — reemplazados por `ui/Skeleton` y `ui/Avatar`). Van a la lista de borrado, no de auditoría.
 
 Antes de dar estos por migrados: `grep -rn "#[0-9A-Fa-f]\{6\}" src/components/<archivo>`.
 
@@ -73,6 +76,5 @@ Antes de dar estos por migrados: `grep -rn "#[0-9A-Fa-f]\{6\}" src/components/<a
 
 - [ ] Pantalla "Búsqueda dedicada" (recientes/sugerencias) — no existe
 - [ ] Flujo de bienvenida/onboarding (`8a`–`8d`) — no existe, solo el paso de intereses
-- [ ] Confirmar contenido real de Alertas/Mensajes/Chat (mockups `10a`/`10b`/`10c`)
-- [ ] Borrar código muerto: `EventCard.js`, `ExternalEventCard.js`, `ExternalEventSearchCard.js`, `ExternalEventDetailModal.js`, `SkeletonLoader.js`, `UserAvatar.js`
+- [ ] Confirmar contenido real de Alertas/Mensajes/Chat (mockups `10a`/`10b`/`10c`) — **Alertas es la próxima sesión**
 - [ ] Auditar hex hardcodeado en `CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`

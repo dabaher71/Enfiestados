@@ -204,6 +204,7 @@ export default function InterestsScreen({ navigation, route }) {
                     onPress={() => setProvince(p)}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: active }}
+                    hitSlop={1}
                     style={[
                       styles.chip,
                       { backgroundColor: active ? colors['action.primary'] : colors['bg.surface'], borderColor: active ? colors['action.primary'] : colors['border.strong'] },
@@ -229,6 +230,7 @@ export default function InterestsScreen({ navigation, route }) {
                     onPress={() => setRadius_(r)}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: active }}
+                    hitSlop={1}
                     style={[
                       styles.chip,
                       { backgroundColor: active ? colors['action.primary'] : colors['bg.surface'], borderColor: active ? colors['action.primary'] : colors['border.strong'] },

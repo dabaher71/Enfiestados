@@ -14,7 +14,7 @@ export default function ImageViewerModal({ uri, visible, onClose }) {
     >
       <StatusBar hidden />
       <View style={styles.backdrop}>
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+        <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={2}>
           <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.imageArea} onPress={onClose} activeOpacity={1}>

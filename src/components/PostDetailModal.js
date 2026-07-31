@@ -88,10 +88,10 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
 
               <View style={styles.headerActions}>
                 {/* Menú ··· — eliminar/reportar detrás del menú */}
-                <Pressable onPress={() => setShowMenu(v => !v)} style={styles.iconBtn} accessibilityLabel="Opciones">
+                <Pressable onPress={() => setShowMenu(v => !v)} style={styles.iconBtn} hitSlop={4} accessibilityLabel="Opciones">
                   <Ionicons name="ellipsis-horizontal" size={20} color={colors['text.tertiary']} />
                 </Pressable>
-                <Pressable onPress={onClose} style={styles.iconBtn} accessibilityLabel="Cerrar">
+                <Pressable onPress={onClose} style={styles.iconBtn} hitSlop={4} accessibilityLabel="Cerrar">
                   <Ionicons name="close" size={22} color={colors['text.secondary']} />
                 </Pressable>
               </View>

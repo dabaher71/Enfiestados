@@ -100,6 +100,7 @@ export default function CreatePostScreen({ navigation }) {
         <Pressable
           onPress={handlePost}
           disabled={!canPost}
+          hitSlop={4}
           style={[
             styles.publishBtn,
             { backgroundColor: canPost ? colors['action.primary'] : colors['bg.surface'] },
