@@ -7,8 +7,10 @@
 // - El índice se actualiza en onMomentumScrollEnd, nunca en onScroll (un
 //   setState por frame de scroll tira los FPS en una lista de cards grandes).
 // - 1 imagen = cero FlatList/puntos/contador/listeners.
-// - Encuadre según forma: horizontal (ratio > 1.15) → cover. Cuadrada o
-//   vertical → marco desenfocado (nunca se recorta un afiche con texto impreso).
+// - Encuadre según forma: horizontal (ratio > 1.15) → cover. Cuadrada,
+//   vertical, o todavía sin cargar → marco desenfocado (nunca se recorta un
+//   afiche con texto impreso — "sin cargar" arranca ahí porque es la opción
+//   segura para cualquier forma).
 // - Nada de autoplay ni zonas de toque invisibles a los lados.
 import { Image } from 'expo-image';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -37,8 +39,15 @@ function CarouselImage({ uri, width, aspectRatio, reduced, onPress, accessibilit
     setLoaded(true);
   };
 
-  const isHorizontal = ratio == null || ratio > HORIZONTAL_RATIO_THRESHOLD;
+  // null → arranca enmarcado, que es seguro para cualquier forma (nunca
+  // recorta). Solo pasa a cover una vez que sabemos que es horizontal.
+  const isHorizontal = ratio != null && ratio > HORIZONTAL_RATIO_THRESHOLD;
 
+  // Un solo subárbol — la <Image> con onLoad/onError NUNCA se desmonta al
+  // conocer la forma real; si isHorizontal cambiara de rama (cover ↔
+  // enmarcado) React remonta esa Image y se ve un flash (frame recortado,
+  // después el fondo desenfocado solo porque el skeleton ya se ocultó).
+  // Acá solo cambian contentFit/estilo sobre la misma instancia.
   return (
     <Pressable
       onPress={onPress}
@@ -49,21 +58,11 @@ function CarouselImage({ uri, width, aspectRatio, reduced, onPress, accessibilit
       {!loaded && (
         <Skeleton width="100%" height="100%" style={StyleSheet.absoluteFill} />
       )}
-      {isHorizontal ? (
-        <Image
-          source={{ uri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          contentPosition="top"
-          transition={reduced ? 0 : 200}
-          onLoad={handleLoad}
-          onError={onFail}
-        />
-      ) : (
-        // Marco desenfocado — el afiche trae su propia tipografía (fecha,
-        // precio, artista); recortarlo destruye la información que vende
-        // el evento. Se enmarca completo, nunca se recorta.
-        <View style={{ flex: 1, backgroundColor: colors['bg.surface'] }}>
+      <View style={{ flex: 1, backgroundColor: colors['bg.surface'] }}>
+        {/* Fondo desenfocado — solo existe cuando enmarcado; no lleva
+            onLoad/onError, así que agregarlo/quitarlo no afecta a la
+            imagen principal. */}
+        {!isHorizontal && (
           <Image
             source={{ uri }}
             style={StyleSheet.absoluteFill}
@@ -71,18 +70,19 @@ function CarouselImage({ uri, width, aspectRatio, reduced, onPress, accessibilit
             contentFit="cover"
             transition={reduced ? 0 : 200}
           />
-          <View style={styles.framedInner}>
-            <Image
-              source={{ uri }}
-              style={[styles.framedImg, { aspectRatio: ratio ?? 1 }]}
-              contentFit="contain"
-              transition={reduced ? 0 : 200}
-              onLoad={handleLoad}
-              onError={onFail}
-            />
-          </View>
+        )}
+        <View style={[styles.framedInner, isHorizontal && styles.framedInnerFull]}>
+          <Image
+            source={{ uri }}
+            style={isHorizontal ? StyleSheet.absoluteFill : [styles.framedImg, { aspectRatio: ratio ?? 1 }]}
+            contentFit={isHorizontal ? 'cover' : 'contain'}
+            contentPosition={isHorizontal ? 'top' : 'center'}
+            transition={reduced ? 0 : 200}
+            onLoad={handleLoad}
+            onError={onFail}
+          />
         </View>
-      )}
+      </View>
     </Pressable>
   );
 }
@@ -166,7 +166,7 @@ export default function MediaCarousel({
             onFail={() => handleFail(effective[0])}
           />
         )}
-        {topLeftSlot && <View style={styles.topLeft}>{topLeftSlot}</View>}
+        {topLeftSlot && <View style={styles.topLeft} pointerEvents="none">{topLeftSlot}</View>}
       </View>
     );
   }
@@ -194,10 +194,10 @@ export default function MediaCarousel({
         />
       )}
 
-      {topLeftSlot && <View style={styles.topLeft}>{topLeftSlot}</View>}
+      {topLeftSlot && <View style={styles.topLeft} pointerEvents="none">{topLeftSlot}</View>}
 
       {showCounter && (
-        <View style={[styles.counter, { backgroundColor: 'rgba(11,9,16,0.7)' }]}>
+        <View style={[styles.counter, { backgroundColor: 'rgba(11,9,16,0.7)' }]} pointerEvents="none">
           <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.primary'] }}>
             {index + 1}
           </Text>
@@ -232,6 +232,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: space[3],
+  },
+  // Rama horizontal: la Image pasa a absoluteFill+cover, así que el padding
+  // del marco (pensado para "contain") sobra y hay que anularlo.
+  framedInnerFull: {
+    padding: 0,
   },
   framedImg: {
     height: '100%',

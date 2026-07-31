@@ -142,7 +142,7 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
         <View style={styles.actionRow}>
           <View style={styles.priceCluster}>
             {isFree ? (
-              <StatusBadge label="Gratis" variant="free" />
+              <StatusBadge label="GRATIS" variant="free" />
             ) : hasConfidentPrice && event.price > 0 ? (
               <Text style={[styles.price, { fontSize: v.priceFontSize, color: colors['text.primary'] }]}>
                 ₡{Number(event.price).toLocaleString('es-CR')}
