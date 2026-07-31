@@ -73,7 +73,7 @@ function FieldLabel({ label, optional = false, colors }) {
         {label}
       </Text>
       {optional && (
-        <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.tertiary'] }}>
+        <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.tertiary'] }}>
           · opcional
         </Text>
       )}

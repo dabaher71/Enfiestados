@@ -35,7 +35,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 42,          // fijo — nunca depende del padre (§ 2 FIX_ROUND_2)
+    height: 44,          // mínimo táctil (§ 6a FIX_ROUND_4) — fijo, no depende del padre (§ 2 FIX_ROUND_2)
     alignSelf: 'center', // blindaje contra padres con alignItems: stretch
     paddingHorizontal: space[3],
     borderRadius: radius.md,

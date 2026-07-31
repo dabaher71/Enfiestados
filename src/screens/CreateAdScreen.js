@@ -118,7 +118,7 @@ export default function CreateAdScreen({ navigation }) {
       accessibilityState={{ checked: active }}
       style={[styles.chip, { backgroundColor: active ? colors['action.primary'] : colors['bg.surface'], borderColor: active ? colors['action.primary'] : colors['border.strong'] }]}
     >
-      <Text style={{ fontSize: 13, fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium', color: active ? colors['text.onAction'] : colors['text.secondary'] }}>
+      <Text style={{ fontSize: 14, fontFamily: active ? 'PlusJakartaSans_700Bold' : 'PlusJakartaSans_500Medium', color: active ? colors['text.onAction'] : colors['text.secondary'] }}>
         {label}
       </Text>
     </Pressable>

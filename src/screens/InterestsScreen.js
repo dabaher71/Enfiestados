@@ -176,7 +176,7 @@ export default function InterestsScreen({ navigation, route }) {
                     <View style={[styles.catIcon, { backgroundColor: isSelected ? `${cat.color}33` : colors['bg.raised'] }]}>
                       <Ionicons name={cat.icon} size={24} color={isSelected ? cat.color : colors['text.tertiary']} />
                     </View>
-                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans_600SemiBold', color: isSelected ? colors['text.primary'] : colors['text.secondary'], textAlign: 'center' }}>
+                    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: isSelected ? colors['text.primary'] : colors['text.secondary'], textAlign: 'center' }}>
                       {cat.name}
                     </Text>
                     {isSelected && (

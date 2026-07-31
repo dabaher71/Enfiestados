@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { useRef } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
@@ -25,7 +26,7 @@ export default function Button({
   const reduced = useReducedMotion();
 
   // useRef evita recrear el valor en cada render
-  const scaleAnim = new Animated.Value(1);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
     if (reduced) return;
@@ -90,10 +91,10 @@ function getVariantStyle(variant, colors, disabled) {
   if (disabled) return { container: { backgroundColor: colors['action.primary.disabled'], borderWidth: 0 }, textColor: colors['text.tertiary'] };
   switch (variant) {
     case 'primary':     return { container: { backgroundColor: colors['action.primary'] }, textColor: colors['text.onAction'] };
-    case 'secondary':   return { container: { backgroundColor: colors['border.subtle'], borderWidth: 1.5, borderColor: colors['border.strong'] }, textColor: colors['text.primary'] };
+    case 'secondary':   return { container: { backgroundColor: colors['bg.surface'], borderWidth: 1.5, borderColor: colors['border.strong'] }, textColor: colors['text.primary'] };
     case 'ghost':       return { container: { backgroundColor: 'transparent' }, textColor: colors['link'] };
     case 'destructive': return { container: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors['status.urgent'] }, textColor: colors['status.urgent'] };
-    case 'icon':        return { container: { backgroundColor: colors['border.subtle'] }, textColor: colors['text.primary'] };
+    case 'icon':        return { container: { backgroundColor: colors['bg.surface'] }, textColor: colors['text.primary'] };
     default:            return { container: { backgroundColor: colors['action.primary'] }, textColor: colors['text.onAction'] };
   }
 }
