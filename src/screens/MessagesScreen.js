@@ -1,10 +1,18 @@
 // MessagesScreen — pantalla propia para chats, accesible desde header de Inicio
-// Reutiliza la lógica existente de ChatsScreen pero con estructura del design system
+//
+// FIX_ROUND_4 § F (Chat): los documentos de chat solo guardan participants/
+// lastMessage/lastMessageTime — nunca otherUserName/otherUserAvatar (no
+// pueden ser un campo fijo del doc: "el otro usuario" depende de quién mira).
+// Esta pantalla asumía que sí existían, así que toda fila mostraba avatar
+// vacío y "Usuario". Se resuelve el otro participante con un getDoc por
+// chat, igual que ya hacía (bien) el duplicado ChatsScreen.js — que se borra
+// por redundante: nada navegaba a él (ver commit).
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View, Text as RNText } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 import Avatar from '../components/ui/Avatar';
 import EmptyState from '../components/ui/EmptyState';
 import { SkeletonList } from '../components/ui/Skeleton';
@@ -32,20 +40,27 @@ function chatTime(ts) {
 
 export default function MessagesScreen({ navigation }) {
   const { colors } = useTheme();
-  const [chats, setChats] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [chats,     setChats]     = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [usersData, setUsersData] = useState({});
   const userId = auth.currentUser?.uid;
 
   useEffect(() => {
-    const unsub = subscribeToChats(userId, (data) => {
+    const unsub = subscribeToChats(userId, async (data) => {
       setChats(data);
+      const ids = [...new Set(data.map(c => c.participants?.find(id => id !== userId)).filter(Boolean))];
+      const docs = await Promise.all(ids.map(uid => getDoc(doc(db, 'users', uid)).catch(() => null)));
+      const map = {};
+      ids.forEach((uid, i) => { if (docs[i]?.exists()) map[uid] = docs[i].data(); });
+      if (Object.keys(map).length > 0) setUsersData(prev => ({ ...prev, ...map }));
       setLoading(false);
     });
     return () => unsub();
   }, [userId]);
 
   const renderItem = useCallback(({ item }) => {
-    const otherId = item.participants?.find(id => id !== userId);
+    const otherId  = item.participants?.find(id => id !== userId);
+    const other    = usersData[otherId];
     const isUnread = item.unreadFor?.includes(userId);
     return (
       <Pressable
@@ -53,14 +68,14 @@ export default function MessagesScreen({ navigation }) {
         onPress={() => navigation.navigate('ChatDetail', {
           chatId: item.id,
           otherUserId: otherId,
-          otherUserName: item.otherUserName ?? '',
-          otherUserAvatar: item.otherUserAvatar ?? '',
+          otherUserName: other?.name ?? '',
+          otherUserAvatar: other?.avatar ?? '',
         })}
       >
-        <Avatar name={item.otherUserName} size={48} />
+        <Avatar uri={other?.avatar} name={other?.name} size={48} />
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
-            <Text variant="title" numberOfLines={1} style={{ flex: 1 }}>{item.otherUserName ?? 'Usuario'}</Text>
+            <Text variant="title" numberOfLines={1} style={{ flex: 1 }}>{other?.name ?? 'Usuario'}</Text>
             {item.lastMessageTime && (
               <Text variant="caption" color="text.tertiary">
                 {chatTime(item.lastMessageTime)}
@@ -76,7 +91,7 @@ export default function MessagesScreen({ navigation }) {
         )}
       </Pressable>
     );
-  }, [userId, colors]);
+  }, [userId, usersData, colors, navigation]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>

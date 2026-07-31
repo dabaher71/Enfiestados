@@ -8,7 +8,6 @@ import { auth, db } from '../config/firebase';
 import ErrorBoundary from '../components/ErrorBoundary';
 import LoadingScreen from '../components/LoadingScreen';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
-import ChatsScreen from '../screens/ChatsScreen';
 import EditEventScreen from '../screens/EditEventScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
@@ -95,7 +94,6 @@ export default function AppNavigator() {
               />
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-              <Stack.Screen name="Chats" component={ChatsScreen} />
               <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
               <Stack.Screen name="EditEvent" component={EditEventScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />

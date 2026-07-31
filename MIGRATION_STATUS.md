@@ -21,9 +21,8 @@
 | Editar perfil | `screens/EditProfileScreen.js` | listo | |
 | Alertas | `screens/NotificationsScreen.js` | listo | Verificado con datos reales: 4 tipos, agrupado por día, corte a fecha absoluta a los 7 días, nombre/título largos, leído/no leído |
 | Config. de alertas | `screens/NotificationsSettingsScreen.js` | listo | |
-| Mensajes (lista chats) | `screens/ChatsScreen.js` | parcial | Tokens ok; contenido real (mockup `10b`) sin confirmar esta ronda |
-| Mensajes (nueva, separada) | `screens/MessagesScreen.js` | parcial | Existe; contenido real sin confirmar esta ronda |
-| Chat | `screens/ChatDetailScreen.js` | parcial | Tokens ok; contenido real (mockup `10c`) sin confirmar esta ronda |
+| Mensajes (lista chats) | `screens/MessagesScreen.js` | listo | Bug real corregido: no resolvía nombre/avatar del otro participante (esos campos no existen en el doc de chat), toda fila mostraba "Usuario" y avatar vacío. `ChatsScreen.js` (duplicado sin uso, nada navegaba a él) borrado. |
+| Chat | `screens/ChatDetailScreen.js` | listo | Verificado con datos reales: burbujas agrupadas, separador por día, tarjeta de evento compartido, no leído |
 | Crear evento | `screens/CreateEventScreen.js` | listo | Wizard 3 pasos, `themeVariant` corregido |
 | Editar evento | `screens/EditEventScreen.js` | listo | Migrado completo ronda 3 sesión final |
 | Crear publicación | `screens/CreatePostScreen.js` | parcial | Tokens ok; no re-auditada a fondo esta ronda |
@@ -77,5 +76,5 @@ Antes de dar estos por migrados: `grep -rn "#[0-9A-Fa-f]\{6\}" src/components/<a
 - [ ] Pantalla "Búsqueda dedicada" (recientes/sugerencias) — no existe
 - [ ] Flujo de bienvenida/onboarding (`8a`–`8d`) — no existe, solo el paso de intereses
 - [x] Confirmar contenido real de Alertas (mockup `10a`) — verificado con datos reales
-- [ ] Confirmar contenido real de Mensajes/Chat (mockups `10b`/`10c`) — próxima sesión
+- [x] Confirmar contenido real de Mensajes/Chat (mockups `10b`/`10c`) — verificado con datos reales, bug de nombre/avatar corregido
 - [ ] Auditar hex hardcodeado en `CommentsSection.js`, `PostCard.js`, `PostDetailModal.js`, `ReportModal.js`, `ImageViewerModal.js`
