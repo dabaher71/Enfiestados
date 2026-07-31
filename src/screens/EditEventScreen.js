@@ -3,23 +3,22 @@
 // PRESENTACIÓN: tokens del design system, mismos patrones que CreateEventScreen
 // (chips de categoría, MetaRow-like pickers de fecha/hora sin duplicado, SegmentedControl, CTA amarillo).
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
 import { doc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Button from '../components/ui/Button';
+import ImageGridPicker from '../components/ui/ImageGridPicker';
 import Input, { TextArea } from '../components/ui/Input';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import Text from '../components/ui/Text';
 
-import { db, storage } from '../config/firebase';
-import { validateImageSize, validateImageMime, isValidWebURL, INPUT_LIMITS } from '../utils/security';
+import { db } from '../config/firebase';
+import { getImages } from '../lib/format';
+import { isValidWebURL, INPUT_LIMITS } from '../utils/security';
 import { CATEGORIES } from '../constants/categories';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -110,54 +109,15 @@ export default function EditEventScreen({ route, navigation }) {
   const [price,           setPrice]          = useState(event.price?.toString() || '');
   const [isVirtual,       setIsVirtual]      = useState(event.isVirtual || false);
   const [virtualLink,     setVirtualLink]    = useState(event.virtualLink || '');
-  const [image,           setImage]          = useState(event.image || null);
-  const [newImage,        setNewImage]       = useState(null);
+  const [images,          setImages]         = useState(() => getImages(event)); // URLs ya subidas
+  const [imagesUploading, setImagesUploading]= useState(false);
   const [loading,         setLoading]        = useState(false);
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería');
+  const handleSave = async () => {
+    if (imagesUploading) {
+      Alert.alert('Esperá un momento', 'Todavía se están subiendo las imágenes.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      if (!validateImageSize(asset)) {
-        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
-        return;
-      }
-      setNewImage(asset.uri);
-    }
-  };
-
-  const uploadImage = async (uri) => {
-    const blob = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = () => resolve(xhr.response);
-      xhr.onerror = () => reject(new Error('Error al leer imagen'));
-      xhr.responseType = 'blob';
-      xhr.open('GET', uri, true);
-      xhr.send(null);
-    });
-    if (!validateImageMime(blob)) {
-      blob.close?.();
-      throw new Error('Tipo de archivo no permitido. Solo se aceptan imágenes JPG, PNG, WebP o GIF.');
-    }
-    const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-    const storageRef = ref(storage, filename);
-    await uploadBytes(storageRef, blob, { contentType: blob.type });
-    const url = await getDownloadURL(storageRef);
-    blob.close?.();
-    return url;
-  };
-
-  const handleSave = async () => {
     if (!title || !category) {
       Alert.alert('Error', 'Completá los campos obligatorios');
       return;
@@ -177,9 +137,6 @@ export default function EditEventScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      let imageURL = image;
-      if (newImage) imageURL = await uploadImage(newImage);
-
       await updateDoc(doc(db, 'events', event.id), {
         title,
         description,
@@ -195,7 +152,8 @@ export default function EditEventScreen({ route, navigation }) {
         virtualLink: isVirtual ? virtualLink : '',
         isFree,
         price: isFree ? 0 : parseFloat(price) || 0,
-        image: imageURL,
+        images,
+        image: images[0] || '', // back-compat: consumidores viejos leen 'image' (FIX_ROUND_5 § 6)
         updatedAt: new Date().toISOString(),
       });
 
@@ -208,7 +166,6 @@ export default function EditEventScreen({ route, navigation }) {
     setLoading(false);
   };
 
-  const displayImage = newImage || image;
   const step2Valid = isVirtual ? virtualLink.trim().length > 0 : locationCoords !== null;
 
   return (
@@ -219,7 +176,7 @@ export default function EditEventScreen({ route, navigation }) {
           <Ionicons name="close" size={24} color={colors['text.primary']} />
         </Pressable>
         <Text variant="title">Editar evento</Text>
-        <Button variant="ghost" size="sm" label="Guardar" onPress={handleSave} loading={loading} />
+        <Button variant="ghost" size="sm" label="Guardar" onPress={handleSave} loading={loading} disabled={imagesUploading} />
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -228,23 +185,10 @@ export default function EditEventScreen({ route, navigation }) {
           contentContainerStyle={{ paddingHorizontal: space[5], paddingBottom: space[16] }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Imagen */}
+          {/* Imágenes — opcional, hasta 10, reordenables (FIX_ROUND_5 § 5) */}
           <Field>
             <FieldLabel label="Foto o afiche" optional colors={colors} />
-            <Pressable
-              onPress={pickImage}
-              style={[styles.imagePicker, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
-              accessibilityRole="button"
-            >
-              {displayImage ? (
-                <Image source={{ uri: displayImage }} style={styles.imagePreview} contentFit="cover" />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="image-outline" size={32} color={colors['text.tertiary']} />
-                  <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>Tocar para agregar</Text>
-                </View>
-              )}
-            </Pressable>
+            <ImageGridPicker initialUrls={getImages(event)} onUploadedChange={setImages} onBusyChange={setImagesUploading} />
           </Field>
 
           {/* Título */}
@@ -505,16 +449,6 @@ const styles = StyleSheet.create({
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   fieldWrap: { marginBottom: space[4] },
-
-  // Imagen
-  imagePicker: {
-    height: 160,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-  },
-  imagePreview: { width: '100%', height: '100%' },
-  imagePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Chips de categoría
   chipScroll: { flexGrow: 0, marginTop: 4 },
