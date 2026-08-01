@@ -82,11 +82,16 @@ export default function AppNavigator() {
       } catch {}
       setHasInterests(interests.length > 0);
 
-      // El invitado acaba de crear cuenta / iniciar sesión real: el Stack ya
-      // estaba montado en el árbol autenticado (mismo set de pantallas que
-      // cuando era anónimo), así que initialRouteName no se vuelve a evaluar.
-      // Hay que llevarlo a mano a MainApp o a Interests según corresponda.
-      if (wasAnonymous === true && navigationRef.isReady()) {
+      // Se acaba de autenticar como usuario real viniendo de Login/Register
+      // (wasAnonymous es null la primera vez que este componente ve un
+      // currentUser — cubre tanto "era invitado" como "nunca llegó a serlo",
+      // ej. si signInAnonymously falló y cayó directo a LoginScreen). Ahí
+      // Login/Register siguen registradas en el Stack (no desaparecen, ver
+      // abajo), así que React Navigation no vuelve a evaluar initialRouteName
+      // solo — hay que llevarlo a mano a MainApp o a Interests.
+      // wasAnonymous === false (usuario real re-emitiendo el mismo estado,
+      // ej. refresh de token) es el único caso que NO debe resetear la nav.
+      if (wasAnonymous !== false && navigationRef.isReady()) {
         navigationRef.reset({
           index: 0,
           routes: [{ name: interests.length > 0 ? 'MainApp' : 'Interests' }],
