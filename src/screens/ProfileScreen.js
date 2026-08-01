@@ -47,6 +47,15 @@ export default function ProfileScreen({ navigation }) {
   const currentUser = auth.currentUser;
 
   useEffect(() => {
+    // Defensa contra una carrera de auth: MainTabNavigator puede quedar
+    // montado un instante con auth.currentUser ya en null (sesión que
+    // terminó justo ahora) antes de que AppNavigator reaccione y desmonte
+    // este árbol — sin este guard, currentUser.uid revienta la pantalla
+    // entera vía ErrorBoundary. Si currentUser sigue null, loading no baja
+    // de true y esta pantalla se queda en skeleton hasta que la carrera
+    // se resuelva y AppNavigator la desmonte (o la vuelva a montar ya bien).
+    if (!currentUser) return;
+
     loadUser();
 
     // Eventos que organizó el usuario
@@ -89,7 +98,7 @@ export default function ProfileScreen({ navigation }) {
       unsubSavedExternal?.();
       focusUnsub?.();
     };
-  }, []);
+  }, [currentUser?.uid]);
 
   const loadUser = async () => {
     try {

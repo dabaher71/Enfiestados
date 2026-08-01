@@ -49,6 +49,17 @@ export default function AppNavigator() {
     }
     unsubscribeRef.current = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
+        // Sesión terminada (o arranque en frío). Si YA había una sesión
+        // montada (real o anónima), hay que sacarla de la UI ya mismo: si
+        // no, pantallas que leen auth.currentUser directo (ej.
+        // ProfileScreen) truenan con "Cannot read property 'uid' of null"
+        // — auth.currentUser YA es null acá aunque el estado de React
+        // todavía no se enteró — y los listeners de Firestore que quedaron
+        // abiertos bajo la sesión vieja tiran permission-denied. En el
+        // arranque en frío (todavía no había nada montado, user===undefined)
+        // no hace falta: el LoadingScreen ya cubre la espera.
+        setUser(prev => (prev === undefined ? undefined : null));
+
         // § 8a — sin muro de login: en vez de mostrar el formulario, se entra
         // como invitado (Firebase Auth anónimo) directo al feed. Login/Register
         // quedan para cuando el invitado intente guardar/asistir/comentar/etc.
