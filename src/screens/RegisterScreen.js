@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -201,7 +201,18 @@ export default function RegisterScreen({ navigation }) {
             style={{ marginTop: space[3] }}
           />
 
-          <Button variant="primary" size="lg" label="Crear cuenta" onPress={handleRegister} loading={loading} fullWidth style={{ marginTop: space[5] }} />
+          <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[5] }}>
+            Al crear tu cuenta aceptás nuestros{' '}
+            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados.net/terminos')}>
+              Términos y Condiciones
+            </Text>{' '}
+            y nuestra{' '}
+            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados.net/privacidad')}>
+              Política de Privacidad
+            </Text>.
+          </Text>
+
+          <Button variant="primary" size="lg" label="Crear cuenta" onPress={handleRegister} loading={loading} fullWidth style={{ marginTop: space[3] }} />
 
           {/* Divider */}
           <View style={styles.divider}>
