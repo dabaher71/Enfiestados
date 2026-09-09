@@ -62,6 +62,10 @@ module.exports = {
         backgroundColor: '#1a1a2e',
       },
       package: 'com.enfiestados.app',
+      // Requerido por @react-native-firebase/app (Crashlytics) — antes no
+      // estaba referenciado acá, así que nunca se copiaba al proyecto nativo
+      // ni se aplicaba el Google Services Gradle plugin.
+      googleServicesFile: './google-services.json',
       config: {
         googleMaps: {
           apiKey: googleMapsApiKeyAndroid,
@@ -111,6 +115,11 @@ module.exports = {
       'expo-font',
       'expo-router',
       '@react-native-google-signin/google-signin',
+      // Crashlytics: reportes de crashes en producción. Solo Android por
+      // ahora — no hay GoogleService-Info.plist todavía (build de iOS sin
+      // empezar). Agregar ios.googleServicesFile acá cuando arranque iOS.
+      '@react-native-firebase/app',
+      '@react-native-firebase/crashlytics',
     ],
     notification: {
       icon: './assets/images/logo.png',

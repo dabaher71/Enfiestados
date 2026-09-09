@@ -20,6 +20,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SnackbarProvider } from './src/components/ui/Snackbar';
 import { ThemeProvider } from './src/theme/ThemeProvider';
+import { installGlobalErrorHandler } from './src/lib/crashReporting';
 import { sanitizeError } from './src/utils/security';
 
 // Override global: evita que objetos Firebase completos (con tokens, configs)
@@ -33,6 +34,8 @@ if (!__DEV__) {
     _origError(...safe);
   };
 }
+
+installGlobalErrorHandler();
 
 // Configurar cómo se muestran las notificaciones
 // Notifications.setNotificationHandler({

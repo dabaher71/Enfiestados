@@ -9,6 +9,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import LoadingScreen from '../components/LoadingScreen';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import BlockedUsersScreen from '../screens/BlockedUsersScreen';
+import { setCrashUser } from '../lib/crashReporting';
 import EditEventScreen from '../screens/EditEventScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
@@ -77,6 +78,7 @@ export default function AppNavigator() {
       const wasAnonymous = wasAnonymousRef.current;
       wasAnonymousRef.current = currentUser.isAnonymous;
       setUser(currentUser);
+      setCrashUser(currentUser.uid);
 
       if (currentUser.isAnonymous) {
         setHasInterests(true);

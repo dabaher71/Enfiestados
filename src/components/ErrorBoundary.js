@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { recordError } from '../lib/crashReporting';
 
 export default class ErrorBoundary extends Component {
   state = { hasError: false, error: null };
@@ -11,6 +12,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary]', error, info);
+    recordError(error, `ErrorBoundary: ${info?.componentStack?.slice(0, 200) || ''}`);
   }
 
   reset = () => {
