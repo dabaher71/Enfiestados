@@ -851,7 +851,9 @@ exports.triggerScrape = onCall(
 // email, y lo confirma (confirmAccountDeletion) para borrar la cuenta.
 // El código se guarda hasheado — nunca en texto plano — y expira a los 15 min.
 
-const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
+// Correo hospedado en Hostinger (smtp.hostinger.com), no Gmail/Microsoft —
+// el secret es la contraseña normal de la casilla, no un "app password".
+const EMAIL_SMTP_PASSWORD = defineSecret("EMAIL_SMTP_PASSWORD");
 const DELETION_SENDER_EMAIL = "info@enfiestados.net";
 const DELETION_CODE_TTL_MS = 15 * 60 * 1000;
 const DELETION_REQUEST_COOLDOWN_MS = 60 * 1000;
@@ -862,7 +864,7 @@ function hashDeletionCode(code) {
 }
 
 exports.requestAccountDeletion = onCall(
-  { secrets: [GMAIL_APP_PASSWORD], timeoutSeconds: 30 },
+  { secrets: [EMAIL_SMTP_PASSWORD], timeoutSeconds: 30 },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Debés estar autenticado");
@@ -891,8 +893,10 @@ exports.requestAccountDeletion = onCall(
     });
 
     const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: DELETION_SENDER_EMAIL, pass: GMAIL_APP_PASSWORD.value() },
+      host: "smtp.hostinger.com",
+      port: 465,
+      secure: true,
+      auth: { user: DELETION_SENDER_EMAIL, pass: EMAIL_SMTP_PASSWORD.value() },
     });
 
     await transporter.sendMail({
