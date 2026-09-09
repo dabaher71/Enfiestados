@@ -15,6 +15,7 @@ import {
   View
 } from 'react-native';
 import { auth, db } from '../config/firebase';
+import useBlockedUsers from '../hooks/useBlockedUsers';
 import { addComment, deleteComment } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { recordSignal } from '../services/signalService';
@@ -35,6 +36,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
 
   const user = auth.currentUser;
   const userId = user?.uid;
+  const { allBlocked } = useBlockedUsers();
 
   const [currentUserData, setCurrentUserData] = useState(null);
 
@@ -235,11 +237,13 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     );
   }, [userId, organizerId, handleDelete]);
 
+  const visibleComments = comments.filter(c => !allBlocked.has(getCommentUserId(c)));
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Comentarios ({comments.length})</Text>
+      <Text style={styles.title}>Comentarios ({visibleComments.length})</Text>
 
-      {comments.length === 0 ? (
+      {visibleComments.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="chatbubble-outline" size={40} color="#888" />
           <Text style={styles.emptyText}>No hay comentarios aún</Text>
@@ -247,7 +251,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         </View>
       ) : (
         <FlatList
-          data={comments}
+          data={visibleComments}
           keyExtractor={(item) => item.id}
           renderItem={renderComment}
           scrollEnabled={false}

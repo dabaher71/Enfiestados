@@ -39,6 +39,7 @@ export default function UserProfileScreen({ route, navigation }) {
   const [isFollowing,      setIsFollowing]      = useState(false);
   const [hasPending,       setHasPending]       = useState(false);
   const [isBlocked,        setIsBlocked]        = useState(false);
+  const [theyBlockedMe,    setTheyBlockedMe]    = useState(false);
   const [showReport,       setShowReport]       = useState(false);
 
   const currentUserId  = auth.currentUser?.uid;
@@ -60,6 +61,7 @@ export default function UserProfileScreen({ route, navigation }) {
         setUser(data);
         setIsFollowing(data.followers?.includes(currentUserId) || false);
         setHasPending(data.followRequests?.includes(currentUserId) || false);
+        setTheyBlockedMe(data.usuariosBloqueados?.includes(currentUserId) || false);
         const mySnap = await getDoc(doc(db, 'users', currentUserId));
         setIsBlocked(mySnap.data()?.usuariosBloqueados?.includes(userId) || false);
       }
@@ -99,6 +101,7 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const handleMessage = async () => {
     if (!requireAccount(navigation, 'Creá una cuenta para enviar mensajes.')) return;
+    if (isBlocked || theyBlockedMe) return;
     try {
       const chat = await getOrCreateChat(currentUserId, userId);
       navigation.navigate('ChatDetail', { chatId: chat.id, otherUserId: userId, otherUserName: user.name, otherUserAvatar: user.avatar });
@@ -139,7 +142,8 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const followLabel  = isFollowing ? 'Siguiendo' : hasPending ? 'Solicitado' : 'Seguir';
   const followVariant = isFollowing || hasPending ? 'secondary' : 'primary';
-  const canView = isOwnProfile || isFollowing || user?.perfilPublico !== false;
+  const blockedEitherWay = isBlocked || theyBlockedMe;
+  const canView = !blockedEitherWay && (isOwnProfile || isFollowing || user?.perfilPublico !== false);
 
   if (loading) {
     return (
@@ -211,7 +215,7 @@ export default function UserProfileScreen({ route, navigation }) {
           {/* Acciones */}
           {!isOwnProfile && (
             <View style={styles.actions}>
-              {!isBlocked && (
+              {!isBlocked && !theyBlockedMe && (
                 <>
                   <Button variant={followVariant} size="md" label={followLabel} onPress={handleFollow} style={{ flex: 1 }} />
                   <Button variant="secondary" size="icon" leadingIcon={<Ionicons name="chatbubble-outline" size={20} color={colors['text.primary']} />} onPress={handleMessage} accessibilityLabel="Enviar mensaje" />
@@ -232,6 +236,11 @@ export default function UserProfileScreen({ route, navigation }) {
                 accessibilityLabel="Reportar"
               />
             </View>
+          )}
+          {theyBlockedMe && (
+            <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[3] }}>
+              No podés interactuar con este usuario.
+            </Text>
           )}
         </View>
 
@@ -268,6 +277,12 @@ export default function UserProfileScreen({ route, navigation }) {
               )}
             </>
           )
+        ) : blockedEitherWay ? (
+          <EmptyState
+            icon={<Ionicons name="ban-outline" size={28} color={colors['text.tertiary']} />}
+            title="No disponible"
+            description="No podés ver el contenido de este usuario."
+          />
         ) : (
           <EmptyState
             icon={<Ionicons name="lock-closed-outline" size={28} color={colors['nav.selected']} />}

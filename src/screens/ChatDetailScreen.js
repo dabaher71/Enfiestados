@@ -14,6 +14,7 @@ import Avatar from '../components/ui/Avatar';
 import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
+import useBlockedUsers from '../hooks/useBlockedUsers';
 import { markMessagesAsRead, sendMessage, subscribeToMessages } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -65,6 +66,8 @@ export default function ChatDetailScreen({ route, navigation }) {
   const [otherUser,  setOtherUser]  = useState({ name: otherUserName, avatar: otherUserAvatar });
   const listRef = useRef();
   const userId  = auth.currentUser?.uid;
+  const { allBlocked } = useBlockedUsers();
+  const isBlocked = allBlocked.has(otherUserId);
 
   useEffect(() => {
     getDoc(doc(db, 'users', otherUserId))
@@ -80,7 +83,7 @@ export default function ChatDetailScreen({ route, navigation }) {
 
   const handleSend = async () => {
     const text = newMessage.trim();
-    if (!text) return;
+    if (!text || isBlocked) return;
     setNewMessage('');
     try { await sendMessage(chatId, userId, text); } catch {}
   };
@@ -241,23 +244,31 @@ export default function ChatDetailScreen({ route, navigation }) {
         />
 
         {/* Input */}
-        <View style={[styles.inputBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors['bg.surface'], color: colors['text.primary'] }]}
-            placeholder="Escribí un mensaje…"
-            placeholderTextColor={colors['text.tertiary']}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            multiline
-          />
-          <Pressable
-            style={[styles.sendBtn, { backgroundColor: colors['action.primary'] }]}
-            onPress={handleSend}
-            accessibilityLabel="Enviar mensaje"
-          >
-            <Ionicons name="send" size={20} color={colors['text.onAction']} />
-          </Pressable>
-        </View>
+        {isBlocked ? (
+          <View style={[styles.blockedBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
+            <Text variant="caption" color="text.tertiary" align="center">
+              No podés enviar mensajes a este usuario.
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.inputBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors['bg.surface'], color: colors['text.primary'] }]}
+              placeholder="Escribí un mensaje…"
+              placeholderTextColor={colors['text.tertiary']}
+              value={newMessage}
+              onChangeText={setNewMessage}
+              multiline
+            />
+            <Pressable
+              style={[styles.sendBtn, { backgroundColor: colors['action.primary'] }]}
+              onPress={handleSend}
+              accessibilityLabel="Enviar mensaje"
+            >
+              <Ionicons name="send" size={20} color={colors['text.onAction']} />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -310,6 +321,11 @@ const styles = StyleSheet.create({
     paddingVertical: space[3],
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: space[3],
+  },
+  blockedBar: {
+    paddingHorizontal: space[4],
+    paddingVertical: space[4],
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   input: {
     flex: 1,

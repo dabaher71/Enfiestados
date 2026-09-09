@@ -19,6 +19,7 @@ import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 import Sheet from '../components/ui/Sheet';
 
+import useBlockedUsers from '../hooks/useBlockedUsers';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { subscribeToEvents } from '../services/eventService';
 import { CATEGORIES } from '../constants/categories';
@@ -201,6 +202,7 @@ export default function SearchScreen({ navigation }) {
   const [timeFilter,    setTimeFilter]    = useState('all');
   const [province,      setProvince]      = useState('all');
   const [showAllCats,   setShowAllCats]   = useState(false);
+  const { allBlocked } = useBlockedUsers();
 
   const mapRef  = useRef(null);
   const listRef = useRef(null);
@@ -219,7 +221,8 @@ export default function SearchScreen({ navigation }) {
   const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
 
   const filteredNative = useMemo(() => {
-    let f = events.filter(e => { const d = parseDate(e.date); return !d || d >= today; });
+    let f = events.filter(e => { const d = parseDate(e.date); return !d || d >= today; })
+      .filter(e => !allBlocked.has(e.organizerId));
     if (query.trim()) {
       const q = query.toLowerCase();
       f = f.filter(e => e.title?.toLowerCase().includes(q) || e.location?.name?.toLowerCase().includes(q));
@@ -234,7 +237,7 @@ export default function SearchScreen({ navigation }) {
       });
     }
     return f;
-  }, [events, query, category, timeFilter, province, today]);
+  }, [events, query, category, timeFilter, province, today, allBlocked]);
 
   const filteredExternal = useMemo(() => {
     let f = externalEvents.filter(e => e.dateISO ? new Date(e.dateISO) >= today : true);

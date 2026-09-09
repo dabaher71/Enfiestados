@@ -18,6 +18,7 @@ import EmptyState from '../components/ui/EmptyState';
 import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 import { subscribeToChats } from '../services/chatService';
+import useBlockedUsers from '../hooks/useBlockedUsers';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 
@@ -44,6 +45,7 @@ export default function MessagesScreen({ navigation }) {
   const [loading,   setLoading]   = useState(true);
   const [usersData, setUsersData] = useState({});
   const userId = auth.currentUser?.uid;
+  const { allBlocked } = useBlockedUsers();
 
   useEffect(() => {
     const unsub = subscribeToChats(userId, async (data) => {
@@ -93,6 +95,11 @@ export default function MessagesScreen({ navigation }) {
     );
   }, [userId, usersData, colors, navigation]);
 
+  const visibleChats = chats.filter(c => {
+    const otherId = c.participants?.find(id => id !== userId);
+    return !allBlocked.has(otherId);
+  });
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       <View style={styles.header}>
@@ -104,7 +111,7 @@ export default function MessagesScreen({ navigation }) {
 
       {loading ? (
         <SkeletonList count={5} />
-      ) : chats.length === 0 ? (
+      ) : visibleChats.length === 0 ? (
         <EmptyState
           icon={<Ionicons name="chatbubbles-outline" size={28} color={colors['text.tertiary']} />}
           title="Sin conversaciones"
@@ -114,7 +121,7 @@ export default function MessagesScreen({ navigation }) {
         />
       ) : (
         <FlatList
-          data={chats}
+          data={visibleChats}
           keyExtractor={item => item.id}
           renderItem={renderItem}
         />

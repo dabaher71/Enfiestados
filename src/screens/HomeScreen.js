@@ -23,6 +23,7 @@ import { SkeletonEventRow, SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 
 import { auth, db, functions } from '../config/firebase';
+import useBlockedUsers from '../hooks/useBlockedUsers';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { formatDaySeparator } from '../lib/format';
 import { requireAccount } from '../lib/requireAccount';
@@ -174,6 +175,7 @@ export default function HomeScreen({ navigation }) {
   const [internalAds,    setInternalAds]    = useState([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [savedExternalIds, setSavedExternalIds] = useState(new Set());
+  const { allBlocked } = useBlockedUsers();
 
   const visibleSinceRef   = useRef({});
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
@@ -262,7 +264,7 @@ export default function HomeScreen({ navigation }) {
 
   const displayedEvents = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const native = events.filter(ev => !isExpired(ev));
+    const native = events.filter(ev => !isExpired(ev) && !allBlocked.has(ev.organizerId));
     let base;
     if (activeTab === 'siguiendo') {
       base = sortAsc(native.filter(ev => following?.includes(ev.organizerId)));
@@ -271,7 +273,7 @@ export default function HomeScreen({ navigation }) {
       base = scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
     }
     return applyTimeFilter(base, timeFilter);
-  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired]);
+  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired, allBlocked]);
 
   const sections = useMemo(
     () => groupByDay(displayedEvents, internalAds),

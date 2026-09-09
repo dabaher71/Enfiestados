@@ -110,7 +110,7 @@ export default function SettingsScreen({ navigation }) {
           <Row icon="person-outline"    label="Editar perfil"       subtitle="Foto, nombre, biografía"        onPress={() => navigation.navigate('EditProfile', { user: null })} />
           <Row icon="sparkles-outline"  label="Mis intereses"       subtitle="Qué tipo de eventos querés ver"  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
           <Row icon="location-outline"  label="Zona y distancia"    subtitle="Región y radio de búsqueda"      value="15 km"      onPress={() => Alert.alert('Zona', 'Próximamente…')} />
-          <Row icon="lock-closed-outline" label="Privacidad"        subtitle="Permisos y bloqueos"             onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
+          <Row icon="lock-closed-outline" label="Usuarios bloqueados" subtitle="Ver y desbloquear"              onPress={() => navigation.navigate('BlockedUsers')} />
         </View>
 
         {/* Apariencia */}
