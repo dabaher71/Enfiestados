@@ -233,6 +233,14 @@ service cloud.firestore {
       allow delete: if isAdminUser();
     }
 
+    // ── accountDeletionRequests ──────────────────────────────────────────────
+    // Solo lo tocan requestAccountDeletion/confirmAccountDeletion (Admin SDK,
+    // ignora estas reglas). El cliente nunca debe leer ni escribir acá —
+    // expondría el hash del código a fuerza bruta offline.
+    match /accountDeletionRequests/{userId} {
+      allow read, write: if false;
+    }
+
     // ── notifications ─────────────────────────────────────────────────────────
     match /notifications/{notificationId} {
       allow read: if isAuth() && resource.data.toUserId == request.auth.uid;

@@ -3,27 +3,37 @@
 // PRESENTACIÓN: design system v1.1 — MetaRow, SwitchRow, Dialog, tokens.
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Button from '../components/ui/Button';
 import Dialog from '../components/ui/Dialog';
+import Input from '../components/ui/Input';
+import Sheet from '../components/ui/Sheet';
 import Text from '../components/ui/Text';
 
-import { auth } from '../config/firebase';
+import { auth, functions } from '../config/firebase';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
 import Constants from 'expo-constants';
 
 const NOTIF_KEY = '@enfiestados/notif_prefs';
+const PRIVACY_URL = 'https://enfiestados-alpha.web.app/privacidad';
 
 export default function SettingsScreen({ navigation }) {
   const { colors, mode, setThemeMode } = useTheme();
   const [notifCount,  setNotifCount]  = useState(3);  // "3 de 3" por defecto
   const [showLogout, setShowLogout] = useState(false);
+
+  // Eliminar cuenta: 'closed' → 'confirm' (aviso) → 'code' (pedir/validar código)
+  const [deleteStep,    setDeleteStep]    = useState('closed');
+  const [deleteCode,    setDeleteCode]    = useState('');
+  const [deleteError,   setDeleteError]   = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Leer preferencias para mostrar el valor actual en la fila
   useState(() => {
@@ -38,6 +48,39 @@ export default function SettingsScreen({ navigation }) {
   const handleLogout = async () => {
     try { await signOut(auth); } catch { Alert.alert('Error', 'No se pudo cerrar sesión'); }
     setShowLogout(false);
+  };
+
+  const closeDeleteFlow = () => {
+    setDeleteStep('closed');
+    setDeleteCode('');
+    setDeleteError('');
+  };
+
+  const handleRequestDeletionCode = async () => {
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      await httpsCallable(functions, 'requestAccountDeletion')();
+      setDeleteStep('code');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'No se pudo enviar el código. Intentá de nuevo.');
+    }
+    setDeleteLoading(false);
+  };
+
+  const handleConfirmDeletion = async () => {
+    if (deleteCode.length !== 6) { setDeleteError('Ingresá los 6 dígitos'); return; }
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      await httpsCallable(functions, 'confirmAccountDeletion')({ code: deleteCode });
+      closeDeleteFlow();
+      await signOut(auth);
+      Alert.alert('Cuenta eliminada', 'Gracias por haber sido parte de Enfiestados.');
+    } catch (e) {
+      setDeleteError(e?.message || 'No se pudo confirmar. Intentá de nuevo.');
+    }
+    setDeleteLoading(false);
   };
 
   const SectionTitle = ({ label }) => (
@@ -163,7 +206,7 @@ export default function SettingsScreen({ navigation }) {
         <SectionTitle label="INFORMACIÓN" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           <Row icon="document-text-outline"    label="Términos y condiciones" onPress={() => Alert.alert('Términos', 'Próximamente…')} />
-          <Row icon="shield-checkmark-outline" label="Política de privacidad" onPress={() => Alert.alert('Privacidad', 'Próximamente…')} />
+          <Row icon="shield-checkmark-outline" label="Política de privacidad" onPress={() => Linking.openURL(PRIVACY_URL)} />
           <Row icon="help-circle-outline"      label="Ayuda y soporte"        onPress={() => Alert.alert('Soporte', 'Escribinos a soporte@enfiestados.com')} />
           <Row icon="information-circle-outline" label="Versión"              value={`${Constants.expoConfig?.version ?? '1.0.0'} Beta`} />
         </View>
@@ -172,13 +215,19 @@ export default function SettingsScreen({ navigation }) {
         <SectionTitle label="SESIÓN" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           <Row icon="log-out-outline"  label={t.settings.logout}    destructive onPress={() => setShowLogout(true)} />
-          <Row icon="trash-outline"    label="Eliminar cuenta"       destructive onPress={() => Alert.alert('Eliminar cuenta', 'Esta acción es irreversible. Contactá a soporte@enfiestados.com para proceder.')} />
         </View>
 
-        {/* Footer */}
+        {/* Footer — eliminar cuenta va acá, discreto: no es una acción que
+            queramos invitar a tocar por accidente, pero tiene que ser
+            encontrable (requisito de Google Play). */}
         <View style={styles.footer}>
           <Text variant="caption" color="text.tertiary" align="center">Hecho con ☀️ en Costa Rica</Text>
           <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: 4 }}>© 2026 Enfiestados</Text>
+          <Pressable onPress={() => setDeleteStep('confirm')} hitSlop={8} style={{ marginTop: space[6] }}>
+            <Text variant="caption" color="text.tertiary" align="center" style={styles.deleteLink}>
+              Eliminar mi cuenta
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -192,6 +241,54 @@ export default function SettingsScreen({ navigation }) {
         onConfirm={handleLogout}
         onCancel={() => setShowLogout(false)}
       />
+
+      <Sheet visible={deleteStep !== 'closed'} onClose={closeDeleteFlow} height="half" title="Eliminar cuenta">
+        <View style={styles.deleteSheet}>
+          {deleteStep === 'confirm' && (
+            <>
+              <Text variant="body" color="text.secondary">
+                Esta acción es irreversible: se borra tu perfil y tu cuenta deja de existir. Te vamos a mandar un código de verificación a tu correo para confirmar que sos vos.
+              </Text>
+              <Button
+                variant="destructive"
+                size="md"
+                label="Enviar código de verificación"
+                loading={deleteLoading}
+                onPress={handleRequestDeletionCode}
+                style={{ marginTop: space[5] }}
+              />
+            </>
+          )}
+          {deleteStep === 'code' && (
+            <>
+              <Text variant="body" color="text.secondary">
+                Te enviamos un código de 6 dígitos por correo. Ingresalo para eliminar tu cuenta definitivamente.
+              </Text>
+              <Input
+                label="Código de verificación"
+                placeholder="000000"
+                value={deleteCode}
+                onChangeText={v => { setDeleteCode(v.replace(/\D/g, '').slice(0, 6)); setDeleteError(''); }}
+                keyboardType="number-pad"
+                maxLength={6}
+                errorText={deleteError}
+                style={{ marginTop: space[4] }}
+              />
+              <Button
+                variant="destructive"
+                size="md"
+                label="Eliminar cuenta definitivamente"
+                loading={deleteLoading}
+                onPress={handleConfirmDeletion}
+                style={{ marginTop: space[4] }}
+              />
+              <Pressable onPress={handleRequestDeletionCode} disabled={deleteLoading} style={{ marginTop: space[3], alignSelf: 'center' }}>
+                <Text variant="caption" color="text.tertiary">Reenviar código</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </Sheet>
     </SafeAreaView>
   );
 }
@@ -245,4 +342,6 @@ const styles = StyleSheet.create({
   },
 
   footer: { paddingVertical: space[8], alignItems: 'center' },
+  deleteLink: { fontSize: 12, textDecorationLine: 'underline' },
+  deleteSheet: { paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[8] },
 });

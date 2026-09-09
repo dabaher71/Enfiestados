@@ -2,9 +2,12 @@ const { setGlobalOptions } = require("firebase-functions");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -840,5 +843,106 @@ exports.triggerScrape = onCall(
     const all = results.flatMap((r) => r.status === "fulfilled" ? r.value : []);
     await saveScrapedEvents(all);
     return { count: all.length };
+  }
+);
+
+// ─── Eliminación de cuenta con código por correo ───────────────────────────────
+// Flujo: el cliente pide un código (requestAccountDeletion), lo recibe por
+// email, y lo confirma (confirmAccountDeletion) para borrar la cuenta.
+// El código se guarda hasheado — nunca en texto plano — y expira a los 15 min.
+
+const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
+const DELETION_SENDER_EMAIL = "info@enfiestados.net";
+const DELETION_CODE_TTL_MS = 15 * 60 * 1000;
+const DELETION_REQUEST_COOLDOWN_MS = 60 * 1000;
+const DELETION_MAX_ATTEMPTS = 5;
+
+function hashDeletionCode(code) {
+  return crypto.createHash("sha256").update(code).digest("hex");
+}
+
+exports.requestAccountDeletion = onCall(
+  { secrets: [GMAIL_APP_PASSWORD], timeoutSeconds: 30 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Debés estar autenticado");
+
+    const userRecord = await admin.auth().getUser(uid);
+    const email = userRecord.email;
+    if (!email) {
+      throw new HttpsError("failed-precondition", "Tu cuenta no tiene un correo asociado");
+    }
+
+    const reqRef = db.collection("accountDeletionRequests").doc(uid);
+    const existing = await reqRef.get();
+    if (existing.exists) {
+      const lastSentAt = existing.data().createdAt?.toMillis?.() ?? 0;
+      if (Date.now() - lastSentAt < DELETION_REQUEST_COOLDOWN_MS) {
+        throw new HttpsError("resource-exhausted", "Esperá un momento antes de pedir otro código");
+      }
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await reqRef.set({
+      codeHash: hashDeletionCode(code),
+      attempts: 0,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + DELETION_CODE_TTL_MS),
+    });
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: DELETION_SENDER_EMAIL, pass: GMAIL_APP_PASSWORD.value() },
+    });
+
+    await transporter.sendMail({
+      from: `Enfiestados <${DELETION_SENDER_EMAIL}>`,
+      to: email,
+      subject: "Código para eliminar tu cuenta de Enfiestados",
+      text: `Tu código para eliminar tu cuenta de Enfiestados es: ${code}\n\n` +
+        "Vence en 15 minutos. Si no pediste esto, ignorá este correo — tu cuenta sigue segura.\n\n" +
+        "— Enfiestados",
+    });
+
+    return { sent: true };
+  }
+);
+
+exports.confirmAccountDeletion = onCall(
+  { timeoutSeconds: 30 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Debés estar autenticado");
+
+    const code = String(request.data?.code || "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      throw new HttpsError("invalid-argument", "Código inválido");
+    }
+
+    const reqRef = db.collection("accountDeletionRequests").doc(uid);
+    const snap = await reqRef.get();
+    if (!snap.exists) {
+      throw new HttpsError("failed-precondition", "Pedí un código primero");
+    }
+
+    const data = snap.data();
+    if (data.expiresAt.toMillis() < Date.now()) {
+      await reqRef.delete();
+      throw new HttpsError("deadline-exceeded", "El código venció, pedí uno nuevo");
+    }
+    if (data.attempts >= DELETION_MAX_ATTEMPTS) {
+      await reqRef.delete();
+      throw new HttpsError("resource-exhausted", "Demasiados intentos, pedí un código nuevo");
+    }
+    if (hashDeletionCode(code) !== data.codeHash) {
+      await reqRef.update({ attempts: admin.firestore.FieldValue.increment(1) });
+      throw new HttpsError("invalid-argument", "Código incorrecto");
+    }
+
+    await reqRef.delete();
+    await db.collection("users").doc(uid).delete().catch(() => {});
+    await admin.auth().deleteUser(uid).catch(() => {});
+
+    return { deleted: true };
   }
 );

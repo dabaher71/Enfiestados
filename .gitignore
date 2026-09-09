@@ -34,6 +34,9 @@ yarn-error.*
 .env*.local
 .env
 
+# caché local de firebase deploy
+.firebase
+
 # Secretos — NUNCA commitear
 serviceAccountKey.json
 *serviceAccount*.json

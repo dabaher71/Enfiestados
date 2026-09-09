@@ -201,13 +201,16 @@ export default function RegisterScreen({ navigation }) {
             style={{ marginTop: space[3] }}
           />
 
+          {/* Privacidad: URL temporal en Firebase Hosting hasta que el abogado
+              entregue la versión final y se suba a enfiestados.net/privacidad.
+              Términos sigue pendiente — el abogado todavía la está redactando. */}
           <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[5] }}>
             Al crear tu cuenta aceptás nuestros{' '}
             <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados.net/terminos')}>
               Términos y Condiciones
             </Text>{' '}
             y nuestra{' '}
-            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados.net/privacidad')}>
+            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados-alpha.web.app/privacidad')}>
               Política de Privacidad
             </Text>.
           </Text>
