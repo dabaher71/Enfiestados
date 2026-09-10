@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>211216248478-oir25bd44tf6iv3gh9spro8a7imhpaoi.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyB_ZFvGPVw6qdE0z5pdYrCOaNhkRPEU124</string>
+	<key>GCM_SENDER_ID</key>
+	<string>211216248478</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.enfiestados.app</string>
+	<key>PROJECT_ID</key>
+	<string>enfiestados-alpha</string>
+	<key>STORAGE_BUCKET</key>
+	<string>enfiestados-alpha.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:211216248478:ios:164f2cf46d1a009e81558f</string>
+</dict>
+</plist>

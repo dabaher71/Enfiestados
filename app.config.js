@@ -37,16 +37,20 @@ module.exports = {
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.david.enfiestados',
+      // Antes decía 'com.david.enfiestados' — no coincidía con el bundle ID
+      // ya registrado en Firebase (app iOS) ni con el cliente OAuth de
+      // Google Sign-In para iOS, ambos configurados con 'com.enfiestados.app'
+      // (el mismo package que Android). No hay nada en App Store Connect
+      // todavía atado al valor viejo, así que se corrige acá en vez de volver
+      // a registrar todo en Firebase/Google Cloud con el ID equivocado.
+      bundleIdentifier: 'com.enfiestados.app',
       buildNumber: '7',
+      googleServicesFile: './GoogleService-Info.plist',
       config: {
         googleMapsApiKey: googleMapsApiKeyIOS,
       },
       infoPlist: {
         CFBundleURLTypes: [
-          { CFBundleURLSchemes: ['com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h'] },
-          { CFBundleURLSchemes: ['com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h'] },
-          { CFBundleURLSchemes: ['com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h'] },
           { CFBundleURLSchemes: ['com.googleusercontent.apps.211216248478-3h0pjmcm66d8bf59r6m6eh0aeiagbk7h'] },
         ],
         NSCameraUsageDescription: 'Necesitamos acceso a tu cámara para tomar fotos de eventos y perfil',
@@ -115,11 +119,20 @@ module.exports = {
       'expo-font',
       'expo-router',
       '@react-native-google-signin/google-signin',
-      // Crashlytics: reportes de crashes en producción. Solo Android por
-      // ahora — no hay GoogleService-Info.plist todavía (build de iOS sin
-      // empezar). Agregar ios.googleServicesFile acá cuando arranque iOS.
+      // Crashlytics: reportes de crashes en producción, Android e iOS.
       '@react-native-firebase/app',
       '@react-native-firebase/crashlytics',
+      [
+        'expo-build-properties',
+        {
+          // static + $RNFirebaseDisableSPM (ver plugins/withPodfileStaticFrameworkFix.js)
+          // es la combinación que linkea bien con AdMob y react-native-maps.
+          // buildReactNativeFromSource evita otro conflicto del React-Core
+          // precompilado (nuevo en RN 0.81) con este mismo setup.
+          ios: { useFrameworks: 'static', buildReactNativeFromSource: true },
+        },
+      ],
+      './plugins/withPodfileStaticFrameworkFix',
     ],
     notification: {
       icon: './assets/images/logo.png',
