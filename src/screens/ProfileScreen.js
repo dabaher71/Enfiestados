@@ -276,13 +276,20 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => navigation.navigate('EditProfile', { user: null })}
               style={{ flex: 1 }}
             />
-            <Button
-              variant="secondary"
-              size="sm"
-              label="Herramientas"
-              onPress={() => navigation.navigate('OrganizerPanel')}
-              style={{ flex: 1 }}
-            />
+            {/* Herramientas queda fuera de la v1.0: el sistema de anuncios que
+                cuelga de acá no funciona todavía (aprobar anunciante falla por
+                reglas, faltan índices de Firestore, y las métricas las escribe
+                el cliente). Se rediseña como self-serve — ver el plan. Visible
+                solo en desarrollo para poder seguir trabajándolo. */}
+            {__DEV__ && (
+              <Button
+                variant="secondary"
+                size="sm"
+                label="Herramientas"
+                onPress={() => navigation.navigate('OrganizerPanel')}
+                style={{ flex: 1 }}
+              />
+            )}
             <Pressable
               style={[styles.shareBtn, { backgroundColor: colors['bg.surface'] }]}
               onPress={() => Share.share({ message: `Seguime en Enfiestados: @${handle}` }).catch(() => {})}
