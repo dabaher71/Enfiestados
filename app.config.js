@@ -101,7 +101,15 @@ module.exports = {
           iosAppId: 'ca-app-pub-5363568499936245~8795174061',
         },
       ],
-      'expo-notifications',
+      // Las cuentas gratuitas de Apple (Personal Team) no pueden firmar la
+      // capability de Push Notifications: el entitlement `aps-environment`
+      // que agrega este plugin hace fallar la firma al correr en un
+      // dispositivo real desde Xcode. Con EXPO_NO_PUSH=1 se omite el plugin
+      // (el módulo nativo sigue autolinkeado — solo se saca el entitlement).
+      // Sin la variable, o sea en los builds de EAS/producción, las push
+      // quedan intactas. En runtime, pushNotificationService.isPushSupported()
+      // ya contempla este caso y no crashea.
+      process.env.EXPO_NO_PUSH === '1' ? null : 'expo-notifications',
       [
         'expo-image-picker',
         {
@@ -133,7 +141,10 @@ module.exports = {
         },
       ],
       './plugins/withPodfileStaticFrameworkFix',
-    ],
+      // Último en la lista a propósito: borra el entitlement de push que
+      // agrega expo-notifications, así que tiene que correr después de él.
+      './plugins/withOptionalPushEntitlement',
+    ].filter(Boolean),
     notification: {
       icon: './assets/images/logo.png',
       color: '#6c5ce7',
