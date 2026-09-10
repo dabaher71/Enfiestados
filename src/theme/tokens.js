@@ -21,6 +21,12 @@ const _dark = {
   'text.tertiary':  '#9A91AD',
   'text.onAction':  '#17131F',
 
+  // Perilla del Switch: blanca en ambos temas (convención de iOS/Android).
+  // Antes usaba text.primary, que en tema claro es casi negro (#171320) —
+  // la perilla salía negra. Mismo patrón que bg.track: token propio en vez
+  // de un valor escrito a mano en el componente.
+  'control.thumb':  '#FFFFFF',
+
   'action.primary':          '#FFC94A',
   'action.primary.pressed':  '#F2B738',
   'action.primary.disabled': 'rgba(255,255,255,0.05)',
@@ -52,6 +58,8 @@ const _light = {
   'text.secondary': '#4A4258',
   'text.tertiary':  '#6E6680',
   'text.onAction':  '#17131F',
+
+  'control.thumb':  '#FFFFFF',
 
   'action.primary':          '#FFC94A',
   'action.primary.pressed':  '#F2B738',

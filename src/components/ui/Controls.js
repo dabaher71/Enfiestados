@@ -26,7 +26,7 @@ export function SwitchRow({ label, description, value, onValueChange, disabled =
         onValueChange={onValueChange}
         disabled={disabled}
         trackColor={{ false: colors['border.strong'], true: colors['status.free'] }}
-        thumbColor={colors['text.primary']}
+        thumbColor={colors['control.thumb']}
         ios_backgroundColor={colors['border.strong']}
       />
     </Pressable>

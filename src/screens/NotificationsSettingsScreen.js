@@ -89,5 +89,8 @@ const styles = StyleSheet.create({
   header:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4], gap: space[3] },
   back:    { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   intro:   { paddingHorizontal: space[5], paddingBottom: space[4] },
-  section: { marginHorizontal: space[5], borderRadius: 16, overflow: 'hidden' },
+  // SwitchRow no trae padding horizontal propio (es agnóstico al layout, igual
+  // que en EditProfileScreen) — lo tiene que poner el contenedor. Sin esto el
+  // texto y el switch quedaban pegados a los bordes de la tarjeta.
+  section: { marginHorizontal: space[5], borderRadius: 16, overflow: 'hidden', paddingHorizontal: space[4] },
 });

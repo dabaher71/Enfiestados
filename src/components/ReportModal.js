@@ -106,7 +106,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
               value={blockAlso}
               onValueChange={setBlockAlso}
               trackColor={{ false: colors['border.strong'], true: colors['status.free'] }}
-              thumbColor={colors['text.primary']}
+              thumbColor={colors['control.thumb']}
             />
           </View>
         )}
