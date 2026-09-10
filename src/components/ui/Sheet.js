@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Dimensions, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Dimensions, Keyboard, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 
@@ -18,6 +18,9 @@ export default function Sheet({
 }) {
   const { colors } = useTheme();
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+  // Desplazamiento extra cuando aparece el teclado. Va aparte de translateY
+  // (que es el show/hide) y se suman: así una animación no pisa a la otra.
+  const kbOffset = useRef(new Animated.Value(0)).current;
   const ratio = typeof height === 'number' ? height : (HEIGHTS[height] ?? 0.6);
   const sheetH = SCREEN_H * ratio;
 
@@ -37,6 +40,39 @@ export default function Sheet({
       }).start();
     }
   }, [visible]);
+
+  // El sheet está anclado con bottom:0 y alto fijo, así que sin esto el
+  // teclado le tapa la parte de abajo — justo donde suelen ir los botones.
+  useEffect(() => {
+    // En iOS willShow/willHide llegan antes de que el teclado se mueva, lo que
+    // deja la animación sincronizada. Android solo emite los did*.
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    // Tope: nunca subir más que el espacio libre encima del sheet, o el
+    // encabezado se saldría de la pantalla (un sheet 'full' no sube nada).
+    const maxShift = Math.max(0, SCREEN_H - sheetH);
+
+    const onShow = (e) => {
+      const kbH = e?.endCoordinates?.height ?? 0;
+      Animated.timing(kbOffset, {
+        toValue: -Math.min(kbH, maxShift),
+        duration: e?.duration || 250,
+        useNativeDriver: true,
+      }).start();
+    };
+    const onHide = (e) => {
+      Animated.timing(kbOffset, {
+        toValue: 0,
+        duration: e?.duration || 250,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const showSub = Keyboard.addListener(showEvt, onShow);
+    const hideSub = Keyboard.addListener(hideEvt, onHide);
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, [sheetH]);
 
   return (
     <Modal
@@ -59,7 +95,7 @@ export default function Sheet({
           {
             height: sheetH,
             backgroundColor: colors['bg.raised'],
-            transform: [{ translateY }],
+            transform: [{ translateY: Animated.add(translateY, kbOffset) }],
           },
         ]}
       >
