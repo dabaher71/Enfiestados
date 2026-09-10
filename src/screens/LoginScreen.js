@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { signInAnonymously, signInWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -69,15 +70,19 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.flex, { backgroundColor: colors['bg.base'] }]}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    // edges solo 'top': es lo que faltaba (el logo chocaba con la isla
+    // dinámica / notch). El bottom lo cubre el paddingVertical del scroll, y
+    // dejarlo fuera evita que el inset se sume al teclado cuando está abierto.
+    <SafeAreaView edges={['top']} style={[styles.flex, { backgroundColor: colors['bg.base'] }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
       >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Logo + título */}
         <View style={styles.logoSection}>
           <Image
@@ -183,8 +188,9 @@ export default function LoginScreen({ navigation }) {
             </Text>
           </Pressable>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

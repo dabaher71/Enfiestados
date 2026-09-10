@@ -9,6 +9,7 @@ import {
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -138,11 +139,14 @@ export default function RegisterScreen({ navigation }) {
   );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.flex, { backgroundColor: colors['bg.base'] }]}
-    >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    // edges solo 'top': sin esto el botón de volver chocaba con la isla
+    // dinámica / notch. El bottom lo cubre el paddingBottom del scroll.
+    <SafeAreaView edges={['top']} style={[styles.flex, { backgroundColor: colors['bg.base'] }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
         {/* Back */}
         <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Volver">
@@ -243,8 +247,9 @@ export default function RegisterScreen({ navigation }) {
             </Text>
           </Pressable>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
