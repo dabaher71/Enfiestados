@@ -221,8 +221,7 @@ export default function SettingsScreen({ navigation }) {
             queramos invitar a tocar por accidente, pero tiene que ser
             encontrable (requisito de Google Play). */}
         <View style={styles.footer}>
-          <Text variant="caption" color="text.tertiary" align="center">Hecho con ☀️ en Costa Rica</Text>
-          <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: 4 }}>© 2026 Enfiestados</Text>
+          <Text variant="caption" color="text.tertiary" align="center">© 2026 Enfiestados</Text>
           <Pressable onPress={() => setDeleteStep('confirm')} hitSlop={8} style={{ marginTop: space[6] }}>
             <Text variant="caption" color="text.tertiary" align="center" style={styles.deleteLink}>
               Eliminar mi cuenta
