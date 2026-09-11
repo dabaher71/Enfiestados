@@ -1,6 +1,6 @@
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { onIdTokenChanged, signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../config/firebase';
@@ -49,7 +49,18 @@ export default function AppNavigator() {
       setHasInterests(true);
       return;
     }
-    unsubscribeRef.current = onAuthStateChanged(auth, async (currentUser) => {
+    // onIdTokenChanged y NO onAuthStateChanged: cuando un invitado crea su
+    // cuenta usamos linkWithCredential (conserva el uid para no perder lo que
+    // guardó), y eso actualiza al usuario en su lugar — mismo uid, no hay
+    // login nuevo. Firebase no dispara onAuthStateChanged en ese caso, solo
+    // el cambio de token. Con el listener viejo la app quedaba trabada en la
+    // pantalla de Registro y la sesión recién aparecía al re-renderizar otra
+    // pantalla. onIdTokenChanged es un superconjunto: login, logout y token.
+    //
+    // Contrapartida: también dispara en el refresh de token (~cada hora). Es
+    // inocuo — el reset de navegación de abajo ya está guardado por
+    // wasAnonymous, así que un refresh no reinicia la navegación.
+    unsubscribeRef.current = onIdTokenChanged(auth, async (currentUser) => {
       if (!currentUser) {
         // Sesión terminada (o arranque en frío). Si YA había una sesión
         // montada (real o anónima), hay que sacarla de la UI ya mismo: si
