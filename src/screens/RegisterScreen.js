@@ -207,6 +207,9 @@ export default function RegisterScreen({ navigation }) {
 
           {/* Privacidad: URL temporal en Firebase Hosting hasta que el abogado
               entregue la versión final y se suba a enfiestados.net/privacidad.
+              Se usa .firebaseapp.com y no .web.app (sirven lo mismo) porque es
+              el dominio que Google autoriza por defecto en la pantalla de
+              consentimiento de OAuth.
               Términos sigue pendiente — el abogado todavía la está redactando. */}
           <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[5] }}>
             Al crear tu cuenta aceptás nuestros{' '}
@@ -214,7 +217,7 @@ export default function RegisterScreen({ navigation }) {
               Términos y Condiciones
             </Text>{' '}
             y nuestra{' '}
-            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados-alpha.web.app/privacidad')}>
+            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados-alpha.firebaseapp.com/privacidad')}>
               Política de Privacidad
             </Text>.
           </Text>

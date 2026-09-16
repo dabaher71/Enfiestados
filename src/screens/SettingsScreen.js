@@ -22,7 +22,11 @@ import t from '../i18n/es-CR.json';
 import Constants from 'expo-constants';
 
 const NOTIF_KEY = '@enfiestados/notif_prefs';
-const PRIVACY_URL = 'https://enfiestados-alpha.web.app/privacidad';
+// Firebase Hosting sirve el mismo sitio en .web.app y .firebaseapp.com. Se usa
+// el segundo porque es el único que Google autoriza por defecto en la pantalla
+// de consentimiento de OAuth — con .web.app tira "Missing domain". Cambiar a
+// enfiestados.net/privacidad cuando el abogado entregue la versión final.
+const PRIVACY_URL = 'https://enfiestados-alpha.firebaseapp.com/privacidad';
 
 export default function SettingsScreen({ navigation }) {
   const { colors, mode, setThemeMode } = useTheme();
