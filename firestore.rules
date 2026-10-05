@@ -122,21 +122,74 @@ service cloud.firestore {
     }
 
     // ── chats ─────────────────────────────────────────────────────────────────
+    // Dos formas: 'direct' (1 a 1) y 'group'. Los chats creados antes de que
+    // existieran los grupos no tienen `type`, así que todo lo que no diga
+    // 'group' se trata como directo.
+    function isGroupData(data) {
+      return data.get('type', 'direct') == 'group';
+    }
     match /chats/{chatId} {
       allow read: if isAuth() &&
         request.auth.uid in resource.data.participants;
-      // Un participante solo puede tocar el preview del último mensaje y su
-      // propio estado de leído — no puede reescribir 'participants' ni nada más.
-      allow update: if isAuth() &&
-        request.auth.uid in resource.data.participants &&
-        request.resource.data.participants == resource.data.participants &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['lastMessage', 'lastMessageTime', 'unreadFor']);
-      allow create: if isAuth() &&
-        request.auth.uid in request.resource.data.participants &&
-        request.resource.data.participants.size() == 2 &&
-        request.resource.data.keys().hasAll(['participants', 'createdAt']) &&
-        !isBlockedPair(otherParticipant(request.resource.data.participants));
+
+      allow update: if isAuth() && (
+        // (a) Cualquier participante: preview del último mensaje y su estado
+        // de leído. No puede tocar participants ni la config del grupo.
+        (
+          request.auth.uid in resource.data.participants &&
+          request.resource.data.participants == resource.data.participants &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastMessage', 'lastMessageTime', 'unreadFor'])
+        ) || (
+          // (b) Dueño del grupo: renombrar, cambiar quién puede escribir y
+          // administrar miembros. No puede cambiar de dueño ni de tipo.
+          isGroupData(resource.data) &&
+          resource.data.ownerId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['name', 'writePolicy', 'participants', 'unreadFor']) &&
+          request.resource.data.participants.size() >= 2 &&
+          request.resource.data.participants.size() <= 100 &&
+          // El dueño no puede sacarse a sí mismo: para irse tiene que
+          // transferir el grupo (todavía no implementado) o borrarlo.
+          request.resource.data.ownerId in request.resource.data.participants
+        ) || (
+          // (c) Salir del grupo: un miembro se quita a sí mismo y a nadie más.
+          isGroupData(resource.data) &&
+          request.auth.uid in resource.data.participants &&
+          !(request.auth.uid in request.resource.data.participants) &&
+          resource.data.ownerId != request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['participants', 'unreadFor']) &&
+          resource.data.participants.toSet().difference(
+            request.resource.data.participants.toSet()
+          ).hasOnly([request.auth.uid])
+        )
+      );
+
+      allow create: if isAuth() && (
+        isGroupData(request.resource.data)
+          ? (
+            // Grupo: el que lo crea es el dueño y queda adentro. El bloqueo
+            // mutuo no se valida acá — con N participantes habría que
+            // comparar todos los pares, lo que no escala en reglas. Se filtra
+            // en el cliente: no ves los mensajes de quien bloqueaste.
+            request.resource.data.ownerId == request.auth.uid &&
+            request.auth.uid in request.resource.data.participants &&
+            request.resource.data.participants.size() >= 2 &&
+            request.resource.data.participants.size() <= 100 &&
+            request.resource.data.name is string &&
+            request.resource.data.name.size() > 0 &&
+            request.resource.data.name.size() <= 60 &&
+            request.resource.data.writePolicy in ['all', 'owner'] &&
+            request.resource.data.keys().hasAll(['type', 'name', 'ownerId', 'writePolicy', 'participants', 'createdAt'])
+          )
+          : (
+            request.auth.uid in request.resource.data.participants &&
+            request.resource.data.participants.size() == 2 &&
+            request.resource.data.keys().hasAll(['participants', 'createdAt']) &&
+            !isBlockedPair(otherParticipant(request.resource.data.participants))
+          )
+      );
     }
 
     // ── messages ──────────────────────────────────────────────────────────────
@@ -153,7 +206,17 @@ service cloud.firestore {
         request.resource.data.keys().hasAll(['chatId', 'senderId', 'text', 'timestamp']) &&
         exists(/databases/$(database)/documents/chats/$(request.resource.data.chatId)) &&
         request.auth.uid in get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.participants &&
-        !isBlockedPair(otherParticipant(get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.participants));
+        (
+          isGroupData(get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data)
+            ? (
+              // writePolicy 'owner' convierte al grupo en canal de avisos: la
+              // UI esconde el campo de texto, pero el corte real es este — si
+              // no, bastaría un cliente modificado para escribir igual.
+              get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.get('writePolicy', 'all') == 'all' ||
+              get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.ownerId == request.auth.uid
+            )
+            : !isBlockedPair(otherParticipant(get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.participants))
+        );
       allow update: if isAuth() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if false;

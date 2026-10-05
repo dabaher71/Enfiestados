@@ -2,7 +2,7 @@
 // LÓGICA INTACTA: mensajes en tiempo real, event-messages, date separators, mark-as-read.
 // PRESENTACIÓN: design system v1.1 — tokens, Avatar, Text.
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
@@ -15,7 +15,7 @@ import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
 import useBlockedUsers from '../hooks/useBlockedUsers';
-import { markMessagesAsRead, sendMessage, subscribeToMessages } from '../services/chatService';
+import { canWriteInChat, isGroupChat, markMessagesAsRead, sendMessage, subscribeToMessages } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
@@ -64,26 +64,63 @@ export default function ChatDetailScreen({ route, navigation }) {
   const [messages,   setMessages]   = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [otherUser,  setOtherUser]  = useState({ name: otherUserName, avatar: otherUserAvatar });
+  // Doc del chat: en grupos trae nombre, dueño, permiso de escritura y
+  // miembros. Se escucha en vivo para que renombrar o cambiar el permiso se
+  // refleje sin salir de la pantalla.
+  const [chat,       setChat]       = useState(null);
+  // Perfiles de los miembros, para poner nombre y avatar a cada burbuja: en
+  // un grupo no alcanza con "mío / del otro".
+  const [members,    setMembers]    = useState({});
   const listRef = useRef();
   const userId  = auth.currentUser?.uid;
   const { allBlocked } = useBlockedUsers();
-  const isBlocked = allBlocked.has(otherUserId);
+
+  const group = isGroupChat(chat) || route.params?.isGroup === true;
+  // En un directo el bloqueo corta el chat entero; en un grupo solo se ocultan
+  // los mensajes de quien bloqueaste (ver abajo), porque la persona sigue
+  // siendo miembro legítimo para el resto.
+  const isBlocked = !group && allBlocked.has(otherUserId);
+  const canWrite  = chat ? canWriteInChat(chat, userId) : true;
 
   useEffect(() => {
-    getDoc(doc(db, 'users', otherUserId))
-      .then(snap => { if (snap.exists()) setOtherUser(snap.data()); })
-      .catch(() => {});
+    const unsubChat = onSnapshot(doc(db, 'chats', chatId), snap => {
+      if (snap.exists()) setChat({ id: snap.id, ...snap.data() });
+    }, () => {});
 
     const unsub = subscribeToMessages(chatId, (msgs) => {
       setMessages(msgs);
       markMessagesAsRead(chatId, userId);
     });
-    return () => unsub();
+    return () => { unsubChat(); unsub(); };
   }, [chatId]);
+
+  useEffect(() => {
+    if (group || !otherUserId) return;
+    getDoc(doc(db, 'users', otherUserId))
+      .then(snap => { if (snap.exists()) setOtherUser(snap.data()); })
+      .catch(() => {});
+  }, [group, otherUserId]);
+
+  // Carga los perfiles que falten cuando cambia la lista de miembros.
+  useEffect(() => {
+    if (!group || !chat?.participants?.length) return;
+    const missing = chat.participants.filter(id => !members[id]);
+    if (!missing.length) return;
+
+    let cancelled = false;
+    Promise.all(missing.map(id => getDoc(doc(db, 'users', id)).catch(() => null)))
+      .then(docs => {
+        if (cancelled) return;
+        const next = {};
+        missing.forEach((id, i) => { if (docs[i]?.exists()) next[id] = docs[i].data(); });
+        if (Object.keys(next).length) setMembers(prev => ({ ...prev, ...next }));
+      });
+    return () => { cancelled = true; };
+  }, [group, chat?.participants]);
 
   const handleSend = async () => {
     const text = newMessage.trim();
-    if (!text || isBlocked) return;
+    if (!text || isBlocked || !canWrite) return;
     setNewMessage('');
     try { await sendMessage(chatId, userId, text); } catch {}
   };
@@ -98,7 +135,12 @@ export default function ChatDetailScreen({ route, navigation }) {
   // Inyecta separadores de fecha + flags de agrupación (burbujas consecutivas)
   const data = useMemo(() => {
     if (!messages.length) return [];
-    const sorted = [...messages].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    // En grupos se ocultan los mensajes de quien bloqueaste, pero la persona
+    // sigue en el grupo. El filtro va antes de calcular la agrupación, para
+    // que dos mensajes míos separados por uno oculto se agrupen bien.
+    const vis = group ? messages.filter(m => !allBlocked.has(m.senderId)) : messages;
+    if (!vis.length) return [];
+    const sorted = [...vis].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
     const result = [];
     let lastKey = '';
     for (let i = 0; i < sorted.length; i++) {
@@ -116,7 +158,7 @@ export default function ChatDetailScreen({ route, navigation }) {
       result.push({ ...msg, type: 'message', groupedWithPrev, groupedWithNext });
     }
     return result;
-  }, [messages]);
+  }, [messages, group, allBlocked]);
 
   const renderItem = useCallback(({ item }) => {
     if (item.type === 'separator') {
@@ -134,6 +176,9 @@ export default function ChatDetailScreen({ route, navigation }) {
     const isMine  = item.senderId === userId;
     const isEvent = isEventMessage(item.text);
     const { groupedWithPrev, groupedWithNext } = item;
+    // En un grupo cada burbuja puede ser de alguien distinto; en un directo
+    // siempre es el mismo interlocutor.
+    const sender = group ? (members[item.senderId] ?? {}) : otherUser;
 
     // Burbujas agrupadas: radio reducido en el lado del remitente para el grupo medio
     const bubbleRadius = {
@@ -162,7 +207,7 @@ export default function ChatDetailScreen({ route, navigation }) {
       ]}>
         {/* Avatar del otro solo en la última burbuja del grupo */}
         {!isMine && !groupedWithNext ? (
-          <Avatar uri={otherUser.avatar} name={otherUser.name} size={28} style={{ marginRight: space[2] }} />
+          <Avatar uri={sender.avatar} name={sender.name} size={28} style={{ marginRight: space[2] }} />
         ) : !isMine ? (
           <View style={{ width: 28 + space[2] }} />  // espacio reservado para alinear
         ) : null}
@@ -200,6 +245,13 @@ export default function ChatDetailScreen({ route, navigation }) {
               ? { backgroundColor: ownBg }
               : { backgroundColor: colors['bg.surface'] },
           ]}>
+            {/* Quién habla: solo en grupos, solo en ajenas, y solo en la
+                primera de una tanda — repetirlo en cada burbuja es ruido. */}
+            {group && !isMine && !groupedWithPrev && (
+              <Text variant="caption" style={{ color: colors['link'], marginBottom: 2 }}>
+                {sender.name ?? 'Usuario'}
+              </Text>
+            )}
             <Text variant="body" style={{ color: isMine ? ownText : colors['text.primary'] }}>
               {item.text}
             </Text>
@@ -210,7 +262,7 @@ export default function ChatDetailScreen({ route, navigation }) {
         )}
       </View>
     );
-  }, [userId, otherUser, handleEventPress, colors]);
+  }, [userId, otherUser, handleEventPress, colors, group, members, allBlocked]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
@@ -221,12 +273,26 @@ export default function ChatDetailScreen({ route, navigation }) {
         </Pressable>
         <Pressable
           style={styles.headerUser}
-          onPress={() => navigation.navigate('UserProfile', { userId: otherUserId })}
+          onPress={() => group
+            ? navigation.navigate('GroupInfo', { chatId })
+            : navigation.navigate('UserProfile', { userId: otherUserId })}
         >
-          <Avatar uri={otherUser.avatar} name={otherUser.name} size={36} />
-          <Text variant="title" numberOfLines={1} style={{ marginLeft: space[2], flex: 1 }}>
-            {otherUser.name || otherUserName}
-          </Text>
+          <Avatar
+            uri={group ? null : otherUser.avatar}
+            name={group ? (chat?.name ?? 'Grupo') : otherUser.name}
+            size={36}
+          />
+          <View style={{ marginLeft: space[2], flex: 1 }}>
+            <Text variant="title" numberOfLines={1}>
+              {group ? (chat?.name ?? 'Grupo') : (otherUser.name || otherUserName)}
+            </Text>
+            {group && (
+              <Text variant="caption" color="text.tertiary" numberOfLines={1}>
+                {chat?.participants?.length ?? 0} miembros
+                {chat?.writePolicy === 'owner' ? ' · solo lectura' : ''}
+              </Text>
+            )}
+          </View>
         </Pressable>
       </View>
 
@@ -248,6 +314,14 @@ export default function ChatDetailScreen({ route, navigation }) {
           <View style={[styles.blockedBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
             <Text variant="caption" color="text.tertiary" align="center">
               No podés enviar mensajes a este usuario.
+            </Text>
+          </View>
+        ) : !canWrite ? (
+          // Grupo con writePolicy 'owner': canal de avisos. Esto es solo la
+          // UI — el corte real está en firestore.rules.
+          <View style={[styles.blockedBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
+            <Text variant="caption" color="text.tertiary" align="center">
+              Solo quien creó el grupo puede escribir acá.
             </Text>
           </View>
         ) : (

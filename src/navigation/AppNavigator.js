@@ -9,6 +9,8 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import LoadingScreen from '../components/LoadingScreen';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import BlockedUsersScreen from '../screens/BlockedUsersScreen';
+import CreateGroupScreen from '../screens/CreateGroupScreen';
+import GroupInfoScreen from '../screens/GroupInfoScreen';
 import { setCrashUser } from '../lib/crashReporting';
 import EditEventScreen from '../screens/EditEventScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
@@ -160,6 +162,8 @@ export default function AppNavigator() {
               <Stack.Screen name="CreateAd" component={CreateAdScreen} />
               <Stack.Screen name="AdvertiserRequest" component={AdvertiserRequestScreen} />
               <Stack.Screen name="Messages" component={MessagesScreen} />
+              <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+              <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
               <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />
               <Stack.Screen name="OrganizerPanel" component={OrganizerPanelScreen} />
               {__DEV__ && <Stack.Screen name="DevCatalog" component={DevCatalogScreen} />}

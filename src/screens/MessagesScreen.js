@@ -17,7 +17,8 @@ import Avatar from '../components/ui/Avatar';
 import EmptyState from '../components/ui/EmptyState';
 import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
-import { subscribeToChats } from '../services/chatService';
+import { isGroupChat, subscribeToChats } from '../services/chatService';
+import { requireAccount } from '../lib/requireAccount';
 import useBlockedUsers from '../hooks/useBlockedUsers';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
@@ -50,7 +51,13 @@ export default function MessagesScreen({ navigation }) {
   useEffect(() => {
     const unsub = subscribeToChats(userId, async (data) => {
       setChats(data);
-      const ids = [...new Set(data.map(c => c.participants?.find(id => id !== userId)).filter(Boolean))];
+      // Solo los directos necesitan resolver al otro participante; un grupo
+      // ya trae su propio nombre en el doc.
+      const ids = [...new Set(
+        data.filter(c => !isGroupChat(c))
+          .map(c => c.participants?.find(id => id !== userId))
+          .filter(Boolean)
+      )];
       const docs = await Promise.all(ids.map(uid => getDoc(doc(db, 'users', uid)).catch(() => null)));
       const map = {};
       ids.forEach((uid, i) => { if (docs[i]?.exists()) map[uid] = docs[i].data(); });
@@ -61,23 +68,29 @@ export default function MessagesScreen({ navigation }) {
   }, [userId]);
 
   const renderItem = useCallback(({ item }) => {
-    const otherId  = item.participants?.find(id => id !== userId);
-    const other    = usersData[otherId];
+    const group    = isGroupChat(item);
+    const otherId  = group ? null : item.participants?.find(id => id !== userId);
+    const other    = otherId ? usersData[otherId] : null;
     const isUnread = item.unreadFor?.includes(userId);
+
+    const title  = group ? (item.name || 'Grupo') : (other?.name ?? 'Usuario');
+    const avatar = group ? null : other?.avatar;
+
     return (
       <Pressable
         style={[styles.chatRow, { borderBottomColor: colors['border.subtle'] }]}
         onPress={() => navigation.navigate('ChatDetail', {
           chatId: item.id,
+          isGroup: group,
           otherUserId: otherId,
           otherUserName: other?.name ?? '',
           otherUserAvatar: other?.avatar ?? '',
         })}
       >
-        <Avatar uri={other?.avatar} name={other?.name} size={48} />
+        <Avatar uri={avatar} name={title} size={48} />
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
-            <Text variant="title" numberOfLines={1} style={{ flex: 1 }}>{other?.name ?? 'Usuario'}</Text>
+            <Text variant="title" numberOfLines={1} style={{ flex: 1 }}>{title}</Text>
             {item.lastMessageTime && (
               <Text variant="caption" color="text.tertiary">
                 {chatTime(item.lastMessageTime)}
@@ -85,7 +98,9 @@ export default function MessagesScreen({ navigation }) {
             )}
           </View>
           <Text variant="caption" color={isUnread ? 'text.primary' : 'text.tertiary'} numberOfLines={1}>
-            {item.lastMessage || 'Sin mensajes'}
+            {group
+              ? `${item.participants?.length ?? 0} miembros · ${item.lastMessage || 'Sin mensajes'}`
+              : (item.lastMessage || 'Sin mensajes')}
           </Text>
         </View>
         {isUnread && (
@@ -96,6 +111,9 @@ export default function MessagesScreen({ navigation }) {
   }, [userId, usersData, colors, navigation]);
 
   const visibleChats = chats.filter(c => {
+    // Un grupo no se oculta por tener dentro a alguien bloqueado — lo que se
+    // filtra son sus mensajes, dentro del chat.
+    if (isGroupChat(c)) return true;
     const otherId = c.participants?.find(id => id !== userId);
     return !allBlocked.has(otherId);
   });
@@ -106,7 +124,17 @@ export default function MessagesScreen({ navigation }) {
         <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2">Mensajes</Text>
+        <Text variant="h2" style={{ flex: 1 }}>Mensajes</Text>
+        <Pressable
+          onPress={() => {
+            if (!requireAccount(navigation, 'Creá una cuenta para armar un grupo.')) return;
+            navigation.navigate('CreateGroup');
+          }}
+          style={styles.back}
+          accessibilityLabel="Crear grupo"
+        >
+          <Ionicons name="people-outline" size={24} color={colors['text.primary']} />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -115,9 +143,12 @@ export default function MessagesScreen({ navigation }) {
         <EmptyState
           icon={<Ionicons name="chatbubbles-outline" size={28} color={colors['text.tertiary']} />}
           title="Sin conversaciones"
-          description="Cuando compartás un evento con alguien, la charla aparece acá."
-          actionLabel="Explorar eventos"
-          onAction={() => navigation.navigate('MainApp', { screen: 'Home' })}
+          description="Armá un grupo con tus amistades, o compartí un evento con alguien para empezar a chatear."
+          actionLabel="Crear un grupo"
+          onAction={() => {
+            if (!requireAccount(navigation, 'Creá una cuenta para armar un grupo.')) return;
+            navigation.navigate('CreateGroup');
+          }}
         />
       ) : (
         <FlatList

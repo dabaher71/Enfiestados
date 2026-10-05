@@ -1,4 +1,7 @@
 import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -19,6 +22,20 @@ const messagesCollection = collection(db, 'messages');
 
 const MAX_MESSAGE_LENGTH = 1000;
 
+// Un chat es 'direct' (1 a 1) o 'group'. Los chats creados antes de que
+// existieran los grupos no tienen el campo `type` — por eso en toda la app se
+// pregunta `type === 'group'` y cualquier otra cosa cuenta como directo.
+export const isGroupChat = (chat) => chat?.type === 'group';
+
+// Permiso de escritura de un grupo: 'all' (cualquier miembro) u 'owner' (solo
+// el dueño, para usarlo como canal de avisos). Los grupos sin el campo son
+// 'all'. En directos no aplica.
+export const canWriteInChat = (chat, uid) => {
+  if (!isGroupChat(chat)) return true;
+  if ((chat.writePolicy ?? 'all') === 'all') return true;
+  return chat.ownerId === uid;
+};
+
 // ID determinista: evita chats duplicados por race condition
 const getChatId = (uid1, uid2) => [uid1, uid2].sort().join('_');
 
@@ -32,6 +49,7 @@ export const getOrCreateChat = async (userId1, userId2) => {
   }
 
   const newChat = {
+    type: 'direct',
     participants: [userId1, userId2],
     lastMessage: '',
     lastMessageTime: new Date().toISOString(),
@@ -39,6 +57,67 @@ export const getOrCreateChat = async (userId1, userId2) => {
   };
   await setDoc(chatRef, newChat);
   return { id: chatId, ...newChat };
+};
+
+const MAX_GROUP_NAME = 60;
+export const MAX_GROUP_PARTICIPANTS = 100;
+
+// Los grupos usan auto-ID: el ID determinista de los directos existe para
+// evitar duplicados entre dos personas, pero dos grupos con los mismos
+// miembros son grupos distintos y legítimos.
+export const createGroupChat = async (ownerId, name, participantIds, writePolicy = 'all') => {
+  const trimmed = (name || '').trim().slice(0, MAX_GROUP_NAME);
+  if (!trimmed) throw new Error('El grupo necesita un nombre');
+
+  // El dueño siempre adentro, sin repetidos.
+  const participants = [...new Set([ownerId, ...participantIds])];
+  if (participants.length < 2) throw new Error('Agregá al menos una persona');
+  if (participants.length > MAX_GROUP_PARTICIPANTS) {
+    throw new Error(`Máximo ${MAX_GROUP_PARTICIPANTS} personas por grupo`);
+  }
+
+  const ref = await addDoc(chatsCollection, {
+    type: 'group',
+    name: trimmed,
+    ownerId,
+    writePolicy: writePolicy === 'owner' ? 'owner' : 'all',
+    participants,
+    lastMessage: '',
+    lastMessageTime: new Date().toISOString(),
+    unreadFor: [],
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+};
+
+export const updateGroupSettings = async (chatId, { name, writePolicy }) => {
+  const patch = {};
+  if (name !== undefined) {
+    const trimmed = name.trim().slice(0, MAX_GROUP_NAME);
+    if (!trimmed) throw new Error('El grupo necesita un nombre');
+    patch.name = trimmed;
+  }
+  if (writePolicy !== undefined) {
+    patch.writePolicy = writePolicy === 'owner' ? 'owner' : 'all';
+  }
+  if (Object.keys(patch).length === 0) return;
+  await updateDoc(doc(db, 'chats', chatId), patch);
+};
+
+export const addParticipants = async (chatId, uids) => {
+  if (!uids?.length) return;
+  await updateDoc(doc(db, 'chats', chatId), {
+    participants: arrayUnion(...uids),
+  });
+};
+
+// Sirve para que alguien se vaya solo y para que el dueño saque a alguien —
+// las reglas distinguen los dos casos.
+export const removeParticipant = async (chatId, uid) => {
+  await updateDoc(doc(db, 'chats', chatId), {
+    participants: arrayRemove(uid),
+    unreadFor: arrayRemove(uid),
+  });
 };
 
 export const subscribeToChats = (userId, callback) => {
