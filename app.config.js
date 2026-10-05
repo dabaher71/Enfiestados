@@ -75,13 +75,16 @@ module.exports = {
           apiKey: googleMapsApiKeyAndroid,
         },
       },
+      // RECORD_AUDIO se quitó: la app no graba ni reproduce audio, y el
+      // selector de imágenes está limitado a MediaTypeOptions.Images. Un
+      // permiso sensible declarado y sin usar aparece como "Grabar audio" en
+      // la ficha de Play y es motivo de preguntas en la revisión.
       permissions: [
         'android.permission.CAMERA',
         'android.permission.READ_EXTERNAL_STORAGE',
         'android.permission.WRITE_EXTERNAL_STORAGE',
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.ACCESS_COARSE_LOCATION',
-        'android.permission.RECORD_AUDIO',
       ],
     },
     updates: {
