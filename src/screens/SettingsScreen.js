@@ -156,7 +156,11 @@ export default function SettingsScreen({ navigation }) {
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           <Row icon="person-outline"    label="Editar perfil"       subtitle="Foto, nombre, biografía"        onPress={() => navigation.navigate('EditProfile', { user: null })} />
           <Row icon="sparkles-outline"  label="Mis intereses"       subtitle="Qué tipo de eventos querés ver"  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
-          <Row icon="location-outline"  label="Zona y distancia"    subtitle="Región y radio de búsqueda"      value="15 km"      onPress={() => Alert.alert('Zona', 'Próximamente…')} />
+          {/* Sin `value`: antes mostraba "15 km" fijo, como si estuviera
+              configurado, pero al tocarlo decía "Próximamente". Un valor
+              inventado es peor que ninguno — el usuario cree que hay un
+              radio activo filtrándole el feed. */}
+          <Row icon="location-outline"  label="Zona y distancia"    subtitle="Próximamente"                     onPress={() => Alert.alert('Zona y distancia', 'Todavía no está disponible. Por ahora el feed te muestra eventos de todo el país.')} />
           <Row icon="lock-closed-outline" label="Usuarios bloqueados" subtitle="Ver y desbloquear"              onPress={() => navigation.navigate('BlockedUsers')} />
         </View>
 

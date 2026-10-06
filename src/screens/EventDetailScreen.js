@@ -250,7 +250,12 @@ export default function EventDetailScreen({ route, navigation }) {
       const chatData = await getOrCreateChat(userId, chat.uid);
       await sendMessage(chatData.id, userId, `Te comparto este evento: ${event.title}\n${event.date} - ${event.time}\n${eventLink}`);
       setShowShare(false);
-    } catch {}
+    } catch {
+      // Antes el catch se tragaba el error Y dejaba la hoja abierta: el
+      // usuario no veía nada y volvía a tocar, sin saber si se había enviado.
+      setShowShare(false);
+      Alert.alert('No se pudo compartir', 'Revisá tu conexión e intentá de nuevo.');
+    }
   };
 
   return (

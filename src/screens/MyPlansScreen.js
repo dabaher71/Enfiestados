@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '../components/ui/EmptyState';
@@ -84,6 +84,36 @@ function groupByMonth(events) {
 
 // ─── TicketCard — tarjeta boleto con gradiente y perforación ─────────────────
 
+// Abre la app de mapas del sistema. Si el evento tiene coordenadas se usan
+// esas; si no, se cae al nombre del lugar como búsqueda. Apple Maps en iOS y
+// Google Maps en Android, que es lo que la gente espera en cada plataforma.
+function openDirections(ev) {
+  const { lat, lng, name } = ev?.location ?? {};
+  let url;
+  if (lat && lng) {
+    url = Platform.OS === 'ios'
+      ? `http://maps.apple.com/?daddr=${lat},${lng}`
+      : `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(ev.title || '')})`;
+  } else if (name) {
+    const q = encodeURIComponent(name);
+    url = Platform.OS === 'ios' ? `http://maps.apple.com/?q=${q}` : `geo:0,0?q=${q}`;
+  } else {
+    Alert.alert('Sin ubicación', 'Este evento no tiene una dirección cargada.');
+    return;
+  }
+  Linking.openURL(url).catch(() =>
+    Alert.alert('No se pudo abrir', 'No encontramos una app de mapas en tu teléfono.')
+  );
+}
+
+function shareEvent(ev) {
+  const where = ev?.location?.name ? `\n${ev.location.name}` : '';
+  Share.share({
+    title: ev.title,
+    message: `${ev.title}\n${ev.date}${ev.time ? ` · ${ev.time}` : ''}${where}\n\nVia Enfiestados`,
+  }).catch(() => {});
+}
+
 function TicketCard({ event, onPress, onMore, colors }) {
   const dateStr  = formatEventDate(event.date, event.time);
   const daysStr  = formatDaysUntil(event.date) ?? '';
@@ -156,11 +186,11 @@ function TicketCard({ event, onPress, onMore, colors }) {
 
         {/* Acciones del ticket */}
         <View style={styles.ticketActions}>
-          <Pressable style={styles.ticketAction} onPress={() => {}} accessibilityLabel="Cómo llegar">
+          <Pressable style={styles.ticketAction} onPress={() => openDirections(event)} accessibilityLabel="Cómo llegar">
             <Ionicons name="navigate-outline" size={16} color={colors['text.onAction']} />
             <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Cómo llegar</Text>
           </Pressable>
-          <Pressable style={styles.ticketAction} onPress={() => {}} accessibilityLabel="Compartir">
+          <Pressable style={styles.ticketAction} onPress={() => shareEvent(event)} accessibilityLabel="Compartir">
             <Ionicons name="share-outline" size={16} color={colors['text.onAction']} />
             <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Compartir</Text>
           </Pressable>
