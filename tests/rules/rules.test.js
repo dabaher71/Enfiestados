@@ -8,7 +8,7 @@
 // Correr con:  cd tests/rules && npm test
 
 import { readFileSync } from 'node:fs';
-import { after, before, describe, it } from 'node:test';
+import { after, before, beforeEach, describe, it } from 'node:test';
 import {
   assertFails,
   assertSucceeds,
@@ -51,9 +51,15 @@ async function seed() {
     await setDoc(doc(db, 'users', BETO),  { uid: BETO, name: 'Beto', email: 'beto@x.com', followers: [], following: [], followRequests: [], verificado: false, usuariosBloqueados: [] });
     await setDoc(doc(db, 'users', ADMIN), { uid: ADMIN, name: 'Admin', isAdmin: true, followers: [], usuariosBloqueados: [] });
 
+    // Dos comentarios: con uno solo, "vaciar" y "borrar uno" dan el mismo
+    // tamaño final y la prueba de borrado masivo no probaría nada.
     await setDoc(doc(db, 'posts', 'post1'), {
       userId: ANA, createdAt: 'x',
-      likes: [], comments: [{ id: 'c1', userId: ANA, text: 'hola' }],
+      likes: [],
+      comments: [
+        { id: 'c1', userId: ANA,  text: 'uno' },
+        { id: 'c2', userId: BETO, text: 'dos' },
+      ],
     });
 
     await setDoc(doc(db, 'chats', 'grupo1'), {
@@ -77,18 +83,40 @@ async function seed() {
 }
 
 describe('posts — likes y comentarios ajenos', () => {
-  before(seed);
+  beforeEach(seed);
 
-  it('un invitado NO puede vaciar los comentarios de una publicación ajena', async () => {
+  it('un invitado NO puede vaciar de un saque los comentarios ajenos', async () => {
     await assertFails(
       updateDoc(doc(ctx(GUEST), 'posts', 'post1'), { comments: [] })
     );
   });
 
-  it('un invitado NO puede reemplazar los comentarios por contenido falso', async () => {
+  // Esta prueba nació fallando: el tope de ±1 solo contaba, así que se podía
+  // reescribir el hilo entero con tal de que el conteo subiera en uno. Ahora
+  // al agregar se exige que los viejos queden intactos como prefijo.
+  it('un invitado NO puede reescribir el hilo al agregar un comentario', async () => {
     await assertFails(
       updateDoc(doc(ctx(GUEST), 'posts', 'post1'), {
-        comments: [{ id: 'x', userId: ANA, text: 'texto que Ana nunca escribió' }],
+        comments: [
+          { id: 'c1', userId: ANA,  text: 'texto que Ana nunca escribió' },
+          { id: 'c2', userId: BETO, text: 'dos' },
+          { id: 'c3', userId: GUEST, text: 'tres' },
+        ],
+      })
+    );
+  });
+
+  // LIMITACIÓN CONOCIDA, no un arreglo pendiente de prueba: las reglas no
+  // pueden mirar QUÉ elemento de un array cambió, solo cuántos hay. Por eso
+  // "borrar un comentario" y "borrar el comentario de otro" son
+  // indistinguibles, y el tope de ±1 solo frena el borrado masivo. Cerrarlo
+  // de verdad exige mover los comentarios a subcolección, donde cada
+  // documento tiene su propio dueño. Esta prueba fija el comportamiento real
+  // para que quede documentado y para que se note si cambia.
+  it('pero SÍ puede borrar un comentario ajeno de a uno (limitación conocida)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(ctx(GUEST), 'posts', 'post1'), {
+        comments: [{ id: 'c2', userId: BETO, text: 'dos' }],
       })
     );
   });
@@ -108,14 +136,18 @@ describe('posts — likes y comentarios ajenos', () => {
   it('y SÍ puede agregar un comentario', async () => {
     await assertSucceeds(
       updateDoc(doc(ctx(BETO), 'posts', 'post1'), {
-        comments: [{ id: 'c1', userId: ANA, text: 'hola' }, { id: 'c2', userId: BETO, text: 'qué tal' }],
+        comments: [
+          { id: 'c1', userId: ANA,  text: 'uno' },
+          { id: 'c2', userId: BETO, text: 'dos' },
+          { id: 'c3', userId: BETO, text: 'qué tal' },
+        ],
       })
     );
   });
 });
 
 describe('users — campos de autoridad', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('Ana NO puede auto-asignarse la insignia de verificado', async () => {
     await assertFails(
@@ -155,7 +187,7 @@ describe('users — campos de autoridad', () => {
 });
 
 describe('users — seguir (estaba roto en producción)', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('Beto SÍ puede seguir a Ana', async () => {
     await assertSucceeds(
@@ -190,7 +222,7 @@ describe('users — seguir (estaba roto en producción)', () => {
 });
 
 describe('notifications — suplantación', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('un invitado sin perfil NO puede notificar a nadie', async () => {
     await assertFails(
@@ -230,7 +262,7 @@ describe('notifications — suplantación', () => {
 });
 
 describe('chats — salir de un grupo', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('Beto NO puede agregar gente mientras se va', async () => {
     await assertFails(
@@ -276,7 +308,7 @@ describe('chats — canal de solo lectura (writePolicy)', () => {
 });
 
 describe('messages — marcar como leído', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('alguien ajeno al chat NO puede marcar leído un mensaje', async () => {
     await assertFails(
@@ -292,7 +324,7 @@ describe('messages — marcar como leído', () => {
 });
 
 describe('ads — métricas', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('NO se puede fijar un valor arbitrario de impresiones', async () => {
     await assertFails(
@@ -308,7 +340,7 @@ describe('ads — métricas', () => {
 });
 
 describe('reports — panel de moderación', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('el admin SÍ puede listar los reportes pendientes', async () => {
     await assertSucceeds(
@@ -324,7 +356,7 @@ describe('reports — panel de moderación', () => {
 });
 
 describe('accountDeletionRequests — códigos de borrado', () => {
-  before(seed);
+  beforeEach(seed);
 
   it('nadie puede leer los códigos (fuerza bruta offline)', async () => {
     await assertFails(getDoc(doc(ctx(ANA), 'accountDeletionRequests', ANA)));

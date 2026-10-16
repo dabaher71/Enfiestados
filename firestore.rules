@@ -30,6 +30,22 @@ service cloud.firestore {
       return isAuth() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
+    // Comentarios en array: las reglas no pueden mirar QUÉ elemento cambió,
+    // solo cuántos hay, así que no se puede validar la autoría de uno suelto.
+    // Lo que sí se puede:
+    //   - al agregar, exigir que los viejos queden intactos como prefijo —
+    //     si no, se podía reescribir el hilo entero con tal de que el conteo
+    //     subiera en uno;
+    //   - al borrar, limitar a uno por escritura, que frena el vaciado masivo.
+    // Queda abierto: borrar el comentario de otro de a uno, y reescribir el
+    // hilo al borrar. Cerrarlo de verdad exige moverlos a subcolección, donde
+    // cada comentario es un documento con su propio dueño.
+    function isCommentAppendOrSingleDelete(oldList, newList) {
+      return (
+        newList.size() == oldList.size() + 1 &&
+        newList[0:oldList.size()] == oldList
+      ) || newList.size() == oldList.size() - 1;
+    }
     // Solo permite agregar o quitar EXACTAMENTE el propio uid de un array —
     // evita que cualquiera vacíe o manipule likes/attendees/savedBy ajenos.
     function isUidToggle(oldList, newList, uid) {
@@ -115,10 +131,8 @@ service cloud.firestore {
           // en rules, pero al menos se bloquea el vaciado masivo — solo se
           // permite crecer o achicarse de a un comentario por escritura.
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) &&
-          (
-            request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 ||
-            request.resource.data.comments.size() == resource.data.get('comments', []).size() - 1
-          )
+          isCommentAppendOrSingleDelete(
+            resource.data.get('comments', []), request.resource.data.comments)
         )
       );
       allow delete: if isAuth() && resource.data.organizerId == request.auth.uid;
@@ -147,10 +161,8 @@ service cloud.firestore {
         ) ||
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) &&
-          (
-            request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 ||
-            request.resource.data.comments.size() == resource.data.get('comments', []).size() - 1
-          )
+          isCommentAppendOrSingleDelete(
+            resource.data.get('comments', []), request.resource.data.comments)
         )
       );
       allow delete: if isAuth() && resource.data.userId == request.auth.uid;
