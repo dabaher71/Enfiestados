@@ -1,0 +1,13 @@
+{
+  "name": "enfiestados-rules-tests",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de firestore.rules contra el emulador. Aisladas de la app: la librería pide firebase@13 y la app usa la 12.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project enfiestados-test 'node --test rules.test.js'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.0.0"
+  }
+}

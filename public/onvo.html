@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cómo se cobran las entradas — Enfiestados</title>
+<meta name="description" content="Modelo de pagos de Enfiestados con ONVO Pay: cómo se reparte el dinero entre comprador, organizador y la plataforma.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="./logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Documento en escala de grises. La jerarquía se construye con peso
+   tipográfico, contraste y relleno — nunca con color. */
+:root{
+  --bg:#ffffff;
+  --surface:#fafafa;
+  --surface-2:#f0f0f0;
+  --border:#e3e3e3;
+  --border-strong:#c9c9c9;
+  --ink:#111111;
+  --ink-2:#555555;
+  --ink-3:#8a8a8a;
+  --inverse:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121212;
+    --surface:#1a1a1a;
+    --surface-2:#232323;
+    --border:#2f2f2f;
+    --border-strong:#4a4a4a;
+    --ink:#f2f2f2;
+    --ink-2:#b4b4b4;
+    --ink-3:#848484;
+    --inverse:#121212;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121212; --surface:#1a1a1a; --surface-2:#232323;
+  --border:#2f2f2f; --border-strong:#4a4a4a;
+  --ink:#f2f2f2; --ink-2:#b4b4b4; --ink-3:#848484; --inverse:#121212;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:'Manrope',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  line-height:1.62;-webkit-font-smoothing:antialiased;
+}
+a{color:var(--ink);}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
+.wrap{max-width:800px;margin:0 auto;padding:60px 24px 110px;}
+
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:11.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
+}
+h1{
+  font-family:'Sora',sans-serif;font-weight:800;
+  font-size:clamp(31px,4.6vw,44px);line-height:1.05;margin:12px 0 0;
+  letter-spacing:-.02em;text-wrap:balance;
+}
+.dek{font-size:17px;color:var(--ink-2);max-width:60ch;margin:16px 0 0;}
+hr{border:none;border-top:1px solid var(--border);margin:44px 0 0;}
+
+h2{
+  font-family:'Sora',sans-serif;font-weight:700;font-size:21px;
+  margin:0 0 8px;letter-spacing:-.01em;
+}
+section{margin-top:46px;}
+.lede{color:var(--ink-2);margin:0 0 20px;max-width:64ch;}
+p{margin:0 0 14px;}
+strong{font-weight:700;}
+code{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--surface-2);padding:1px 5px;border-radius:3px;}
+ul{margin:0;padding-left:19px;} li{font-size:15.5px;margin-bottom:7px;}
+
+/* Tablas */
+.scroll{overflow-x:auto;margin-top:10px;}
+table{width:100%;border-collapse:collapse;font-size:14.5px;}
+th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--border);vertical-align:top;}
+th{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:500;
+  border-bottom:1px solid var(--border-strong);
+}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+tr.total td{font-weight:700;border-top:2px solid var(--ink);border-bottom:none;}
+.pick{font-weight:700;}
+.mark{
+  display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;
+  letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:3px;
+  background:var(--ink);color:var(--inverse);margin-left:7px;vertical-align:1px;
+}
+.mark.out{background:transparent;color:var(--ink-3);border:1px solid var(--border-strong);}
+
+/* Figura */
+figure{margin:0;}
+.figbox{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:26px 18px;overflow-x:auto;}
+svg{max-width:100%;height:auto;display:block;margin:0 auto;}
+figcaption{font-size:13px;color:var(--ink-3);margin-top:12px;text-align:center;}
+.n-out{fill:var(--bg);stroke:var(--ink);stroke-width:1.6;}
+.n-fill{fill:var(--ink);stroke:var(--ink);stroke-width:1.6;}
+.t-on{fill:var(--ink);font-family:'Sora',sans-serif;font-size:13px;font-weight:700;}
+.t-inv{fill:var(--inverse);font-family:'Sora',sans-serif;font-size:13px;font-weight:700;}
+.s-on{fill:var(--ink-2);font-family:'Manrope',sans-serif;font-size:11px;}
+.s-inv{fill:var(--inverse);font-family:'Manrope',sans-serif;font-size:11px;opacity:.75;}
+.e{stroke:var(--ink);stroke-width:1.7;fill:none;}
+.e-dash{stroke:var(--ink);stroke-width:1.7;fill:none;stroke-dasharray:6 4;}
+.el{fill:var(--ink-2);font-family:'Manrope',sans-serif;font-size:11.5px;}
+.el-b{fill:var(--ink);font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:700;}
+
+/* Bloques */
+.block{border:1px solid var(--border-strong);border-radius:10px;padding:18px 20px;margin-bottom:12px;}
+.block.solid{background:var(--surface-2);}
+.block .k{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px;
+}
+.block p{margin:0;font-size:15px;}
+.block p + p{margin-top:9px;}
+
+.steps{counter-reset:s;list-style:none;padding:0;margin:18px 0 0;}
+.steps li{counter-increment:s;display:grid;grid-template-columns:auto 1fr;gap:14px;margin-bottom:15px;align-items:start;}
+.steps li::before{
+  content:counter(s);font-family:'JetBrains Mono',monospace;font-size:11.5px;
+  width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:var(--ink);color:var(--inverse);font-weight:500;
+}
+.steps b{font-family:'Sora',sans-serif;font-size:15px;display:block;margin-bottom:2px;}
+.steps span{font-size:14.5px;color:var(--ink-2);}
+
+.note{margin-top:50px;padding:18px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--ink-3);}
+.note strong{color:var(--ink-2);}
+
+/* Enlaces: subrayado discreto, sin color — el documento es monocromo */
+a{text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--border-strong);}
+a:hover{text-decoration-color:var(--ink);}
+td a{font-family:'JetBrains Mono',monospace;font-size:12.5px;word-break:break-all;}
+
+@media print{
+  :root{
+    --bg:#fff; --surface:#fff; --surface-2:#f4f4f4;
+    --border:#bbb; --border-strong:#888;
+    --ink:#000; --ink-2:#333; --ink-3:#666; --inverse:#fff;
+  }
+  body{background:#fff;color:#000;font-size:10.5pt;}
+  .wrap{padding:0;max-width:100%;}
+  /* Las secciones NO llevan avoid-page: una sección larga empujada entera a
+     la hoja siguiente deja la anterior medio vacía. Se protege solo lo que
+     de verdad no debe partirse. */
+  figure,table,.block,.steps li,.note{break-inside:avoid;}
+  h1,h2{break-after:avoid;}
+  section{margin-top:26px;}
+  h1{font-size:26pt;}
+  h2{font-size:14pt;}
+  .dek{font-size:11.5pt;}
+  .figbox{padding:14px 10px;}
+  a{text-decoration:none;}
+}
+@page{margin:14mm 13mm;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Enfiestados · Documento técnico-comercial</div>
+    <h1>Cómo se cobran las entradas</h1>
+    <p class="dek">Modelo de pagos con ONVO Pay: cómo se mueve el dinero entre el comprador, el organizador y Enfiestados, por qué se eligió esta pasarela, y qué queda por confirmar.</p>
+    <hr>
+  </header>
+
+  <section>
+    <h2>Por qué ONVO Pay</h2>
+    <p class="lede">Se compararon las pasarelas disponibles en Costa Rica. Estas son las cifras publicadas por cada una:</p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Pasarela</th>
+            <th>Tarjeta</th>
+            <th>SINPE Móvil</th>
+            <th>Costo fijo</th>
+            <th>Marketplace</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pick">ONVO Pay <span class="mark">Elegida</span></td>
+            <td>3.9% + $0.25</td>
+            <td class="pick">1.5%</td>
+            <td>Ninguno</td>
+            <td>Sí</td>
+          </tr>
+          <tr>
+            <td>Tilopay</td>
+            <td>4.25% + $0.35<br><span style="color:var(--ink-3);font-size:13px;">más IVA sobre la comisión</span></td>
+            <td>—</td>
+            <td>Ninguno<br><span style="color:var(--ink-3);font-size:13px;">$2.00 por cada retiro</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Greenpay</td>
+            <td>Incluido en mensualidad</td>
+            <td>—</td>
+            <td>$15–30 + IVA al mes</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="color:var(--ink-3);">Stripe <span class="mark out">Descartada</span></td>
+            <td colspan="4" style="color:var(--ink-3);">No admite comercios de Costa Rica — no hay forma de recibir los depósitos</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:20px;"><strong>Tres razones definieron la decisión.</strong></p>
+    <ul>
+      <li><strong>SINPE Móvil al 1.5%.</strong> Es el método que más se usa en Costa Rica y ONVO tiene la comisión más baja del mercado. Ninguna otra lo ofrece integrado.</li>
+      <li><strong>Sin costo fijo mensual.</strong> Si un mes no hay ventas, no hay cobro. Greenpay cobra $15–30 aunque no se venda nada.</li>
+      <li><strong>Modelo de marketplace.</strong> Es la única que permite repartir cada pago automáticamente entre el organizador y la plataforma. Las demás obligarían a que Enfiestados reciba todo el dinero y después le pague a cada organizador a mano.</li>
+    </ul>
+
+    <div class="block" style="margin-top:22px;">
+      <div class="k">El peso del cargo fijo</div>
+      <p>El <code>+ $0.25</code> de las tarjetas pesa poco en una compra grande, pero es determinante en una entrada barata. En una de ₡3.000, pagar con tarjeta cuesta <strong>8.1% efectivo</strong>; por SINPE Móvil, <strong>1.5%</strong>. Por eso SINPE debe ser el método más visible al momento de pagar.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>El modelo marketplace</h2>
+    <p class="lede">Es la pieza central del diseño. Enfiestados <strong>nunca recibe el dinero del organizador</strong>: ONVO lo reparte en el momento del cobro y deposita a cada uno por separado.</p>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 620 330" role="img" aria-label="El comprador paga en la app. ONVO Pay recibe el dinero, descuenta su comisión y lo divide: deposita el neto en la cuenta bancaria del organizador y la comisión en la cuenta de Enfiestados.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="n-out" x="200" y="14" width="220" height="56" rx="8"/>
+          <text class="t-on" x="310" y="38" text-anchor="middle">Comprador</text>
+          <text class="s-on" x="310" y="56" text-anchor="middle">Paga dentro de la app</text>
+
+          <line class="e" x1="310" y1="70" x2="310" y2="120" marker-end="url(#ar)" color="currentColor"/>
+          <text class="el-b" x="322" y="99">₡10.000</text>
+
+          <rect class="n-fill" x="200" y="120" width="220" height="66" rx="8"/>
+          <text class="t-inv" x="310" y="145" text-anchor="middle">ONVO Pay</text>
+          <text class="s-inv" x="310" y="163" text-anchor="middle">Cobra su comisión</text>
+          <text class="s-inv" x="310" y="178" text-anchor="middle">y divide el resto</text>
+
+          <path class="e" d="M 220 186 L 130 186 L 130 244" marker-end="url(#ar)" color="currentColor"/>
+          <text class="el-b" x="20" y="206">deposita el neto</text>
+          <text class="el" x="20" y="221">₡9.350</text>
+
+          <path class="e-dash" d="M 400 186 L 490 186 L 490 244" marker-end="url(#ar)" color="currentColor"/>
+          <text class="el-b" x="432" y="206">comisión</text>
+          <text class="el" x="432" y="221">₡500</text>
+
+          <rect class="n-out" x="20" y="244" width="220" height="66" rx="8"/>
+          <text class="t-on" x="130" y="269" text-anchor="middle">Organizador</text>
+          <text class="s-on" x="130" y="287" text-anchor="middle">Su propia cuenta bancaria</text>
+          <text class="s-on" x="130" y="302" text-anchor="middle">(él registra su IBAN)</text>
+
+          <rect class="n-out" x="380" y="244" width="220" height="66" rx="8"/>
+          <text class="t-on" x="490" y="269" text-anchor="middle">Enfiestados</text>
+          <text class="s-on" x="490" y="287" text-anchor="middle">Solo recibe su comisión</text>
+          <text class="s-on" x="490" y="302" text-anchor="middle">por el servicio</text>
+        </svg>
+      </div>
+      <figcaption>Línea continua: el dinero del organizador. Línea punteada: la comisión de la plataforma. Nunca se mezclan.</figcaption>
+    </figure>
+
+    <div class="block solid" style="margin-top:22px;">
+      <div class="k">Por qué importa</div>
+      <p>Enfiestados no custodia dinero ajeno, no tiene que liquidarle a nadie, y no puede quedar debiéndole plata a un organizador. Cada quien recibe lo suyo directamente del procesador.</p>
+      <p>También simplifica lo tributario: Enfiestados declara <strong>únicamente sus comisiones</strong>, no el valor de las entradas, porque esas ventas no son su ingreso.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ejemplo con números</h2>
+    <p class="lede">Una entrada de ₡10.000 pagada por SINPE Móvil, con una comisión de plataforma del 5%:</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Concepto</th><th style="text-align:right;">Monto</th><th>Destino</th></tr></thead>
+        <tbody>
+          <tr><td>Precio de la entrada</td><td class="num">₡10.000</td><td>—</td></tr>
+          <tr><td>Comisión ONVO (1.5% SINPE)</td><td class="num">−₡150</td><td>ONVO</td></tr>
+          <tr><td>Comisión Enfiestados (5%)</td><td class="num">−₡500</td><td>Enfiestados</td></tr>
+          <tr class="total"><td>Recibe el organizador</td><td class="num">₡9.350</td><td>Su cuenta</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px;">Con tarjeta, la comisión de ONVO sube de ₡150 a unos ₡516 y el organizador recibiría ₡8.984.</p>
+
+    <div class="block">
+      <div class="k">Pendiente de confirmar con ONVO</div>
+      <p>Sobre las ventas con tarjeta existen <strong>retenciones de Hacienda</strong> que se descuentan de la liquidación. No son costo perdido —funcionan como crédito fiscal— pero afectan el flujo de caja. Falta confirmar cómo se aplican en el modelo marketplace y a quién le corresponden.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Qué tiene que hacer el organizador</h2>
+    <p class="lede">Una sola vez, antes de poder vender:</p>
+    <ol class="steps">
+      <li><div><b>Entra a Configuración → Recibir pagos</b><span>Dentro de la app de Enfiestados.</span></div></li>
+      <li><div><b>Completa un formulario de ONVO</b><span>Se abre un sitio seguro de ONVO, no de Enfiestados. Ahí registra sus datos y la cuenta IBAN donde quiere recibir el dinero.</span></div></li>
+      <li><div><b>Queda habilitado</b><span>Desde ese momento puede publicar eventos con venta de entradas, sin repetir el trámite.</span></div></li>
+    </ol>
+    <div class="block solid" style="margin-top:20px;">
+      <div class="k">Seguridad</div>
+      <p>Los datos bancarios se cargan en el sitio de ONVO, no en Enfiestados. La aplicación <strong>nunca almacena ni ve números de cuenta ni de tarjeta</strong>.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cómo paga el comprador</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Método</th><th>Comisión</th><th>Cómo funciona</th></tr></thead>
+        <tbody>
+          <tr><td>SINPE Móvil</td><td>1.5%</td><td>Transfiere desde su banco al número de ONVO. Se asocia y confirma automáticamente</td></tr>
+          <tr><td>Transferencia SINPE</td><td>2.5%</td><td>Transferencia bancaria tradicional</td></tr>
+          <tr><td>Tarjeta</td><td>3.9% + $0.25</td><td>Visa o Mastercard, en un formulario seguro de ONVO</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px;">En los tres casos el pago se confirma mediante una notificación automática de ONVO hacia los servidores de Enfiestados. La entrada se emite <strong>solo cuando ONVO confirma que el dinero entró</strong>, nunca antes.</p>
+    <p><strong>Una particularidad de SINPE Móvil:</strong> no es un botón instantáneo. El comprador sale de la app, abre su banco y transfiere el monto exacto. ONVO asocia la transferencia y confirma. Puede tomar algunos minutos, así que la entrada queda reservada mientras tanto.</p>
+  </section>
+
+  <section>
+    <h2>Qué queda por definir</h2>
+    <ul>
+      <li><strong>El porcentaje de comisión de Enfiestados.</strong> Es configurable por organizador y puede cambiarse después.</li>
+      <li><strong>Quién emite la factura electrónica al comprador.</strong> Como el organizador recibe el dinero directamente, le corresponde a él — pero debe confirmarlo un contador.</li>
+      <li><strong>Responsabilidad ante contracargos.</strong> Si un comprador desconoce el pago y el dinero ya se liquidó al organizador, falta confirmar con ONVO a quién se le cobra.</li>
+      <li><strong>Cuándo se le deposita al organizador.</strong> ONVO permite configurar la frecuencia de liquidación; falta definir si conviene antes o después del evento.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Verificar esta información</h2>
+    <p class="lede">Todo lo anterior sale de la documentación pública de ONVO. Estos son los enlaces directos a cada punto, por si quieren corroborarlo:</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Qué confirma</th><th>Enlace</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Comisiones por método de pago</td>
+            <td><a href="https://onvopay.com/pricing">onvopay.com/pricing</a></td>
+          </tr>
+          <tr>
+            <td>Modelo marketplace: cuentas conectadas, reparto automático y comisión de plataforma</td>
+            <td><a href="https://docs.onvopay.com/payments/marketplaces">docs.onvopay.com/payments/marketplaces</a></td>
+          </tr>
+          <tr>
+            <td>Flujo de SINPE Móvil y cómo se asocia la transferencia</td>
+            <td><a href="https://docs.onvopay.com/payments/sinpe-mobile">docs.onvopay.com/payments/sinpe-mobile</a></td>
+          </tr>
+          <tr>
+            <td>Confirmación automática del pago hacia nuestros servidores</td>
+            <td><a href="https://docs.onvopay.com/webhooks">docs.onvopay.com/webhooks</a></td>
+          </tr>
+          <tr>
+            <td>Reembolsos totales y parciales</td>
+            <td><a href="https://docs.onvopay.com/payments/refunds">docs.onvopay.com/payments/refunds</a></td>
+          </tr>
+          <tr>
+            <td>Documentación técnica completa</td>
+            <td><a href="https://docs.onvopay.com">docs.onvopay.com</a></td>
+          </tr>
+          <tr>
+            <td>Sitio institucional de ONVO Pay</td>
+            <td><a href="https://www.onvopay.com/">onvopay.com</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px;">Las comisiones de Tilopay y Greenpay provienen de sus propios sitios y de comparativas públicas del mercado costarricense; conviene reconfirmarlas con cada proveedor si se quiere revisar la decisión.</p>
+  </section>
+
+  <p class="note"><strong>Sobre este documento:</strong> elaborado el 7 de octubre de 2026 a partir de la documentación oficial de ONVO Pay — secciones de Marketplaces, Intenciones de pago, SINPE Móvil, Checkout y Webhooks. Las comisiones citadas son las publicadas por cada proveedor y conviene reconfirmarlas al abrir la cuenta de comercio, ya que pueden variar por negociación o cambios de tarifa.</p>
+
+</div>
+</body>
+</html>
