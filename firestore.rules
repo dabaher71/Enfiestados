@@ -50,11 +50,34 @@ service cloud.firestore {
       // otorga manualmente por el equipo (Firebase Console / Admin SDK).
       allow create: if isOwner(userId) && !('isAdmin' in request.resource.data);
       allow update: if (
+        // (a) El dueño edita su perfil. Antes esta rama solo bloqueaba
+        // 'isAdmin', así que cualquiera podía auto-asignarse `verificado`
+        // (insignia de confianza), `isAdvertiser` o `adCredits` — que
+        // AdCenterScreen lee como saldo real.
         isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin'])
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'isAdmin', 'isAdvertiser', 'adCredits', 'verificado',
+          'banned', 'bannedAt', 'bannedReason'
+        ]) &&
+        // Sobre sus propios followers solo puede QUITAR (sacarse un seguidor
+        // o la limpieza al bloquear). Agregar sería inflarse el contador.
+        request.resource.data.get('followers', []).toSet()
+          .difference(resource.data.get('followers', []).toSet()).size() == 0
       ) || (
-        // Admin: solo puede tocar adCredits (addCredits() en adService.js),
-        // nada más del perfil ajeno.
+        // (b) Otra persona siguiéndote o dejando de seguirte: solo puede
+        // mover SU PROPIO uid. Esta rama faltaba — la regla anterior exigía
+        // isOwner, así que seguir siempre fallaba con permission-denied y el
+        // catch {} de UserProfileScreen se lo tragaba en silencio.
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers']) &&
+        isUidToggle(resource.data.get('followers', []), request.resource.data.followers, request.auth.uid)
+      ) || (
+        // (c) Solicitud de seguimiento a una cuenta privada, misma lógica.
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followRequests']) &&
+        isUidToggle(resource.data.get('followRequests', []), request.resource.data.followRequests, request.auth.uid)
+      ) || (
+        // (d) Admin: solo adCredits (addCredits() en adService.js).
         isAdminUser() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adCredits'])
       );
@@ -114,9 +137,21 @@ service cloud.firestore {
       allow update: if isAuth() && (
         // El autor puede editar su propio post
         resource.data.userId == request.auth.uid ||
-        // Otros solo pueden tocar likes y comments
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likes', 'comments'])
+        // Mismo endurecimiento que events. Antes bastaba con
+        // hasOnly(['likes','comments']) SIN mirar los valores, así que
+        // cualquiera —incluido un invitado anónimo— podía vaciar o
+        // reemplazar todos los comentarios y likes de cualquier publicación.
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
+          isUidToggle(resource.data.get('likes', []), request.resource.data.likes, request.auth.uid)
+        ) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) &&
+          (
+            request.resource.data.comments.size() == resource.data.get('comments', []).size() + 1 ||
+            request.resource.data.comments.size() == resource.data.get('comments', []).size() - 1
+          )
+        )
       );
       allow delete: if isAuth() && resource.data.userId == request.auth.uid;
     }
@@ -162,7 +197,14 @@ service cloud.firestore {
             .hasOnly(['participants', 'unreadFor']) &&
           resource.data.participants.toSet().difference(
             request.resource.data.participants.toSet()
-          ).hasOnly([request.auth.uid])
+          ).hasOnly([request.auth.uid]) &&
+          // Y no puede AGREGAR a nadie de paso. difference(viejo, nuevo) solo
+          // mira quién salió: sin esta línea un miembro podía irse sumando
+          // participantes sin límite, además sin el tope de 100 que sí tiene
+          // la rama del dueño.
+          request.resource.data.participants.toSet().difference(
+            resource.data.participants.toSet()
+          ).size() == 0
         )
       );
 
@@ -218,7 +260,12 @@ service cloud.firestore {
             : !isBlockedPair(otherParticipant(get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.participants))
         );
       allow update: if isAuth() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) &&
+        // Faltaba la comprobación de participación que sí tiene `read`:
+        // cualquiera podía marcar como leído un mensaje de un chat ajeno si
+        // conocía el ID del documento.
+        exists(/databases/$(database)/documents/chats/$(resource.data.chatId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(resource.data.chatId)).data.participants;
       allow delete: if false;
     }
 
@@ -235,8 +282,13 @@ service cloud.firestore {
         request.resource.data.keys().hasAll(['reporterId', 'targetType', 'targetId', 'reason', 'status', 'createdAt']) &&
         request.resource.data.targetType in ['user', 'event', 'post'] &&
         request.resource.data.status == 'pending';
-      // Cada usuario puede leer solo sus propios reportes (necesario para verificar duplicados)
-      allow read: if isAuth() && resource.data.reporterId == request.auth.uid;
+      // El reportante lee los suyos (para evitar duplicados) y el admin lee
+      // todos. Sin la rama de admin, la consulta de AdminScreen:55
+      // —where('status','==','pending')— era rechazada entera y el panel de
+      // moderación no mostraba ningún reporte.
+      allow read: if isAuth() && (
+        resource.data.reporterId == request.auth.uid || isAdminUser()
+      );
       allow update, delete: if false; // solo admin via Cloud Functions
     }
 
@@ -276,10 +328,17 @@ service cloud.firestore {
         resource.data.status in ['active', 'paused'] &&
         request.resource.data.status in ['active', 'paused']
       ) || (
-        // TODO: migrar a Cloud Function para prevenir inflación de métricas
+        // Métricas: solo +1 por escritura y de a una. Antes se podía fijar
+        // cualquier valor en cualquier anuncio (el TODO lo reconocía). Sigue
+        // siendo client-side: para cobrar por impresiones esto tiene que
+        // pasar a una Cloud Function con el uid del visor.
         isAuth() &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['impressions', 'clicks'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['impressions']) &&
+        request.resource.data.impressions == resource.data.get('impressions', 0) + 1
+      ) || (
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks']) &&
+        request.resource.data.clicks == resource.data.get('clicks', 0) + 1
       );
       allow delete: if isAdminUser();
     }
@@ -307,9 +366,27 @@ service cloud.firestore {
     // ── notifications ─────────────────────────────────────────────────────────
     match /notifications/{notificationId} {
       allow read: if isAuth() && resource.data.toUserId == request.auth.uid;
+      // NotificationsScreen renderiza `message` y `fromUserName` tal cual, así
+      // que antes cualquiera podía mandarle a cualquiera un texto arbitrario
+      // con remitente inventado ("Enfiestados: tu cuenta será suspendida…").
+      // Se acota el tipo y el largo, y se exige tener perfil — lo que además
+      // deja fuera a los invitados anónimos, que no deberían notificar a nadie.
+      // Pendiente: validar que fromUserName sea el nombre real. Hoy no se
+      // puede porque EditProfileScreen cambia users/{uid}.name sin actualizar
+      // el displayName de Auth, que es lo que mandan los llamadores.
       allow create: if isAuth() &&
         request.resource.data.fromUserId == request.auth.uid &&
-        request.resource.data.fromUserId != request.resource.data.toUserId;
+        request.resource.data.fromUserId != request.resource.data.toUserId &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        request.resource.data.type in [
+          'like', 'comment', 'follow', 'follow_request', 'follow_accepted',
+          'attend', 'post_like', 'post_comment', 'new_event', 'new_post'
+        ] &&
+        (
+          !('message' in request.resource.data) ||
+          (request.resource.data.message is string &&
+           request.resource.data.message.size() <= 200)
+        );
       allow update: if isAuth() &&
         resource.data.toUserId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);

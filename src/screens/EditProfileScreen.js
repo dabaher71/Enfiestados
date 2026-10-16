@@ -4,6 +4,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
@@ -104,6 +105,14 @@ export default function EditProfileScreen({ route, navigation }) {
         perfilPublico: !isPrivate,
         updatedAt: new Date().toISOString(),
       });
+      // Mantener Auth en sincronía con Firestore: varios lugares mandan
+      // `auth.currentUser.displayName` como nombre del remitente (ej.
+      // CreateEventScreen, CreatePostScreen). Si solo se actualizaba
+      // Firestore, esos quedaban con el nombre viejo para siempre.
+      await updateProfile(auth.currentUser, {
+        displayName: name.trim(),
+        photoURL: avatarURL || null,
+      }).catch(() => {});
       Alert.alert('¡Listo!', 'Perfil actualizado', [{ text: 'OK', onPress: () => navigation.goBack() }]);
     } catch {
       Alert.alert('Error', 'No se pudo actualizar el perfil');

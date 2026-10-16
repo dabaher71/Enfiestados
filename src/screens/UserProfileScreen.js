@@ -123,7 +123,11 @@ export default function UserProfileScreen({ route, navigation }) {
             setIsBlocked(false);
           } else {
             await updateDoc(myRef, { usuariosBloqueados: arrayUnion(userId), following: arrayRemove(userId), followers: arrayRemove(userId) });
-            await updateDoc(doc(db, 'users', userId), { followers: arrayRemove(currentUserId), following: arrayRemove(currentUserId) });
+            // En el doc ajeno solo se puede mover el propio uid y de a un
+            // campo (regla de users, rama b): me saco de sus followers. Su
+            // `following` queda con una entrada obsoleta, que es inofensiva
+            // porque el filtro de bloqueo ya lo esconde en ambos sentidos.
+            await updateDoc(doc(db, 'users', userId), { followers: arrayRemove(currentUserId) });
             setIsBlocked(true); setIsFollowing(false); setHasPending(false);
           }
         } catch { Alert.alert('Error', 'No se pudo completar la acción'); }
