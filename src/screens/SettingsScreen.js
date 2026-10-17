@@ -27,6 +27,7 @@ const NOTIF_KEY = '@enfiestados/notif_prefs';
 // de consentimiento de OAuth — con .web.app tira "Missing domain". Cambiar a
 // enfiestados.net/privacidad cuando el abogado entregue la versión final.
 const PRIVACY_URL = 'https://enfiestados-alpha.firebaseapp.com/privacidad';
+const TERMS_URL   = 'https://enfiestados-alpha.firebaseapp.com/terminos';
 
 export default function SettingsScreen({ navigation }) {
   const { colors, mode, setThemeMode } = useTheme();
@@ -213,7 +214,7 @@ export default function SettingsScreen({ navigation }) {
         {/* Información */}
         <SectionTitle label="INFORMACIÓN" />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Row icon="document-text-outline"    label="Términos y condiciones" onPress={() => Alert.alert('Términos', 'Próximamente…')} />
+          <Row icon="document-text-outline"    label="Términos y condiciones" onPress={() => Linking.openURL(TERMS_URL)} />
           <Row icon="shield-checkmark-outline" label="Política de privacidad" onPress={() => Linking.openURL(PRIVACY_URL)} />
           <Row icon="help-circle-outline"      label="Ayuda y soporte"        onPress={() => Alert.alert('Soporte', 'Escribinos a soporte@enfiestados.com')} />
           <Row icon="information-circle-outline" label="Versión"              value={`${Constants.expoConfig?.version ?? '1.0.0'} Beta`} />
