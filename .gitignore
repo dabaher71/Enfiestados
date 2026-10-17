@@ -64,3 +64,4 @@ app-example
 # generated native folders
 /ios
 /android
+firestore-debug.log
