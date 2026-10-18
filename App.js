@@ -165,7 +165,7 @@ export default function App() {
       <SafeAreaProvider>
       <ThemeProvider>
         <SnackbarProvider>
-          <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
+          <StatusBar barStyle="light-content" backgroundColor="#17131F" />
           <AppNavigator />
         </SnackbarProvider>
       </ThemeProvider>

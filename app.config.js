@@ -32,7 +32,7 @@ module.exports = {
     splash: {
       image: './assets/images/logo.png',
       resizeMode: 'contain',
-      backgroundColor: '#1a1a2e',
+      backgroundColor: '#17131F',
     },
     assetBundlePatterns: ['**/*'],
     ios: {
@@ -63,7 +63,7 @@ module.exports = {
     android: {
       adaptiveIcon: {
         foregroundImage: './assets/images/logo.png',
-        backgroundColor: '#1a1a2e',
+        backgroundColor: '#17131F',
       },
       package: 'com.enfiestados.app',
       // Requerido por @react-native-firebase/app (Crashlytics) — antes no
@@ -150,7 +150,7 @@ module.exports = {
     ].filter(Boolean),
     notification: {
       icon: './assets/images/logo.png',
-      color: '#6c5ce7',
+      color: '#8B6BFF',
       androidMode: 'default',
       androidCollapsedTitle: 'Enfiestados',
     },

@@ -1,3 +1,7 @@
+/* eslint-disable no-restricted-syntax -- Excepción deliberada a la regla de
+   tokens: este boundary es la última red de la app y tiene que renderizar
+   aunque lo que haya fallado sea el ThemeProvider, así que no puede llamar a
+   useTheme(). Los hex de abajo replican darkColors de src/theme/tokens.js. */
 import { Component } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,10 +42,14 @@ export default class ErrorBoundary extends Component {
   }
 }
 
+// Único lugar donde los colores van hardcodeados a propósito: este boundary
+// tiene que poder renderizar aunque el que haya reventado sea el ThemeProvider,
+// así que no puede depender de useTheme(). Los valores son los mismos de
+// darkColors en src/theme/tokens.js — si cambian allá, cambiarlos acá también.
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#17131F',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 30,
@@ -49,25 +57,25 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#F7F4EF',
     marginTop: 20,
     marginBottom: 10,
   },
   message: {
     fontSize: 14,
-    color: '#888',
+    color: '#C6BFD6',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 30,
   },
   button: {
-    backgroundColor: '#6c5ce7',
+    backgroundColor: '#8B6BFF',
     paddingHorizontal: 30,
     paddingVertical: 14,
     borderRadius: 25,
   },
   buttonText: {
-    color: '#fff',
+    color: '#F7F4EF',
     fontSize: 15,
     fontWeight: '600',
   },
