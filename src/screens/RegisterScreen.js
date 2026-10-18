@@ -205,21 +205,19 @@ export default function RegisterScreen({ navigation }) {
             style={{ marginTop: space[3] }}
           />
 
-          {/* Los dos apuntan a Firebase Hosting hasta que se monte
-              enfiestados.net. Se usa .firebaseapp.com y no .web.app (sirven lo
-              mismo) porque es el dominio que Google autoriza por defecto en la
-              pantalla de consentimiento de OAuth.
+          {/* Ambos en enfiestados.net, servido por Firebase Hosting como
+              dominio personalizado.
               Términos = el documento de marzo 2026, que describe la app tal
               como es hoy. El abogado está preparando la versión que suma venta
               de entradas; al publicarla hay que avisar en la app, como exige
               la sección 13 del propio documento. */}
           <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[5] }}>
             Al crear tu cuenta aceptás nuestros{' '}
-            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados-alpha.firebaseapp.com/terminos')}>
+            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados.net/terminos')}>
               Términos y Condiciones
             </Text>{' '}
             y nuestra{' '}
-            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados-alpha.firebaseapp.com/privacidad')}>
+            <Text variant="caption" style={{ color: colors['link'] }} onPress={() => Linking.openURL('https://enfiestados.net/privacidad')}>
               Política de Privacidad
             </Text>.
           </Text>
