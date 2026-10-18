@@ -133,7 +133,9 @@ h2{
 
 .split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;}
 
-.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(252px,1fr));gap:16px;margin-top:48px;}
+/* Dos columnas fijas y no auto-fit: con cuatro tarjetas, auto-fit daba tres
+   en una fila y una huérfana abajo. 2×2 además deja respirar el texto. */
+.feat{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:48px;}
 .card{
   background:var(--surface);border:1px solid var(--border-subtle);
   border-radius:18px;padding:26px 24px;
@@ -197,6 +199,7 @@ footer{
 
 @media (max-width:760px){
   .split{grid-template-columns:1fr;gap:38px;}
+  .feat{grid-template-columns:1fr;}
   section{padding:64px 0;}
   .hero{padding:48px 0 64px;}
   .ticket{margin:0 auto;}
