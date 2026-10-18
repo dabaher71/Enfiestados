@@ -426,6 +426,9 @@ export default function HomeScreen({ navigation }) {
           renderSectionHeader={renderSectionHeader}
           stickySectionHeadersEnabled
           showsVerticalScrollIndicator={false}
+          // Sin esto la última tarjeta termina al ras del borde superior de la
+          // tab bar y el botón "Comprar" se ve guillotinado por la barra.
+          contentContainerStyle={{ paddingBottom: space[6] }}
           ListFooterComponent={<ListFooter />}
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
@@ -470,7 +473,10 @@ function HomeHeader({ colors, navigation, unread, location, collapseAnim }) {
         </Text>
         <Animated.View style={{
           opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-          height: anim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }),
+          // 20, no 18: el texto de abajo es de 14px y su caja de línea mide 18.
+          // Con overflow:'hidden' y 18 de alto, la cola de la "j" quedaba
+          // cortada y "Alajuela" se leía "Alaiuela".
+          height: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
           overflow: 'hidden',
         }}>
           <Pressable
@@ -480,7 +486,10 @@ function HomeHeader({ colors, navigation, unread, location, collapseAnim }) {
           >
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
-              <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
+              {/* lineHeight explícito: sin él iOS calcula la caja de línea según
+                  la métrica de la fuente y el alto queda impredecible dentro
+                  del contenedor con overflow:'hidden' de arriba. */}
+              <Text style={{ fontSize: 14, lineHeight: 18, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
                 {location || 'Costa Rica'}
               </Text>
               <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />

@@ -277,10 +277,16 @@ export default function NotificationsScreen({ navigation }) {
     <FollowRequestItem item={item} onAccept={handleAccept} onReject={handleReject} onNavigate={handleRequestNav} colors={colors} />
   ), [handleAccept, handleReject, handleRequestNav, colors]);
 
-  const LIST_PROPS = { showsVerticalScrollIndicator: false, estimatedItemSize: 72 };
+  // paddingBottom: igual que en el resto de las pantallas con tab bar, para que
+  // el último ítem no quede al ras del borde de la barra.
+  const LIST_PROPS = {
+    showsVerticalScrollIndicator: false,
+    estimatedItemSize: 72,
+    contentContainerStyle: { paddingBottom: space[6] },
+  };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text variant="h2">{t.alerts.title}</Text>

@@ -148,7 +148,10 @@ export default function SettingsScreen({ navigation }) {
         <View style={{ width: 44 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
+      {/* space[4] y no space[16]: esta pantalla es de stack, no tiene tab bar
+          que librar, y styles.footer ya aporta 32 de paddingVertical más el
+          safe-area inferior. Con space[16] quedaban ~130px muertos abajo. */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[4] }}>
 
         {/* Cuenta */}
         <SectionTitle label="CUENTA" />

@@ -47,12 +47,29 @@ eas update                                        # OTA update push
 
 ## App Details
 
-- **Theme**: Dark (`#1a1a2e` background, `#6c5ce7` accent purple)
+- **Theme**: design system en `src/theme/` — tokens en `tokens.js` (`darkColors`/`lightColors`, `space`, `radius`, `font`, `elev`, `motion`), consumidos vía `useTheme()` de `ThemeProvider`. Dark: `bg.base` `#17131F`, `nav.selected` `#8B6BFF`. **No hardcodear hex ni `fontSize`** — usar los tokens y el componente `src/components/ui/Text.js` (variantes: display/h1/h2/h3/title/subtitle/body/bodyStrong/label/caption/overline/tabLabel). La paleta vieja (`#1a1a2e`, `#6c5ce7`) está deprecada.
 - **Language**: Spanish UI (permissions, labels, etc.)
 - **Ads**: AdMob `ca-app-pub-5363568499936245~8795174061` — NativeAdCard component
 - **Notifications**: In-app (notificationService) + push (pushNotificationService + expo-notifications)
 - **Firebase project**: `enfiestados-alpha`
 - **EAS project**: `97e444bc-19fc-4a33-bca2-f2eecedd7471`
+
+## Safe area y tab bar
+
+Las pantallas de tab (Home, Explore, MyPlans, Notifications, Profile) **no deben
+aplicar el safe-area inferior**: la tab bar de `MainTabNavigator` ya lo reserva
+dentro de su propia altura (`60 + insets.bottom`). `@react-navigation/bottom-tabs`
+solo *consume* el contexto de insets para dimensionar la barra — nunca lo
+sobreescribe para las pantallas —, así que un `useSafeAreaInsets().bottom` o un
+`<SafeAreaView>` sin `edges` dentro de una pantalla de tab cuenta el inset dos
+veces y deja una banda muerta sobre la barra que recorta botones y texto.
+
+- Pantalla de tab → `<SafeAreaView edges={['top']}>`, y nunca sumar
+  `insets.bottom` a un `contentContainerStyle` ni a un overlay `absolute bottom:0`.
+- Pantalla de stack (Settings, EventDetail, etc.) → `<SafeAreaView>` normal, con
+  borde inferior, porque ahí no hay tab bar.
+- Toda lista scrolleable con tab bar lleva `paddingBottom` (`space[6]` o más) para
+  que el último ítem no quede al ras del borde de la barra.
 
 ## Platform Notes
 

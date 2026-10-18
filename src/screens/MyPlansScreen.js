@@ -387,7 +387,7 @@ export default function MyPlansScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text variant="h2">{t.myPlans.title}</Text>

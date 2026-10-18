@@ -405,7 +405,10 @@ export default function SearchScreen({ navigation }) {
           keyExtractor={(item, i) => item.id ?? `i_${i}`}
           renderItem={renderListItem}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + space[12] }}
+          // Sin insets.bottom: esta es una pantalla con tab bar, y la barra ya
+          // reserva el safe-area inferior en su propia altura. Sumarlo acá lo
+          // contaba dos veces y dejaba espacio muerto al final de la lista.
+          contentContainerStyle={{ paddingBottom: space[12] }}
           ListHeaderComponent={!isSearching ? (
             <View>
               {/* Grilla de categorías */}
@@ -472,7 +475,10 @@ export default function SearchScreen({ navigation }) {
           </Pressable>
 
           {/* Bottom sheet peek — resultados sobre el mapa */}
-          <View style={[styles.mapSheet, { backgroundColor: colors['bg.raised'], paddingBottom: insets.bottom + space[3] }]}>
+          {/* Mismo caso: el sheet es absolute bottom:0 dentro de la pantalla,
+              o sea que su borde inferior ya es el techo de la tab bar, que a
+              su vez ya reserva el safe-area. */}
+          <View style={[styles.mapSheet, { backgroundColor: colors['bg.raised'], paddingBottom: space[3] }]}>
             {/* Handle */}
             <View style={[styles.mapSheetHandle, { backgroundColor: colors['border.strong'] }]} />
 

@@ -163,7 +163,7 @@ export default function ProfileScreen({ navigation }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
         <View style={styles.topBar}>
           <Text variant="h2">Perfil</Text>
         </View>
@@ -178,7 +178,7 @@ export default function ProfileScreen({ navigation }) {
   // a crear cuenta — el resto de la app ya lo manda acá con requireAccount.
   if (currentUser.isAnonymous) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
         <View style={styles.topBar}>
           <Text variant="h2">Perfil</Text>
         </View>
@@ -212,8 +212,11 @@ export default function ProfileScreen({ navigation }) {
   ];
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] + 80 }}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      {/* Antes era space[16] + 80: ese +80 compensaba a mano la banda muerta
+          que dejaba el safe-area inferior duplicado. Arreglado el edges del
+          SafeAreaView, alcanza con space[16] como en el resto. */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
 
         {/* ── TOP BAR: título + settings ─────────────────────────────── */}
         <View style={styles.topBar}>
