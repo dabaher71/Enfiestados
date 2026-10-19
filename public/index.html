@@ -22,234 +22,367 @@
 <style>
 /* Esta página viene del proyecto de Claude Design "Landing page Enfiestados".
    Allá es un .dc.html, un formato de componente que necesita un runtime de
-   React (support.js) que el archivo no carga: publicado tal cual, la página
-   sale en blanco. Acá está convertido a HTML estático — se resolvieron los
-   condicionales, los style-hover pasaron a CSS y se quitó el runtime. */
-html,body{margin:0;background:#FBFAF7;}
-*{box-sizing:border-box;}
-img{max-width:100%;}
-a{color:#1F1C2C;text-decoration:none;}
-a:hover{color:#B8860B;}
+   React (support.js) que el archivo no carga: publicado tal cual sale en
+   blanco. Acá está convertido a HTML estático.
 
-/* En el diseño esto eran atributos style-hover, que solo entiende el runtime. */
-.btn-amarillo:hover{background:#FFD466;color:#1F1C2C;}
-.btn-oscuro:hover{background:#2E2A3F;color:#fff;}
+   POR QUÉ TODO EL LAYOUT ESTÁ EN CLASES Y NO INLINE: el diseño original trae
+   cada estilo como atributo style="" en el elemento. Un estilo inline le gana
+   a cualquier selector de clase, así que las media queries escritas contra
+   clases no se aplicaban nunca y la página no respondía en móvil. Lo
+   estructural — anchos, paddings, gaps, direcciones de flex — vive acá para
+   que las media queries de abajo tengan efecto. Los colores y detalles
+   puntuales siguen inline, que no estorban. */
 
-/* El marco del teléfono tapa la barra de estado real de la captura y dibuja
-   la isla dinámica, para que las tres pantallas se vean parejas. */
-.marco{position:relative;border-radius:38px;overflow:hidden;aspect-ratio:1179/2556;background:#FBFAF7;}
-.marco img{width:100%;height:100%;object-fit:cover;display:block;}
-.tapa{position:absolute;left:0;right:0;top:0;height:5.6%;background:#FBFAF7;display:flex;justify-content:center;align-items:center;}
-.isla{width:34%;height:60%;background:#000;border-radius:999px;}
-
-.chip{display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;font-weight:500;}
-.chip i{width:7px;height:7px;border-radius:50%;background:#FDC74A;font-style:normal;}
-
-/* El diseño original no traía reglas para pantallas angostas: el menú se
-   salía del header y las secciones mantenían 104px de padding en móvil. */
-@media (max-width:720px){
-  .nav-links{display:none;}
-  .pad-seccion{padding-left:20px;padding-right:20px;}
-  .card-org{padding:32px 24px;}
+:root{
+  --tinta:#1F1C2C;
+  --tinta-2:#5E5A70;
+  --tinta-3:#6E6A7E;
+  --crema:#FBFAF7;
+  --crema-2:#F3EFEA;
+  --borde:#EDE8E1;
+  --amarillo:#FDC74A;
+  --oro:#8A6408;
+  --display:'Plus Jakarta Sans',sans-serif;
 }
-:focus-visible{outline:2px solid #1F1C2C;outline-offset:3px;border-radius:6px;}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--crema);}
+/* Red de seguridad: el hero tiene teléfonos rotados y con margen negativo;
+   si alguno se pasa unos píxeles, que no aparezca scroll horizontal. */
+body{overflow-x:hidden;font-family:'DM Sans',sans-serif;color:var(--tinta);}
+img{max-width:100%;}
+a{color:var(--tinta);text-decoration:none;}
+a:hover{color:#B8860B;}
+h1,h2,h3{font-family:var(--display);margin:0;}
+:focus-visible{outline:2px solid var(--tinta);outline-offset:3px;border-radius:6px;}
+
+/* ── Estructura ─────────────────────────────────────────────────────────── */
+.wrap{max-width:1240px;margin:0 auto;padding-left:32px;padding-right:32px;}
+.sec{padding-top:104px;padding-bottom:104px;}
+
+.header{position:sticky;top:0;z-index:20;background:rgba(251,250,247,0.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--borde);}
+.header .wrap{padding-top:14px;padding-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.marca{display:flex;align-items:center;gap:12px;flex:0 0 auto;}
+.marca img{width:40px;height:40px;border-radius:10px;display:block;}
+.marca span{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-0.02em;}
+.nav{display:flex;align-items:center;gap:28px;font-size:15px;font-weight:500;}
+.nav a{color:var(--tinta-2);}
+
+.btn-amarillo{background:var(--amarillo);color:var(--tinta);border-radius:999px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:10px;}
+.btn-amarillo:hover{background:#FFD466;color:var(--tinta);}
+.btn-nav{padding:10px 22px;white-space:nowrap;}
+.btn-tienda{display:flex;align-items:center;gap:10px;background:var(--tinta);color:#fff;padding:12px 24px;border-radius:14px;}
+.btn-tienda:hover{background:#2E2A3F;color:#fff;}
+.btn-tienda svg{flex:none;}
+.btn-tienda .t{display:flex;flex-direction:column;line-height:1.15;text-align:left;}
+.btn-tienda .t small{font-size:11px;color:#CFCBD8;}
+.btn-tienda .t strong{font-size:17px;font-weight:600;}
+.tiendas{display:flex;flex-wrap:wrap;gap:12px;}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.hero{display:flex;flex-wrap:wrap;align-items:center;gap:56px;padding-top:72px;padding-bottom:96px;}
+.hero-texto{flex:1 1 460px;min-width:0;display:flex;flex-direction:column;gap:28px;align-items:flex-start;}
+.hero h1{font-weight:800;font-size:clamp(36px,7.4vw,72px);line-height:1.04;letter-spacing:-0.035em;text-wrap:balance;}
+.hero p{margin:0;font-size:clamp(17px,2.2vw,20px);line-height:1.55;color:var(--tinta-2);max-width:520px;text-wrap:pretty;}
+.insignia{display:flex;align-items:center;gap:8px;background:#FFF3CC;color:var(--oro);padding:7px 16px;border-radius:999px;font-size:14px;font-weight:600;}
+.insignia i{width:8px;height:8px;border-radius:50%;background:#E8A400;font-style:normal;}
+.hero-fotos{flex:1 1 420px;min-width:0;display:flex;justify-content:center;}
+.hero-escena{position:relative;width:min(540px,100%);display:flex;justify-content:center;align-items:flex-end;padding:24px 0;}
+.hero-fondo{position:absolute;inset:8% 4% 0 4%;background:var(--amarillo);border-radius:48px;}
+.tel-atras{position:relative;width:44%;margin-right:-10%;transform:rotate(-6deg) translateY(-6%);z-index:1;}
+.tel-frente{position:relative;width:52%;z-index:2;}
+
+/* ── Teléfono ───────────────────────────────────────────────────────────── */
+.tel{padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -28px rgba(31,28,44,0.55),inset 0 0 0 1.5px #3A3644;}
+.tel-atras .tel{padding:7px;border-radius:40px;}
+.pantalla{position:relative;border-radius:38px;overflow:hidden;aspect-ratio:1179/2556;background:var(--crema);}
+.tel-atras .pantalla{border-radius:33px;}
+.pantalla img{width:100%;height:100%;object-fit:cover;display:block;}
+/* Tapa la barra de estado real de la captura y dibuja la isla dinámica, para
+   que las tres pantallas se vean parejas. */
+.tapa{position:absolute;left:0;right:0;top:0;height:5.6%;background:var(--crema);display:flex;justify-content:center;align-items:center;}
+.tapa i{width:34%;height:60%;background:#000;border-radius:999px;font-style:normal;}
+
+/* ── Funciones ──────────────────────────────────────────────────────────── */
+.funciones{background:var(--crema-2);}
+.funciones .wrap{display:flex;flex-direction:column;gap:96px;}
+.intro{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;}
+.intro h2{font-weight:800;font-size:clamp(28px,4.2vw,46px);letter-spacing:-0.03em;line-height:1.1;text-wrap:balance;}
+.intro p{margin:0;font-size:clamp(17px,2.2vw,19px);line-height:1.55;color:var(--tinta-2);max-width:560px;text-wrap:pretty;}
+.fila{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:72px;}
+.fila-inv{flex-wrap:wrap-reverse;}
+.fila-tel{flex:0 1 300px;min-width:220px;}
+.fila-texto{flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;}
+.eyebrow{font-family:var(--display);font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:var(--oro);}
+.fila-texto h3{font-weight:800;font-size:clamp(24px,3.2vw,38px);letter-spacing:-0.025em;line-height:1.1;}
+.fila-texto p{margin:0;font-size:clamp(16px,2.1vw,18px);line-height:1.6;color:var(--tinta-2);text-wrap:pretty;}
+
+/* ── Categorías ─────────────────────────────────────────────────────────── */
+.cats{background:var(--tinta);padding-top:72px;padding-bottom:72px;}
+.cats .wrap{max-width:1000px;display:flex;flex-direction:column;align-items:center;gap:28px;text-align:center;}
+.cats h2{color:#fff;font-weight:800;font-size:clamp(24px,2.8vw,34px);letter-spacing:-0.02em;}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;}
+.chip{display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;font-weight:500;}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--amarillo);font-style:normal;}
+
+/* ── Organizadores ──────────────────────────────────────────────────────── */
+.org .wrap{max-width:1080px;}
+.org-card{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:40px;padding:56px;border-radius:32px;background:#fff;border:1px solid var(--borde);}
+.org-card h2{font-weight:800;font-size:clamp(24px,3.2vw,38px);letter-spacing:-0.025em;}
+.org-card p{margin:0;font-size:clamp(16px,2.1vw,18px);line-height:1.6;color:var(--tinta-2);max-width:540px;text-wrap:pretty;}
+.org-texto{flex:1 1 420px;display:flex;flex-direction:column;gap:14px;}
+.btn-org{padding:16px 30px;font-size:17px;}
+
+/* ── Descargar ──────────────────────────────────────────────────────────── */
+.descargar{background:var(--amarillo);padding-top:96px;padding-bottom:96px;}
+.descargar .wrap{max-width:720px;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center;}
+.descargar img.logo{width:104px;height:104px;border-radius:24px;display:block;box-shadow:0 18px 40px -16px rgba(31,28,44,0.45);}
+.descargar h2{font-weight:800;font-size:clamp(32px,6vw,56px);letter-spacing:-0.035em;line-height:1.05;}
+.descargar p{margin:0;font-size:clamp(17px,2.2vw,19px);line-height:1.55;color:#3D3826;max-width:480px;text-wrap:pretty;}
+.descargar .tiendas{justify-content:center;}
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+.pie{background:var(--crema);padding-top:48px;padding-bottom:32px;}
+.pie .wrap{display:flex;flex-direction:column;gap:28px;}
+.pie-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:32px;}
+.pie-marca{display:flex;flex-direction:column;gap:8px;}
+.pie-marca span{font-size:14px;color:var(--tinta-3);}
+.pie-cols{display:flex;flex-wrap:wrap;gap:56px;}
+.pie-col{display:flex;flex-direction:column;gap:8px;font-size:14px;}
+.pie-col b{font-weight:600;color:var(--tinta);}
+.pie-col a{color:var(--tinta-3);}
+.pie-col a:hover{color:var(--tinta);}
+.linea{height:1px;background:var(--borde);}
+
+/* ── Móvil ──────────────────────────────────────────────────────────────── */
+/* El diseño original no traía nada para pantallas angostas: el menú se
+   montaba sobre el logo y las secciones mantenían 104px de padding vertical,
+   que en un teléfono son pantallazos enteros en blanco. */
+@media (max-width:860px){
+  .fila{gap:40px;}
+  .funciones .wrap{gap:64px;}
+  .org-card{padding:36px 28px;}
+}
+@media (max-width:720px){
+  .wrap{padding-left:20px;padding-right:20px;}
+  .sec{padding-top:60px;padding-bottom:60px;}
+  /* Se ocultan los enlaces de texto pero NO el botón: es la llamada a la
+     acción principal y en móvil es justo donde más se necesita. */
+  .nav a:not(.btn-nav){display:none;}
+  .nav{gap:0;}
+  .marca span{font-size:19px;}
+  .marca img{width:34px;height:34px;}
+  .hero{padding-top:36px;padding-bottom:56px;gap:36px;}
+  .hero-texto{gap:20px;}
+  .cats{padding-top:56px;padding-bottom:56px;}
+  .descargar{padding-top:64px;padding-bottom:64px;}
+  .descargar img.logo{width:84px;height:84px;}
+  .pie-cols{gap:32px;width:100%;}
+  .pie-col{flex:1 1 140px;}
+}
+@media (max-width:420px){
+  /* A este ancho los dos teléfonos del hero quedan de ~160px y no se lee
+     nada en ninguno: se deja solo el principal, más grande. */
+  .tel-atras{display:none;}
+  .tel-frente{width:70%;}
+  .btn-tienda{flex:1 1 100%;justify-content:center;}
+  .org-card{padding:28px 20px;}
+  .btn-org{width:100%;}
+}
 </style>
 </head>
 <body>
-<div style="font-family:'DM Sans',sans-serif;color:#1F1C2C;background:#FBFAF7;min-height:100vh;">
 
-  <header style="position:sticky;top:0;z-index:20;background:rgba(251,250,247,0.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid #EDE8E1;">
-    <div class="pad-seccion" style="max-width:1240px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
-      <a href="#" style="display:flex;align-items:center;gap:12px;">
-        <img src="assets/logo.png" alt="Enfiestados" style="width:40px;height:40px;border-radius:10px;display:block;">
-        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:22px;letter-spacing:-0.02em;">Enfiestados</span>
+<header class="header">
+  <div class="wrap">
+    <a class="marca" href="#">
+      <img src="assets/logo.png" alt="Enfiestados">
+      <span>Enfiestados</span>
+    </a>
+    <nav class="nav">
+      <a href="#funciones">Funciones</a>
+      <a href="#organizadores">Organizadores</a>
+      <a class="btn-amarillo btn-nav" href="#descargar">Descargar App</a>
+    </nav>
+  </div>
+</header>
+
+<section class="wrap hero">
+  <div class="hero-texto">
+    <div class="insignia"><i></i><span>Disponible noviembre 2026</span></div>
+    <h1>Los eventos empiezan en tu teléfono</h1>
+    <p>Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar. Descubrí, guardá y coordiná tus planes con amigos.</p>
+    <div class="tiendas">
+      <a class="btn-tienda" href="#descargar" aria-label="Próximamente en App Store">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.05 12.54c-0.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-0.14-2.76 0.83-3.48 0.83-0.72 0-1.83-0.81-3.01-0.79-1.55 0.02-2.98 0.9-3.78 2.29-1.61 2.8-0.41 6.94 1.15 9.21 0.76 1.11 1.67 2.36 2.86 2.31 1.15-0.05 1.58-0.74 2.97-0.74 1.39 0 1.78 0.74 2.99 0.72 1.23-0.02 2.02-1.13 2.78-2.24 0.88-1.29 1.24-2.54 1.26-2.6-0.03-0.01-2.41-0.93-2.44-3.69z m-2.25-7.04c0.63-0.77 1.06-1.83 0.94-2.89-0.91 0.04-2.02 0.61-2.67 1.37-0.58 0.67-1.09 1.76-0.95 2.79 1.02 0.08 2.05-0.52 2.68-1.27z"></path></svg>
+        <span class="t"><small>Próximamente en</small><strong>App Store</strong></span>
       </a>
-      <nav class="nav-links" style="display:flex;align-items:center;gap:28px;font-size:15px;font-weight:500;">
-        <a href="#funciones" style="color:#5E5A70;">Funciones</a>
-        <a href="#organizadores" style="color:#5E5A70;">Organizadores</a>
-        <a class="btn-amarillo" href="#descargar" style="background:#FDC74A;color:#1F1C2C;padding:10px 22px;border-radius:999px;font-weight:600;">Descargar App</a>
-      </nav>
+      <a class="btn-tienda" href="#descargar" aria-label="Próximamente en Google Play">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3.6 2.4c-0.3 0.3-0.5 0.8-0.5 1.4v16.4c0 0.6 0.2 1.1 0.5 1.4l0.1 0.1 9.2-9.2v-0.2l-9.2-10-0.1 0.1z m12.3 6.1l-2.9 2.9v0.2l2.9 2.9 0.1-0.1 3.4-2c1-0.5 1-1.4 0-2l-3.4-1.9z m-2.6 3.4l-9.2 9.2c0.3 0.3 0.9 0.4 1.5 0l10.3-5.9-2.6-2.6v-0.7z m0-0.8l2.6-2.6-10.3-5.9c-0.6-0.3-1.2-0.3-1.5 0l9.2 8.5z"></path></svg>
+        <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
+      </a>
     </div>
-  </header>
+  </div>
 
-  <section class="pad-seccion" style="max-width:1240px;margin:0 auto;padding:72px 32px 96px;display:flex;flex-wrap:wrap;align-items:center;gap:56px;">
-    <div style="flex:1 1 460px;min-width:0;display:flex;flex-direction:column;gap:28px;align-items:flex-start;">
-      <div style="display:flex;align-items:center;gap:8px;background:#FFF3CC;color:#8A6408;padding:7px 16px;border-radius:999px;font-size:14px;font-weight:600;">
-        <span style="width:8px;height:8px;border-radius:50%;background:#E8A400;"></span>
-        <span>Disponible noviembre 2026</span>
-      </div>
-      <h1 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(42px,5.6vw,72px);line-height:1.04;letter-spacing:-0.035em;text-wrap:balance;">Los eventos empiezan en tu teléfono</h1>
-      <p style="margin:0;font-size:20px;line-height:1.55;color:#5E5A70;max-width:520px;text-wrap:pretty;">Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar. Descubrí, guardá y coordiná tus planes con amigos.</p>
-      <div style="display:flex;flex-wrap:wrap;gap:12px;">
-        <a class="btn-oscuro" href="#descargar" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.05 12.54c-0.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-0.14-2.76 0.83-3.48 0.83-0.72 0-1.83-0.81-3.01-0.79-1.55 0.02-2.98 0.9-3.78 2.29-1.61 2.8-0.41 6.94 1.15 9.21 0.76 1.11 1.67 2.36 2.86 2.31 1.15-0.05 1.58-0.74 2.97-0.74 1.39 0 1.78 0.74 2.99 0.72 1.23-0.02 2.02-1.13 2.78-2.24 0.88-1.29 1.24-2.54 1.26-2.6-0.03-0.01-2.41-0.93-2.44-3.69z m-2.25-7.04c0.63-0.77 1.06-1.83 0.94-2.89-0.91 0.04-2.02 0.61-2.67 1.37-0.58 0.67-1.09 1.76-0.95 2.79 1.02 0.08 2.05-0.52 2.68-1.27z"></path></svg>
-          <span style="display:flex;flex-direction:column;line-height:1.15;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">App Store</span></span>
-        </a>
-        <a class="btn-oscuro" href="#descargar" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3.6 2.4c-0.3 0.3-0.5 0.8-0.5 1.4v16.4c0 0.6 0.2 1.1 0.5 1.4l0.1 0.1 9.2-9.2v-0.2l-9.2-10-0.1 0.1z m12.3 6.1l-2.9 2.9v0.2l2.9 2.9 0.1-0.1 3.4-2c1-0.5 1-1.4 0-2l-3.4-1.9z m-2.6 3.4l-9.2 9.2c0.3 0.3 0.9 0.4 1.5 0l10.3-5.9-2.6-2.6v-0.7z m0-0.8l2.6-2.6-10.3-5.9c-0.6-0.3-1.2-0.3-1.5 0l9.2 8.5z"></path></svg>
-          <span style="display:flex;flex-direction:column;line-height:1.15;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">Google Play</span></span>
-        </a>
-      </div>
-    </div>
-
-    <div style="flex:1 1 420px;min-width:0;display:flex;justify-content:center;">
-      <div style="position:relative;width:min(540px,100%);display:flex;justify-content:center;align-items:flex-end;padding:24px 0;">
-        <div style="position:absolute;inset:8% 4% 0 4%;background:#FDC74A;border-radius:48px;"></div>
-        <div style="position:relative;width:44%;margin-right:-10%;transform:rotate(-6deg) translateY(-6%);z-index:1;">
-          <div style="padding:7px;background:#16141C;border-radius:40px;box-shadow:0 30px 60px -24px rgba(31,28,44,0.5),inset 0 0 0 1.5px #3A3644;">
-            <div class="marco" style="border-radius:33px;">
-              <img src="assets/screen-3.jpg" alt="Pantalla Mis planes de Enfiestados, con la entrada de un evento guardado">
-              <div class="tapa"><div class="isla"></div></div>
-            </div>
+  <div class="hero-fotos">
+    <div class="hero-escena">
+      <div class="hero-fondo"></div>
+      <div class="tel-atras">
+        <div class="tel">
+          <div class="pantalla">
+            <img src="assets/screen-3.jpg" alt="Pantalla Mis planes de Enfiestados, con la entrada de un evento guardado">
+            <div class="tapa"><i></i></div>
           </div>
         </div>
-        <div style="position:relative;width:52%;z-index:2;">
-          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -28px rgba(31,28,44,0.55),inset 0 0 0 1.5px #3A3644;">
-            <div class="marco">
-              <img src="assets/screen-2.jpg" alt="Pantalla de inicio de Enfiestados con el feed de eventos">
-              <div class="tapa"><div class="isla"></div></div>
-            </div>
+      </div>
+      <div class="tel-frente">
+        <div class="tel">
+          <div class="pantalla">
+            <img src="assets/screen-2.jpg" alt="Pantalla de inicio de Enfiestados con el feed de eventos">
+            <div class="tapa"><i></i></div>
           </div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section id="funciones" class="pad-seccion" style="background:#F3EFEA;padding:104px 32px;">
-    <div style="max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:96px;">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;">
-        <h2 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(32px,3.6vw,46px);letter-spacing:-0.03em;line-height:1.1;text-wrap:balance;">¿Qué podés hacer con Enfiestados?</h2>
-        <p style="margin:0;font-size:19px;line-height:1.55;color:#5E5A70;max-width:560px;text-wrap:pretty;">Más que una app de eventos. Es tu compañero para no perderte nada.</p>
-      </div>
+<section id="funciones" class="sec funciones">
+  <div class="wrap">
+    <div class="intro">
+      <h2>¿Qué podés hacer con Enfiestados?</h2>
+      <p>Más que una app de eventos. Es tu compañero para no perderte nada.</p>
+    </div>
 
-      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:72px;">
-        <div style="flex:0 1 300px;min-width:240px;">
-          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -30px rgba(31,28,44,0.45),inset 0 0 0 1.5px #3A3644;">
-            <div class="marco">
-              <img src="assets/screen-1.jpg" alt="Mapa de Enfiestados con los eventos cercanos y su precio">
-              <div class="tapa"><div class="isla"></div></div>
-            </div>
-          </div>
-        </div>
-        <div style="flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;">
-          <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#8A6408;">01 · Explorar</span>
-          <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;line-height:1.1;">Descubrí eventos cerca</h3>
-          <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;text-wrap:pretty;">Conciertos, fiestas, ferias, arte, gastronomía y más. Mirá en el mapa qué está pasando en tu zona, con su precio o si es gratis, y filtrá por provincia, fecha o categoría.</p>
-        </div>
-      </div>
-
-      <div style="display:flex;flex-wrap:wrap-reverse;align-items:center;justify-content:center;gap:72px;">
-        <div style="flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;">
-          <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#8A6408;">02 · Para vos</span>
-          <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;line-height:1.1;">Planes a tu medida</h3>
-          <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;text-wrap:pretty;">Un inicio con lo que te gusta y lo que hacen las personas que seguís. Filtrá por hoy, este finde o gratis, y marcá «Voy» con un toque.</p>
-        </div>
-        <div style="flex:0 1 300px;min-width:240px;">
-          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -30px rgba(31,28,44,0.45),inset 0 0 0 1.5px #3A3644;">
-            <div class="marco">
-              <img src="assets/screen-2.jpg" alt="Feed Para vos de Enfiestados">
-              <div class="tapa"><div class="isla"></div></div>
-            </div>
+    <div class="fila">
+      <div class="fila-tel">
+        <div class="tel">
+          <div class="pantalla">
+            <img src="assets/screen-1.jpg" alt="Mapa de Enfiestados con los eventos cercanos y su precio">
+            <div class="tapa"><i></i></div>
           </div>
         </div>
       </div>
+      <div class="fila-texto">
+        <span class="eyebrow">01 · Explorar</span>
+        <h3>Descubrí eventos cerca</h3>
+        <p>Conciertos, fiestas, ferias, arte, gastronomía y más. Mirá en el mapa qué está pasando en tu zona, con su precio o si es gratis, y filtrá por provincia, fecha o categoría.</p>
+      </div>
+    </div>
 
-      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:72px;">
-        <div style="flex:0 1 300px;min-width:240px;">
-          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -30px rgba(31,28,44,0.45),inset 0 0 0 1.5px #3A3644;">
-            <div class="marco">
-              <img src="assets/screen-3.jpg" alt="Mis planes, con la entrada de un evento y la cuenta regresiva">
-              <div class="tapa"><div class="isla"></div></div>
-            </div>
+    <div class="fila fila-inv">
+      <div class="fila-texto">
+        <span class="eyebrow">02 · Para vos</span>
+        <h3>Planes a tu medida</h3>
+        <p>Un inicio con lo que te gusta y lo que hacen las personas que seguís. Filtrá por hoy, este finde o gratis, y marcá «Voy» con un toque.</p>
+      </div>
+      <div class="fila-tel">
+        <div class="tel">
+          <div class="pantalla">
+            <img src="assets/screen-2.jpg" alt="Feed Para vos de Enfiestados">
+            <div class="tapa"><i></i></div>
           </div>
-        </div>
-        <div style="flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;">
-          <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#8A6408;">03 · Mis planes</span>
-          <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;line-height:1.1;">Guardá tus favoritos y coordiná con amigos</h3>
-          <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;text-wrap:pretty;">Tus eventos, guardados y entradas en un solo lugar, con cuenta regresiva y recordatorios. Compartí el plan y sacá cómo llegar sin salir de la app. La fiesta es mejor cuando van todos.</p>
         </div>
       </div>
     </div>
-  </section>
 
-  <section class="pad-seccion" style="background:#1F1C2C;padding:72px 32px;">
-    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:28px;text-align:center;">
-      <h2 style="margin:0;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(26px,2.6vw,34px);letter-spacing:-0.02em;">Eventos para todos los gustos</h2>
-      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;">
-        <span class="chip"><i></i><span>Música</span></span>
-        <span class="chip"><i></i><span>Fiestas</span></span>
-        <span class="chip"><i></i><span>Deportes</span></span>
-        <span class="chip"><i></i><span>Arte y Cultura</span></span>
-        <span class="chip"><i></i><span>Gastronomía</span></span>
-        <span class="chip"><i></i><span>Tecnología</span></span>
-        <span class="chip"><i></i><span>Naturaleza</span></span>
-        <span class="chip"><i></i><span>Bienestar</span></span>
-        <span class="chip"><i></i><span>Familia</span></span>
+    <div class="fila">
+      <div class="fila-tel">
+        <div class="tel">
+          <div class="pantalla">
+            <img src="assets/screen-3.jpg" alt="Mis planes, con la entrada de un evento y la cuenta regresiva">
+            <div class="tapa"><i></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="fila-texto">
+        <span class="eyebrow">03 · Mis planes</span>
+        <h3>Guardá tus favoritos y coordiná con amigos</h3>
+        <p>Tus eventos, guardados y entradas en un solo lugar, con cuenta regresiva y recordatorios. Compartí el plan y sacá cómo llegar sin salir de la app. La fiesta es mejor cuando van todos.</p>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section id="organizadores" class="pad-seccion" style="padding:104px 32px;">
-    <div class="card-org" style="max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:40px;padding:56px;border-radius:32px;background:#fff;border:1px solid #EDE8E1;">
-      <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:14px;">
-        <h2 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;">¿Organizás eventos?</h2>
-        <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;max-width:540px;text-wrap:pretty;">Publicá tus eventos gratis y llegá a miles de personas en todo Costa Rica. Vendé tus entradas desde la app.</p>
+<section class="cats">
+  <div class="wrap">
+    <h2>Eventos para todos los gustos</h2>
+    <div class="chips">
+      <span class="chip"><i></i><span>Música</span></span>
+      <span class="chip"><i></i><span>Fiestas</span></span>
+      <span class="chip"><i></i><span>Deportes</span></span>
+      <span class="chip"><i></i><span>Arte y Cultura</span></span>
+      <span class="chip"><i></i><span>Gastronomía</span></span>
+      <span class="chip"><i></i><span>Tecnología</span></span>
+      <span class="chip"><i></i><span>Naturaleza</span></span>
+      <span class="chip"><i></i><span>Bienestar</span></span>
+      <span class="chip"><i></i><span>Familia</span></span>
+    </div>
+  </div>
+</section>
+
+<section id="organizadores" class="sec org">
+  <div class="wrap">
+    <div class="org-card">
+      <div class="org-texto">
+        <h2>¿Organizás eventos?</h2>
+        <p>Publicá tus eventos gratis y llegá a miles de personas en todo Costa Rica. Vendé tus entradas desde la app.</p>
       </div>
-      <a class="btn-amarillo" href="#descargar" style="display:flex;align-items:center;gap:10px;background:#FDC74A;color:#1F1C2C;padding:16px 30px;border-radius:999px;font-size:17px;font-weight:600;">
+      <a class="btn-amarillo btn-org" href="#descargar">
         <span>Publicar mi evento</span>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F1C2C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
       </a>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section id="descargar" class="pad-seccion" style="background:#FDC74A;padding:96px 32px;">
-    <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center;">
-      <img src="assets/logo.png" alt="" style="width:104px;height:104px;border-radius:24px;display:block;box-shadow:0 18px 40px -16px rgba(31,28,44,0.45);">
-      <h2 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(36px,4.4vw,56px);letter-spacing:-0.035em;line-height:1.05;">¿Listo para la fiesta?</h2>
-      <p style="margin:0;font-size:19px;line-height:1.55;color:#3D3826;max-width:480px;text-wrap:pretty;">Descargá Enfiestados y empezá a descubrir los mejores planes de Costa Rica.</p>
-      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;">
-        <a class="btn-oscuro" href="#" aria-label="Próximamente en App Store" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.05 12.54c-0.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-0.14-2.76 0.83-3.48 0.83-0.72 0-1.83-0.81-3.01-0.79-1.55 0.02-2.98 0.9-3.78 2.29-1.61 2.8-0.41 6.94 1.15 9.21 0.76 1.11 1.67 2.36 2.86 2.31 1.15-0.05 1.58-0.74 2.97-0.74 1.39 0 1.78 0.74 2.99 0.72 1.23-0.02 2.02-1.13 2.78-2.24 0.88-1.29 1.24-2.54 1.26-2.6-0.03-0.01-2.41-0.93-2.44-3.69z m-2.25-7.04c0.63-0.77 1.06-1.83 0.94-2.89-0.91 0.04-2.02 0.61-2.67 1.37-0.58 0.67-1.09 1.76-0.95 2.79 1.02 0.08 2.05-0.52 2.68-1.27z"></path></svg>
-          <span style="display:flex;flex-direction:column;line-height:1.15;text-align:left;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">App Store</span></span>
-        </a>
-        <a class="btn-oscuro" href="#" aria-label="Próximamente en Google Play" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3.6 2.4c-0.3 0.3-0.5 0.8-0.5 1.4v16.4c0 0.6 0.2 1.1 0.5 1.4l0.1 0.1 9.2-9.2v-0.2l-9.2-10-0.1 0.1z m12.3 6.1l-2.9 2.9v0.2l2.9 2.9 0.1-0.1 3.4-2c1-0.5 1-1.4 0-2l-3.4-1.9z m-2.6 3.4l-9.2 9.2c0.3 0.3 0.9 0.4 1.5 0l10.3-5.9-2.6-2.6v-0.7z m0-0.8l2.6-2.6-10.3-5.9c-0.6-0.3-1.2-0.3-1.5 0l9.2 8.5z"></path></svg>
-          <span style="display:flex;flex-direction:column;line-height:1.15;text-align:left;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">Google Play</span></span>
-        </a>
+<section id="descargar" class="descargar">
+  <div class="wrap">
+    <img class="logo" src="assets/logo.png" alt="">
+    <h2>¿Listo para la fiesta?</h2>
+    <p>Descargá Enfiestados y empezá a descubrir los mejores planes de Costa Rica.</p>
+    <div class="tiendas">
+      <a class="btn-tienda" href="#" aria-label="Próximamente en App Store">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.05 12.54c-0.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-0.14-2.76 0.83-3.48 0.83-0.72 0-1.83-0.81-3.01-0.79-1.55 0.02-2.98 0.9-3.78 2.29-1.61 2.8-0.41 6.94 1.15 9.21 0.76 1.11 1.67 2.36 2.86 2.31 1.15-0.05 1.58-0.74 2.97-0.74 1.39 0 1.78 0.74 2.99 0.72 1.23-0.02 2.02-1.13 2.78-2.24 0.88-1.29 1.24-2.54 1.26-2.6-0.03-0.01-2.41-0.93-2.44-3.69z m-2.25-7.04c0.63-0.77 1.06-1.83 0.94-2.89-0.91 0.04-2.02 0.61-2.67 1.37-0.58 0.67-1.09 1.76-0.95 2.79 1.02 0.08 2.05-0.52 2.68-1.27z"></path></svg>
+        <span class="t"><small>Próximamente en</small><strong>App Store</strong></span>
+      </a>
+      <a class="btn-tienda" href="#" aria-label="Próximamente en Google Play">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3.6 2.4c-0.3 0.3-0.5 0.8-0.5 1.4v16.4c0 0.6 0.2 1.1 0.5 1.4l0.1 0.1 9.2-9.2v-0.2l-9.2-10-0.1 0.1z m12.3 6.1l-2.9 2.9v0.2l2.9 2.9 0.1-0.1 3.4-2c1-0.5 1-1.4 0-2l-3.4-1.9z m-2.6 3.4l-9.2 9.2c0.3 0.3 0.9 0.4 1.5 0l10.3-5.9-2.6-2.6v-0.7z m0-0.8l2.6-2.6-10.3-5.9c-0.6-0.3-1.2-0.3-1.5 0l9.2 8.5z"></path></svg>
+        <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer class="pie">
+  <div class="wrap">
+    <div class="pie-top">
+      <div class="pie-marca">
+        <div class="marca">
+          <img src="assets/logo.png" alt="" style="width:32px;height:32px;border-radius:8px;">
+          <span style="font-size:18px;">Enfiestados</span>
+        </div>
+        <span>3-102-942588 S.R.L.</span>
+        <span>Alajuela, San Carlos, Costa Rica</span>
+      </div>
+      <div class="pie-cols">
+        <div class="pie-col">
+          <b>Legal</b>
+          <!-- En el diseño iban a "#"; acá apuntan a las páginas que ya
+               existen en el sitio (cleanUrls está activo en hosting). -->
+          <a href="./privacidad">Política de Privacidad</a>
+          <a href="./terminos">Términos y Condiciones</a>
+          <a href="./empresa">La empresa</a>
+        </div>
+        <div class="pie-col">
+          <b>Contacto</b>
+          <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
+        </div>
       </div>
     </div>
-  </section>
+    <div class="linea"></div>
+    <span style="font-size:13px;color:var(--tinta-3);">© 2026 Enfiestados. Todos los derechos reservados.</span>
+  </div>
+</footer>
 
-  <footer class="pad-seccion" style="background:#FBFAF7;padding:48px 32px 32px;">
-    <div style="max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px;">
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:32px;">
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <img src="assets/logo.png" alt="" style="width:32px;height:32px;border-radius:8px;display:block;">
-            <span style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:18px;">Enfiestados</span>
-          </div>
-          <span style="font-size:14px;color:#6E6A7E;">3-102-942588 S.R.L.</span>
-          <span style="font-size:14px;color:#6E6A7E;">Alajuela, San Carlos, Costa Rica</span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:56px;">
-          <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
-            <span style="font-weight:600;color:#1F1C2C;">Legal</span>
-            <!-- En el diseño estos iban a "#"; acá apuntan a las páginas que
-                 ya existen en el sitio (cleanUrls está activo en hosting). -->
-            <a href="./privacidad" style="color:#6E6A7E;">Política de Privacidad</a>
-            <a href="./terminos" style="color:#6E6A7E;">Términos y Condiciones</a>
-            <a href="./empresa" style="color:#6E6A7E;">La empresa</a>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
-            <span style="font-weight:600;color:#1F1C2C;">Contacto</span>
-            <a href="mailto:info@enfiestados.net" style="color:#6E6A7E;">info@enfiestados.net</a>
-          </div>
-        </div>
-      </div>
-      <div style="height:1px;background:#EDE8E1;"></div>
-      <span style="font-size:13px;color:#6E6A7E;">© 2026 Enfiestados. Todos los derechos reservados.</span>
-    </div>
-  </footer>
-</div>
 </body>
 </html>
