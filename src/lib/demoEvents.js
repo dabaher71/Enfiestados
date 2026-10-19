@@ -38,6 +38,11 @@ const IMG = {
   feria:  `${COMMONS}/f/f6/Street_market_in_Marsaxlokk_12.jpg/1280px-Street_market_in_Marsaxlokk_12.jpg`,
   monte:  `${COMMONS}/3/37/White_Pass_Scenic_Byway_-_A_Hiking_Trail_in_Lowland_Forest_-_NARA_-_7722845.jpg/1280px-White_Pass_Scenic_Byway_-_A_Hiking_Trail_in_Lowland_Forest_-_NARA_-_7722845.jpg`,
   desfile:`${COMMONS}/b/be/Nibo_Carnival_Street_Parade.jpg/1280px-Nibo_Carnival_Street_Parade.jpg`,
+  // Estas dos existen porque los eventos de tech y networking salen como
+  // tiquete en Mis Planes: con la foto genérica de concierto que tenían antes,
+  // una expo de tecnología quedaba ilustrada con una banda de heavy metal.
+  hack:   `${COMMONS}/9/98/WTS_HACKATHON_2024.jpg/1280px-WTS_HACKATHON_2024.jpg`,
+  salon:  `${COMMONS}/f/f6/Conferentiezaal_Conference_hall_%2852215585711%29.jpg/1280px-Conferentiezaal_Conference_hall_%2852215585711%29.jpg`,
 };
 
 // Nueve fotos para treinta y pico de eventos, así que se repiten. Para las
@@ -49,8 +54,8 @@ const PORCATEGORIA = {
   deporte:    IMG.correr,
   arte:       IMG.feria,
   comida:     IMG.feria,
-  tech:       IMG.musica,
-  networking: IMG.desfile,
+  tech:       IMG.hack,
+  networking: IMG.salon,
   educacion:  IMG.cafe,
   cine:       IMG.musica,
   bienestar:  IMG.monte,
@@ -233,4 +238,32 @@ export const DEMO_EVENTS = [...DESTACADOS, ...RELLENO];
 export function withDemoEvents(events) {
   if (!__DEV__ || !DEMO_EVENTS_ENABLED) return events;
   return [...DEMO_EVENTS, ...events];
+}
+
+// ─── Entradas en "Mis planes" ────────────────────────────────────────────────
+// Los eventos que se muestran como si el usuario ya tuviera la entrada. El
+// más próximo de los tres sale como TicketCard grande — la tarjeta amarilla
+// con perforación — y los otros dos en la lista de abajo.
+//
+// MyPlansScreen no pasa por subscribeToEvents: consulta Firestore directo con
+// `where('attendees','array-contains', uid)`. Por eso hace falta este segundo
+// punto de inyección, que se llama desde esa suscripción.
+const CON_ENTRADA = [
+  'demo-gam-16', // Expo tecnología en Belén
+  'demo-gam-17', // Caminata al Volcán Barva
+  'demo-gam-20', // Networking de emprendedores
+];
+
+export function withDemoAttending(events) {
+  if (!__DEV__ || !DEMO_EVENTS_ENABLED) return events;
+  const mios = DEMO_EVENTS.filter(e => CON_ENTRADA.includes(e.id));
+  if (mios.length !== CON_ENTRADA.length) {
+    // Si alguien reordena el array GAM, los ids dejan de apuntar a lo que
+    // dice el comentario de arriba. Mejor enterarse que quedarse sin tiquete.
+    console.warn(
+      `[demoEvents] CON_ENTRADA esperaba ${CON_ENTRADA.length} eventos y encontró ${mios.length}. ` +
+      'Revisá que los ids sigan existiendo en DEMO_EVENTS.'
+    );
+  }
+  return [...mios, ...events];
 }
