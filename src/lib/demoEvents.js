@@ -20,7 +20,11 @@ export const DEMO_EVENTS_ENABLED = true;
 const COMMONS = 'https://upload.wikimedia.org/wikipedia/commons/thumb';
 
 const IMG = {
-  cafe:  `${COMMONS}/1/10/Coffee_harvested_costa_rica.jpg/1280px-Coffee_harvested_costa_rica.jpg`,
+  // Foto tomada en San Marcos de Tarrazú, el mismo pueblo donde se hace la
+  // Expo Café. No es una foto de la feria en sí: las que circulan en prensa y
+  // redes tienen derechos de terceros y los enlaces se caen, así que se usa
+  // una de licencia libre del lugar correcto.
+  cafe:  `${COMMONS}/8/87/Coffee-cherry-picker-san-marcos-tarrazu-costa-rica.jpg/1280px-Coffee-cherry-picker-san-marcos-tarrazu-costa-rica.jpg`,
   maiz:  `${COMMONS}/8/83/Mazorcas_de_maiz_-_Mazarocas_de_millo_-_01.jpg/1280px-Mazorcas_de_maiz_-_Mazarocas_de_millo_-_01.jpg`,
   queso: `${COMMONS}/2/2f/Queso_Turrialba.jpg/1280px-Queso_Turrialba.jpg`,
   bingo: `${COMMONS}/c/c1/Bingo.jpg/1280px-Bingo.jpg`,
@@ -32,8 +36,14 @@ const CR    = { organizerId: 'demo-costa-rica', organizerName: 'Costa Rica',    
 const VECINA = { organizerId: 'demo-marieta',   organizerName: 'Marieta Vargas', organizerAvatar: '' };
 
 // `date` va en DD/MM/YYYY y `time` en HH:MM (24h), igual que lo escribe
-// CreateEventScreen. Tienen que ser futuras: el feed descarta las vencidas y
-// el mapa filtra por `fecha >= hoy`.
+// CreateEventScreen.
+//
+// POR QUÉ LAS FECHAS SON DE 2027 Y NO LAS DE LA ÚLTIMA EDICIÓN REAL: el feed
+// descarta los eventos vencidos (isExpired) y el mapa filtra por
+// `fecha >= hoy`, así que un evento pasado sencillamente no se ve — que es lo
+// contrario de lo que hace falta para tomar capturas. Las tres ferias son
+// reales y conservan su mes de siempre; lo único movido es el año, a la
+// próxima edición. Ver el detalle de cada una más abajo.
 function demo({ id, title, description, category, date, time, place, lat, lng, image, price = 0, org }) {
   return {
     id,
@@ -64,7 +74,7 @@ function demo({ id, title, description, category, date, time, place, lat, lng, i
 export const DEMO_EVENTS = [
   demo({
     id: 'demo-bingo',
-    title: 'Bingo bailable a beneficio del salón comunal',
+    title: 'Bingo en beneficio del salón comunal',
     description:
       'Bingo de toda la vida para juntar plata y arreglar el techo del salón. ' +
       'Cartón a ₡2.500, hay chifrijo y café, y después se pone música. ' +
@@ -72,52 +82,65 @@ export const DEMO_EVENTS = [
     category: 'familia',
     date: '24/10/2026',
     time: '19:00',
-    place: 'Salón Comunal de Guadalupe, Goicoechea',
+    place: 'Salón Comunal',
     lat: 9.9489,
     lng: -84.0560,
     image: IMG.bingo,
     price: 2500,            // el único con precio
     org: VECINA,
   }),
+  // Feria real. Se hace en marzo en el Estadio Municipal de San Marcos, es
+  // gratis y reúne a más de cien expositores. Celebra el café de Tarrazú, que
+  // tiene Denominación de Origen desde 2021.
+  // La edición de marzo de 2026 ya pasó, así que va la siguiente.
   demo({
-    id: 'demo-feria-cafe',
-    title: 'Feria del Café de Naranjo',
+    id: 'demo-expo-cafe-tarrazu',
+    title: 'Expo Café Tarrazú',
     description:
-      'Catación abierta con caficultores de la zona, venta de grano recién ' +
-      'tostado y recorridos por el beneficio. Entrada libre todo el día.',
+      'Celebrá la cultura del café. Más de cien expositores con café de la ' +
+      'zona, gastronomía local y artesanía, catación abierta, conciertos y ' +
+      'actividades culturales. Entrada gratuita y pet friendly.',
     category: 'comida',
-    date: '25/10/2026',
-    time: '09:00',
-    place: 'Parque Central de Naranjo, Alajuela',
-    lat: 10.0956,
-    lng: -84.3792,
+    date: '13/03/2027',
+    time: '10:00',
+    place: 'Estadio Municipal de San Marcos de Tarrazú',
+    lat: 9.6547,
+    lng: -84.0186,
     image: IMG.cafe,
     org: CR,
   }),
+  // Feria real: la Fiesta del Maíz de Upala es tradición del 13 de octubre,
+  // con coronación de la Reina del Maíz y desfile de trajes hechos con
+  // tusa, granos y pelo de maíz. La de 2026 fue hace unos días.
   demo({
-    id: 'demo-feria-maiz',
-    title: 'Feria del Maíz de Upala',
+    id: 'demo-fiesta-maiz-upala',
+    title: 'Fiesta del Maíz de Upala',
     description:
-      'Chorreadas, tamal asado, pozol y atol de maíz nuevo. Concurso de la ' +
-      'mazorca más grande y baile con marimba al cerrar la tarde.',
+      'La celebración de la cosecha del maíz: coronación de la Reina del ' +
+      'Maíz, desfile de trajes hechos con tusa y grano, artesanía y toda la ' +
+      'comida típica de maíz — chorreadas, tamal asado, pozol y atol.',
     category: 'comida',
-    date: '31/10/2026',
+    date: '13/10/2027',
     time: '10:00',
-    place: 'Plaza de Deportes de Upala, Alajuela',
+    place: 'Upala, Alajuela',
     lat: 10.8983,
     lng: -85.0158,
     image: IMG.maiz,
     org: CR,
   }),
+  // Feria real: la Expo Feria Nacional del Queso de Santa Cruz de Turrialba
+  // existe desde el 2000 y va por la edición 23 (2025, del 6 al 8 de
+  // setiembre). Su sello es el queso más grande del país, que se reparte
+  // gratis el domingo.
   demo({
-    id: 'demo-feria-queso',
-    title: 'Feria del Queso de Santa Cruz de Turrialba',
+    id: 'demo-expo-feria-queso',
+    title: 'Expo Feria Nacional del Queso',
     description:
       'Queso Turrialba con denominación de origen, directo de las lecherías ' +
-      'de la zona. Degustación, venta por kilo y tortillas de queso hechas ' +
-      'al momento.',
+      'de Santa Cruz. Degustación, venta por kilo, tortillas de queso hechas ' +
+      'al momento y la elaboración del queso más grande de Costa Rica.',
     category: 'comida',
-    date: '08/11/2026',
+    date: '03/09/2027',
     time: '09:00',
     place: 'Santa Cruz de Turrialba, Cartago',
     lat: 10.0167,
