@@ -424,7 +424,12 @@ export default function HomeScreen({ navigation }) {
           keyExtractor={(item, index) => item.id ?? `item_${index}`}
           renderItem={renderItem}
           renderSectionHeader={renderSectionHeader}
-          stickySectionHeadersEnabled
+          // Sin sticky: clavado arriba, el DaySeparator comía ~34px de forma
+          // permanente y nunca dejaba ver una tarjeta entera. La fecha ya va
+          // dos veces en la propia tarjeta (el badge del día y la fila
+          // "Lun 19 oct"), así que fijarla arriba era redundante. Ahora el
+          // separador scrollea junto con el contenido.
+          stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
           // Sin esto la última tarjeta termina al ras del borde superior de la
           // tab bar y el botón "Comprar" se ve guillotinado por la barra.
