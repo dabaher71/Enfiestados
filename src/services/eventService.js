@@ -16,7 +16,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { withDemoEvents } from '../lib/demoEvents';
 
 export const eventsCollection = collection(db, 'events');
 
@@ -28,9 +27,7 @@ export const subscribeToEvents = (onUpdate) => {
   return onSnapshot(q, (snapshot) => {
     const events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     const lastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
-    // Único punto de inyección de los eventos de demo, así Home, Explorar y
-    // el mapa los ven todos. En release es un no-op (ver src/lib/demoEvents.js).
-    onUpdate(withDemoEvents(events), lastDoc);
+    onUpdate(events, lastDoc);
   });
 };
 

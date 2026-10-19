@@ -18,7 +18,6 @@ import { toggleAttendance } from '../services/eventService';
 import { fetchExternalEventsByIds } from '../services/externalEventService';
 import { recordSignal } from '../services/signalService';
 import { formatEventDate, formatDaysUntil } from '../lib/format';
-import { withDemoAttending } from '../lib/demoEvents';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
@@ -227,11 +226,7 @@ export default function MyPlansScreen({ navigation }) {
       orderBy('date', 'asc')
     );
     const unsub = onSnapshot(q, snap => {
-      // withDemoAttending: segundo punto de inyección de los eventos de
-      // demostración, porque esta pantalla consulta Firestore directo en vez
-      // de pasar por subscribeToEvents. En release es un no-op.
-      // Ver src/lib/demoEvents.js.
-      const evs = withDemoAttending(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const evs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .filter(e => !isExpired(e))
         .sort((a, b) => getEventTs(a) - getEventTs(b));
       setAttending(evs);
