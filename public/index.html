@@ -3,64 +3,421 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enfiestados</title>
-<meta name="description" content="Enfiestados — plataforma de eventos en Costa Rica. Sitio en construcción.">
-<meta name="robots" content="noindex">
+<title>Enfiestados — Todos los planes de Costa Rica, en un solo lugar</title>
+<meta name="description" content="Descubrí conciertos, fiestas y planes cerca tuyo. Entrá sin crear cuenta, guardá lo que te gusta y organizá tus propios eventos. Gratis, hecho en Costa Rica.">
 <meta name="theme-color" content="#17131F">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Enfiestados — Todos los planes de Costa Rica">
+<meta property="og:description" content="Descubrí conciertos, fiestas y planes cerca tuyo. Entrá sin crear cuenta.">
+<meta property="og:image" content="https://enfiestados.net/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+
 <link rel="icon" href="./logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Plus+Jakarta+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+
 <style>
+/* Paleta tomada de src/theme/tokens.js — el tema oscuro de la app.
+   La página se queda en oscuro a propósito: la app arranca en oscuro
+   (userInterfaceStyle: 'dark') y es el mundo visual del producto. */
 :root{
-  --bg:#17131F; --text:#F7F4EF; --text-2:#C6BFD6; --text-3:#9A91AD;
-  --action:#FFC94A; --link:#B9A5FF; --border:rgba(255,255,255,0.09);
+  --bg:#17131F;
+  --surface:#211C2C;
+  --raised:#2C2639;
+  --border-subtle:rgba(255,255,255,0.09);
+  --border-strong:rgba(255,255,255,0.16);
+  --text:#F7F4EF;
+  --text-2:#C6BFD6;
+  --text-3:#9A91AD;
+  --on-action:#17131F;
+  --action:#FFC94A;
+  --action-pressed:#F2B738;
+  --violet:#8B6BFF;
+  --link:#B9A5FF;
+  --free:#2FBF87;
+  --display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;
+  --body:'Plus Jakarta Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
 }
 *{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto;}
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}
+}
 body{
-  margin:0;min-height:100vh;background:var(--bg);color:var(--text);
-  font-family:'Plus Jakarta Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
-  line-height:1.6;display:flex;align-items:center;justify-content:center;
-  padding:32px 24px;-webkit-font-smoothing:antialiased;
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--body);line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
 }
-.box{max-width:440px;width:100%;text-align:center;}
-img{width:72px;height:72px;border-radius:18px;margin:0 auto 26px;display:block;}
-h1{
-  font-family:'Bricolage Grotesque',ui-sans-serif,sans-serif;font-weight:800;
-  font-size:34px;letter-spacing:-.03em;margin:0 0 14px;
-}
-p{color:var(--text-2);font-size:16.5px;margin:0 0 10px;}
-.small{color:var(--text-3);font-size:14px;margin-top:26px;}
 a{color:var(--link);}
-.links{
-  margin-top:34px;padding-top:24px;border-top:1px solid var(--border);
-  display:flex;flex-wrap:wrap;gap:18px;justify-content:center;font-size:14px;
+:focus-visible{outline:2px solid var(--violet);outline-offset:3px;border-radius:4px;}
+img{max-width:100%;display:block;}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+
+/* ── Hero ───────────────────────────────────────────────────────── */
+.hero{position:relative;padding:72px 0 88px;overflow:hidden;}
+/* Resplandor ámbar/violeta: el ambiente de la app sin caer en degradado de banner */
+.hero::before{
+  content:'';position:absolute;inset:-30% -10% auto -10%;height:70vh;
+  background:
+    radial-gradient(42% 46% at 72% 18%, rgba(139,107,255,.26), transparent 70%),
+    radial-gradient(38% 40% at 20% 8%, rgba(255,201,74,.16), transparent 70%);
+  pointer-events:none;
 }
-.links a{color:var(--text-3);text-decoration:none;}
-.links a:hover{color:var(--text);}
-:focus-visible{outline:2px solid var(--action);outline-offset:3px;border-radius:4px;}
+.hero .wrap{position:relative;}
+.brandrow{display:flex;align-items:center;gap:14px;margin-bottom:38px;}
+.brandrow img{width:46px;height:46px;border-radius:12px;}
+.brandrow span{font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:-.02em;}
+
+h1{
+  font-family:var(--display);font-weight:800;
+  font-size:clamp(40px,7.2vw,76px);line-height:1.02;letter-spacing:-.035em;
+  margin:0;max-width:16ch;text-wrap:balance;
+}
+h1 em{font-style:normal;color:var(--action);}
+.sub{
+  font-size:clamp(17px,2.1vw,20px);color:var(--text-2);
+  max-width:46ch;margin:22px 0 0;
+}
+
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:38px;}
+.store{
+  display:flex;align-items:center;gap:11px;
+  background:var(--raised);border:1.5px solid var(--border-strong);
+  border-radius:14px;padding:11px 20px 11px 17px;
+  text-decoration:none;color:var(--text);
+  transition:border-color .18s ease, transform .18s ease;
+}
+.store:hover{border-color:var(--violet);transform:translateY(-2px);}
+.store svg{width:24px;height:24px;flex:none;fill:currentColor;}
+.store .t{display:flex;flex-direction:column;line-height:1.2;}
+.store .t small{font-size:11px;color:var(--text-3);letter-spacing:.03em;}
+.store .t strong{font-size:15.5px;font-weight:700;}
+.soon{
+  display:inline-flex;align-items:center;gap:7px;margin-top:18px;
+  font-size:13.5px;color:var(--text-3);
+}
+.soon i{width:7px;height:7px;border-radius:50%;background:var(--action);font-style:normal;flex:none;}
+
+/* ── Franja de categorías ───────────────────────────────────────── */
+.strip{
+  border-top:1px solid var(--border-subtle);
+  border-bottom:1px solid var(--border-subtle);
+  background:var(--surface);padding:22px 0;
+}
+.chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--raised);border:1px solid var(--border-subtle);
+  border-radius:999px;padding:8px 15px;
+  font-size:14px;font-weight:600;color:var(--text-2);white-space:nowrap;
+}
+
+/* ── Secciones ──────────────────────────────────────────────────── */
+section{padding:88px 0;}
+.eyebrow{
+  font-family:var(--body);font-weight:800;font-size:12px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--action);
+  margin:0 0 14px;
+}
+h2{
+  font-family:var(--display);font-weight:700;
+  font-size:clamp(28px,4.2vw,42px);line-height:1.08;letter-spacing:-.025em;
+  margin:0;max-width:20ch;text-wrap:balance;
+}
+.lede{font-size:17.5px;color:var(--text-2);max-width:56ch;margin:18px 0 0;}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;}
+
+/* Dos columnas fijas y no auto-fit: con cuatro tarjetas, auto-fit daba tres
+   en una fila y una huérfana abajo. 2×2 además deja respirar el texto. */
+.feat{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:48px;}
+.card{
+  background:var(--surface);border:1px solid var(--border-subtle);
+  border-radius:18px;padding:26px 24px;
+}
+.card .ic{
+  width:42px;height:42px;border-radius:12px;
+  background:rgba(139,107,255,.16);color:var(--violet);
+  display:flex;align-items:center;justify-content:center;margin-bottom:16px;
+}
+.card .ic svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+.card h3{font-family:var(--body);font-weight:700;font-size:17.5px;margin:0 0 7px;letter-spacing:-.01em;}
+.card p{font-size:15px;color:var(--text-2);margin:0;}
+
+/* ── Ticket: el motivo viene de MyPlansScreen (perforación + muescas) ── */
+.ticket{
+  background:var(--action);color:var(--on-action);
+  border-radius:20px;overflow:hidden;position:relative;
+  box-shadow:0 24px 60px -24px rgba(255,201,74,.3);
+  max-width:400px;
+}
+.ticket-top{padding:26px 26px 22px;}
+.ticket-top .k{
+  font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.62;
+}
+.ticket-top h4{font-family:var(--display);font-weight:700;font-size:25px;margin:9px 0 5px;letter-spacing:-.02em;}
+.ticket-top p{font-size:14.5px;margin:0;opacity:.72;font-weight:600;}
+.perf{position:relative;height:22px;}
+.perf::before,.perf::after{
+  content:'';position:absolute;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border-radius:50%;background:var(--bg);
+}
+.perf::before{left:-11px;} .perf::after{right:-11px;}
+.perf i{
+  position:absolute;top:50%;left:16px;right:16px;height:0;
+  border-top:2px dashed rgba(23,19,31,.26);
+}
+.ticket-foot{display:flex;gap:26px;padding:20px 26px 26px;}
+.ticket-foot div{display:flex;flex-direction:column;gap:2px;}
+.ticket-foot .k{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.6;}
+.ticket-foot .v{font-size:15.5px;font-weight:800;}
+
+/* ── Organizadores ──────────────────────────────────────────────── */
+.orgwrap{background:var(--surface);border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);}
+.bullets{list-style:none;padding:0;margin:30px 0 0;display:grid;gap:15px;}
+.bullets li{display:flex;gap:13px;align-items:flex-start;font-size:16px;color:var(--text-2);}
+.bullets svg{width:20px;height:20px;flex:none;margin-top:3px;stroke:var(--free);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+
+/* ── Cierre ─────────────────────────────────────────────────────── */
+.close{text-align:center;}
+.close h2{margin:0 auto;}
+.close .cta{justify-content:center;}
+
+footer{
+  border-top:1px solid var(--border-subtle);
+  padding:44px 0 56px;color:var(--text-3);font-size:14px;
+}
+.frow{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center;}
+.flinks{display:flex;flex-wrap:wrap;gap:22px;}
+.flinks a{color:var(--text-3);text-decoration:none;}
+.flinks a:hover{color:var(--text);}
+
+@media (max-width:760px){
+  .split{grid-template-columns:1fr;gap:38px;}
+  .feat{grid-template-columns:1fr;}
+  section{padding:64px 0;}
+  .hero{padding:48px 0 64px;}
+  .ticket{margin:0 auto;}
+}
 </style>
 </head>
 <body>
-  <div class="box">
-    <img src="./logo.png" alt="Enfiestados">
-    <h1>Enfiestados</h1>
-    <p>Plataforma de eventos sociales en Costa Rica.</p>
-    <p>Estamos preparando el sitio. Muy pronto.</p>
 
-    <p class="small">
-      ¿Consultas? <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
+<header class="hero">
+  <div class="wrap">
+    <div class="brandrow">
+      <img src="./logo.png" alt="">
+      <span>Enfiestados</span>
+    </div>
+
+    <h1>Todos los planes de Costa&nbsp;Rica, en <em>un solo lugar</em>.</h1>
+    <p class="sub">
+      Conciertos, fiestas, ferias y planes cerca tuyo. Mirá qué hay esta noche
+      sin crear una cuenta — y cuando algo te guste, guardalo.
+    </p>
+    <p class="sub" style="margin-top:14px;font-size:16px;color:var(--text-3);">
+      Operado por 3-102-942588 S.R.L., sociedad costarricense inscrita en el
+      Registro Nacional. <a href="./empresa" style="color:var(--link);">Información de la empresa</a>.
     </p>
 
-    <nav class="links">
-      <a href="./empresa">La empresa</a>
-      <a href="./terminos">Términos y Condiciones</a>
-      <a href="./privacidad">Política de Privacidad</a>
-    </nav>
-
-    <p class="small" style="margin-top:28px;font-size:12.5px;">
-      3-102-942588 S.R.L. · Alajuela, San Carlos, Costa Rica
-    </p>
+    <div class="cta">
+      <a class="store" href="#" aria-label="Próximamente en App Store">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.15 9.21.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.02-1.13 2.78-2.24.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.44-3.69zM14.8 5.5c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.76-.95 2.79 1.02.08 2.05-.52 2.68-1.27z"/></svg>
+        <span class="t"><small>Próximamente en</small><strong>App Store</strong></span>
+      </a>
+      <a class="store" href="#" aria-label="Próximamente en Google Play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.4c-.3.3-.5.8-.5 1.4v16.4c0 .6.2 1.1.5 1.4l.1.1 9.2-9.2v-.2L3.7 2.3l-.1.1zm12.3 6.1L13 11.4v.2l2.9 2.9.1-.1 3.4-2c1-.5 1-1.4 0-2l-3.4-1.9zM13.3 11.9L4.1 21.1c.3.3.9.4 1.5 0l10.3-5.9-2.6-2.6v-.7zm0-.8l2.6-2.6L5.6 2.6c-.6-.3-1.2-.3-1.5 0l9.2 8.5z"/></svg>
+        <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
+      </a>
+    </div>
+    <p class="soon"><i></i> La aplicación está en pruebas finales. Publicación prevista en las tiendas para noviembre de 2026.</p>
   </div>
+</header>
+
+<div class="strip">
+  <div class="wrap">
+    <div class="chips">
+      <span class="chip">🎵 Música</span>
+      <span class="chip">🎉 Fiesta</span>
+      <span class="chip">⚽ Deportes</span>
+      <span class="chip">🎨 Arte &amp; Cultura</span>
+      <span class="chip">🍽️ Gastronomía</span>
+      <span class="chip">💻 Tecnología</span>
+      <span class="chip">🤝 Networking</span>
+      <span class="chip">📚 Educación</span>
+      <span class="chip">🎬 Cine</span>
+      <span class="chip">🧘 Bienestar</span>
+      <span class="chip">🌿 Naturaleza</span>
+      <span class="chip">👨‍👩‍👧 Familia</span>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Sin vueltas</p>
+    <h2>Abrís la app y ya estás viendo planes.</h2>
+    <p class="lede">
+      Nada de registrarte para mirar. Enfiestados te deja entrar directo al feed —
+      la cuenta te la pedimos recién cuando querés guardar algo, confirmar que vas
+      o escribirle a alguien.
+    </p>
+
+    <div class="feat">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-5.1-7-10a7 7 0 1 1 14 0c0 4.9-7 10-7 10z"/><circle cx="12" cy="11" r="2.6"/></svg></div>
+        <h3>Cerca tuyo, en el mapa</h3>
+        <p>Explorá por provincia o mirá en el mapa qué hay alrededor. Filtrá por categoría y por cuándo.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 5.6 6.1.5-4.6 4 1.4 5.9L12 15.9 6.7 19l1.4-5.9-4.6-4 6.1-.5L12 3z"/></svg></div>
+        <h3>Un feed que te conoce</h3>
+        <p>Elegís qué te interesa y el feed se acomoda. Pero nunca te encierra: siempre vas a ver qué más está pasando.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V20l-8-4-8 4V5.5z"/></svg></div>
+        <h3>Guardá tus planes</h3>
+        <p>Lo que te gusta queda en Mis Planes, con la fecha y cuánto falta. Todo junto, sin capturas de pantalla.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.9A7.5 7.5 0 1 1 20 11.5z"/></svg></div>
+        <h3>Coordiná con tu gente</h3>
+        <p>Compartí un evento por chat o armá un grupo para ponerse de acuerdo sin salir de la app.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="wrap split">
+    <div>
+      <p class="eyebrow">Mis planes</p>
+      <h2>Tu entrada, siempre a mano.</h2>
+      <p class="lede">
+        Cada plan guardado se ve como un ticket: la fecha, el lugar y cuántos días
+        faltan. Con un toque abrís cómo llegar o se lo pasás a quien te acompaña.
+      </p>
+    </div>
+    <div>
+      <div class="ticket">
+        <div class="ticket-top">
+          <div class="k">Vas a ir</div>
+          <h4>Noche de Cumbia</h4>
+          <p>Barrio Escalante, San José</p>
+        </div>
+        <div class="perf"><i></i></div>
+        <div class="ticket-foot">
+          <div><span class="k">Fecha</span><span class="v">Sáb 24 oct</span></div>
+          <div><span class="k">Hora</span><span class="v">9:00 p.m.</span></div>
+          <div><span class="k">Faltan</span><span class="v">6 días</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="orgwrap">
+  <section>
+    <div class="wrap split">
+      <div>
+        <p class="eyebrow">Para organizadores</p>
+        <h2>Publicá tu evento gratis.</h2>
+        <p class="lede">
+          Da igual si armás una fiesta en tu casa o manejás un local con agenda
+          llena. Subís tu evento en tres pasos y aparece frente a gente que ya
+          está buscando qué hacer.
+        </p>
+        <ul class="bullets">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Publicar es gratis, sin comisión por publicar</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Mirá cuánta gente confirmó que va</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Hasta 10 fotos por evento, con mapa y precio</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Armá un grupo para avisarle a los que van</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="card" style="background:var(--raised);">
+          <p class="eyebrow" style="color:var(--violet);">En camino</p>
+          <h3 style="font-size:20px;">Vendé entradas desde la app</h3>
+          <p>Estamos trabajando en que puedas cobrar tus entradas por SINPE Móvil o tarjeta, y que la plata te llegue directo a tu cuenta.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="orgwrap">
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Cómo funciona el negocio</p>
+      <h2>Gratis para quien busca planes.</h2>
+      <p class="lede">
+        Descubrir eventos, guardarlos y coordinar con tu gente no cuesta nada, y
+        publicar un evento tampoco. Enfiestados cobra únicamente a los
+        organizadores, y solo por dos servicios concretos.
+      </p>
+
+      <div class="feat">
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5V7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v3.5a2 2 0 0 0 0 3.9V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.6a2 2 0 0 0 0-3.9z"/><path d="M14 6v12"/></svg></div>
+          <h3>Comisión por venta de entradas</h3>
+          <p>Cuando un organizador vende entradas por la app, Enfiestados cobra un porcentaje sobre la venta. El organizador es el vendedor y recibe su dinero directamente en su cuenta bancaria.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 8.5a5 5 0 0 1 0 7"/></svg></div>
+          <h3>Promoción de eventos</h3>
+          <p>Un organizador puede pagar para que su evento aparezca destacado dentro de la app, con un presupuesto que define él y puede detener cuando quiera.</p>
+        </div>
+      </div>
+
+      <p class="lede" style="margin-top:28px;">
+        Los pagos se procesan con ONVO Pay y aceptamos SINPE Móvil, transferencia
+        y tarjeta. Enfiestados no almacena datos de tarjetas ni credenciales
+        bancarias. Los detalles de entrega y reembolsos están en
+        <a href="./empresa">información de la empresa</a> y en los
+        <a href="./terminos">Términos y Condiciones</a>.
+      </p>
+    </div>
+  </section>
+</div>
+
+<section class="close">
+  <div class="wrap">
+    <h2 style="max-width:18ch;margin-inline:auto;">¿Listo para no perderte nada?</h2>
+    <p class="lede" style="margin-inline:auto;">
+      Enfiestados es gratis y está hecho en Costa Rica, para lo que pasa en Costa Rica.
+    </p>
+    <div class="cta">
+      <a class="store" href="#" aria-label="Próximamente en App Store">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.15 9.21.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.02-1.13 2.78-2.24.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.44-3.69zM14.8 5.5c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.76-.95 2.79 1.02.08 2.05-.52 2.68-1.27z"/></svg>
+        <span class="t"><small>Próximamente en</small><strong>App Store</strong></span>
+      </a>
+      <a class="store" href="#" aria-label="Próximamente en Google Play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.4c-.3.3-.5.8-.5 1.4v16.4c0 .6.2 1.1.5 1.4l.1.1 9.2-9.2v-.2L3.7 2.3l-.1.1zm12.3 6.1L13 11.4v.2l2.9 2.9.1-.1 3.4-2c1-.5 1-1.4 0-2l-3.4-1.9zM13.3 11.9L4.1 21.1c.3.3.9.4 1.5 0l10.3-5.9-2.6-2.6v-.7zm0-.8l2.6-2.6L5.6 2.6c-.6-.3-1.2-.3-1.5 0l9.2 8.5z"/></svg>
+        <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap frow">
+    <div>
+      © 2026 Enfiestados · Costa Rica<br>
+      <span style="font-size:13px;">3-102-942588 S.R.L. · Alajuela, San Carlos · +506 6110 3556</span>
+    </div>
+    <nav class="flinks">
+      <a href="./empresa">La empresa</a>
+      <a href="./terminos">Términos</a>
+      <a href="./privacidad">Privacidad</a>
+      <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
+    </nav>
+  </div>
+</footer>
+
 </body>
 </html>

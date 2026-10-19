@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enfiestados</title>
+<meta name="description" content="Enfiestados — plataforma de eventos en Costa Rica. Sitio en construcción.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#17131F">
+<link rel="icon" href="./logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Plus+Jakarta+Sans:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#17131F; --text:#F7F4EF; --text-2:#C6BFD6; --text-3:#9A91AD;
+  --action:#FFC94A; --link:#B9A5FF; --border:rgba(255,255,255,0.09);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font-family:'Plus Jakarta Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  line-height:1.6;display:flex;align-items:center;justify-content:center;
+  padding:32px 24px;-webkit-font-smoothing:antialiased;
+}
+.box{max-width:440px;width:100%;text-align:center;}
+img{width:72px;height:72px;border-radius:18px;margin:0 auto 26px;display:block;}
+h1{
+  font-family:'Bricolage Grotesque',ui-sans-serif,sans-serif;font-weight:800;
+  font-size:34px;letter-spacing:-.03em;margin:0 0 14px;
+}
+p{color:var(--text-2);font-size:16.5px;margin:0 0 10px;}
+.small{color:var(--text-3);font-size:14px;margin-top:26px;}
+a{color:var(--link);}
+.links{
+  margin-top:34px;padding-top:24px;border-top:1px solid var(--border);
+  display:flex;flex-wrap:wrap;gap:18px;justify-content:center;font-size:14px;
+}
+.links a{color:var(--text-3);text-decoration:none;}
+.links a:hover{color:var(--text);}
+:focus-visible{outline:2px solid var(--action);outline-offset:3px;border-radius:4px;}
+</style>
+</head>
+<body>
+  <div class="box">
+    <img src="./logo.png" alt="Enfiestados">
+    <h1>Enfiestados</h1>
+    <p>Plataforma de eventos sociales en Costa Rica.</p>
+    <p>Estamos preparando el sitio. Muy pronto.</p>
+
+    <p class="small">
+      ¿Consultas? <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
+    </p>
+
+    <nav class="links">
+      <a href="./empresa">La empresa</a>
+      <a href="./terminos">Términos y Condiciones</a>
+      <a href="./privacidad">Política de Privacidad</a>
+    </nav>
+
+    <p class="small" style="margin-top:28px;font-size:12.5px;">
+      3-102-942588 S.R.L. · Alajuela, San Carlos, Costa Rica
+    </p>
+  </div>
+</body>
+</html>
