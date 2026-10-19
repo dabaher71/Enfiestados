@@ -27,7 +27,10 @@ const IMG = {
   cafe:  `${COMMONS}/8/87/Coffee-cherry-picker-san-marcos-tarrazu-costa-rica.jpg/1280px-Coffee-cherry-picker-san-marcos-tarrazu-costa-rica.jpg`,
   maiz:  `${COMMONS}/8/83/Mazorcas_de_maiz_-_Mazarocas_de_millo_-_01.jpg/1280px-Mazorcas_de_maiz_-_Mazarocas_de_millo_-_01.jpg`,
   queso: `${COMMONS}/2/2f/Queso_Turrialba.jpg/1280px-Queso_Turrialba.jpg`,
-  bingo: `${COMMONS}/c/c1/Bingo.jpg/1280px-Bingo.jpg`,
+  // Un cartón de bingo y nada más. Es horizontal (1900x1288, ratio 1.48),
+  // que es lo que conviene: MediaCarousel solo encuadra a `cover` cuando el
+  // ratio pasa de 1.15 — las verticales las muestra con marco desenfocado.
+  bingo: `${COMMONS}/2/2f/Bingo-carton-sandoval-de-la-reina-san-blas-febrero-2024.jpg/1280px-Bingo-carton-sandoval-de-la-reina-san-blas-febrero-2024.jpg`,
 };
 
 // El perfil "Costa Rica" organiza las tres ferias; el bingo lo arma una
