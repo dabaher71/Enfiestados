@@ -1,423 +1,256 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enfiestados — Todos los planes de Costa Rica, en un solo lugar</title>
-<meta name="description" content="Descubrí conciertos, fiestas y planes cerca tuyo. Entrá sin crear cuenta, guardá lo que te gusta y organizá tus propios eventos. Gratis, hecho en Costa Rica.">
-<meta name="theme-color" content="#17131F">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enfiestados — Los eventos empiezan en tu teléfono</title>
+<meta name="description" content="Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar. Descubrí, guardá y coordiná tus planes con amigos.">
+<meta name="theme-color" content="#FBFAF7">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Enfiestados — Todos los planes de Costa Rica">
-<meta property="og:description" content="Descubrí conciertos, fiestas y planes cerca tuyo. Entrá sin crear cuenta.">
-<meta property="og:image" content="https://enfiestados.net/logo.png">
+<meta property="og:title" content="Enfiestados — Los eventos empiezan en tu teléfono">
+<meta property="og:description" content="Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar.">
+<meta property="og:image" content="https://enfiestados.net/assets/logo.png">
+<meta property="og:url" content="https://enfiestados.net/">
 <meta name="twitter:card" content="summary_large_image">
 
-<link rel="icon" href="./logo.png">
+<link rel="icon" href="./assets/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
-/* Paleta tomada de src/theme/tokens.js — el tema oscuro de la app.
-   La página se queda en oscuro a propósito: la app arranca en oscuro
-   (userInterfaceStyle: 'dark') y es el mundo visual del producto. */
-:root{
-  --bg:#17131F;
-  --surface:#211C2C;
-  --raised:#2C2639;
-  --border-subtle:rgba(255,255,255,0.09);
-  --border-strong:rgba(255,255,255,0.16);
-  --text:#F7F4EF;
-  --text-2:#C6BFD6;
-  --text-3:#9A91AD;
-  --on-action:#17131F;
-  --action:#FFC94A;
-  --action-pressed:#F2B738;
-  --violet:#8B6BFF;
-  --link:#B9A5FF;
-  --free:#2FBF87;
-  --display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;
-  --body:'Plus Jakarta Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
-}
+/* Esta página viene del proyecto de Claude Design "Landing page Enfiestados".
+   Allá es un .dc.html, un formato de componente que necesita un runtime de
+   React (support.js) que el archivo no carga: publicado tal cual, la página
+   sale en blanco. Acá está convertido a HTML estático — se resolvieron los
+   condicionales, los style-hover pasaron a CSS y se quitó el runtime. */
+html,body{margin:0;background:#FBFAF7;}
 *{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
-@media (prefers-reduced-motion:reduce){
-  html{scroll-behavior:auto;}
-  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}
-}
-body{
-  margin:0;background:var(--bg);color:var(--text);
-  font-family:var(--body);line-height:1.6;
-  -webkit-font-smoothing:antialiased;
-  overflow-x:hidden;
-}
-a{color:var(--link);}
-:focus-visible{outline:2px solid var(--violet);outline-offset:3px;border-radius:4px;}
-img{max-width:100%;display:block;}
+img{max-width:100%;}
+a{color:#1F1C2C;text-decoration:none;}
+a:hover{color:#B8860B;}
 
-.wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+/* En el diseño esto eran atributos style-hover, que solo entiende el runtime. */
+.btn-amarillo:hover{background:#FFD466;color:#1F1C2C;}
+.btn-oscuro:hover{background:#2E2A3F;color:#fff;}
 
-/* ── Hero ───────────────────────────────────────────────────────── */
-.hero{position:relative;padding:72px 0 88px;overflow:hidden;}
-/* Resplandor ámbar/violeta: el ambiente de la app sin caer en degradado de banner */
-.hero::before{
-  content:'';position:absolute;inset:-30% -10% auto -10%;height:70vh;
-  background:
-    radial-gradient(42% 46% at 72% 18%, rgba(139,107,255,.26), transparent 70%),
-    radial-gradient(38% 40% at 20% 8%, rgba(255,201,74,.16), transparent 70%);
-  pointer-events:none;
-}
-.hero .wrap{position:relative;}
-.brandrow{display:flex;align-items:center;gap:14px;margin-bottom:38px;}
-.brandrow img{width:46px;height:46px;border-radius:12px;}
-.brandrow span{font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:-.02em;}
+/* El marco del teléfono tapa la barra de estado real de la captura y dibuja
+   la isla dinámica, para que las tres pantallas se vean parejas. */
+.marco{position:relative;border-radius:38px;overflow:hidden;aspect-ratio:1179/2556;background:#FBFAF7;}
+.marco img{width:100%;height:100%;object-fit:cover;display:block;}
+.tapa{position:absolute;left:0;right:0;top:0;height:5.6%;background:#FBFAF7;display:flex;justify-content:center;align-items:center;}
+.isla{width:34%;height:60%;background:#000;border-radius:999px;}
 
-h1{
-  font-family:var(--display);font-weight:800;
-  font-size:clamp(40px,7.2vw,76px);line-height:1.02;letter-spacing:-.035em;
-  margin:0;max-width:16ch;text-wrap:balance;
-}
-h1 em{font-style:normal;color:var(--action);}
-.sub{
-  font-size:clamp(17px,2.1vw,20px);color:var(--text-2);
-  max-width:46ch;margin:22px 0 0;
-}
+.chip{display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;font-weight:500;}
+.chip i{width:7px;height:7px;border-radius:50%;background:#FDC74A;font-style:normal;}
 
-.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:38px;}
-.store{
-  display:flex;align-items:center;gap:11px;
-  background:var(--raised);border:1.5px solid var(--border-strong);
-  border-radius:14px;padding:11px 20px 11px 17px;
-  text-decoration:none;color:var(--text);
-  transition:border-color .18s ease, transform .18s ease;
+/* El diseño original no traía reglas para pantallas angostas: el menú se
+   salía del header y las secciones mantenían 104px de padding en móvil. */
+@media (max-width:720px){
+  .nav-links{display:none;}
+  .pad-seccion{padding-left:20px;padding-right:20px;}
+  .card-org{padding:32px 24px;}
 }
-.store:hover{border-color:var(--violet);transform:translateY(-2px);}
-.store svg{width:24px;height:24px;flex:none;fill:currentColor;}
-.store .t{display:flex;flex-direction:column;line-height:1.2;}
-.store .t small{font-size:11px;color:var(--text-3);letter-spacing:.03em;}
-.store .t strong{font-size:15.5px;font-weight:700;}
-.soon{
-  display:inline-flex;align-items:center;gap:7px;margin-top:18px;
-  font-size:13.5px;color:var(--text-3);
-}
-.soon i{width:7px;height:7px;border-radius:50%;background:var(--action);font-style:normal;flex:none;}
-
-/* ── Franja de categorías ───────────────────────────────────────── */
-.strip{
-  border-top:1px solid var(--border-subtle);
-  border-bottom:1px solid var(--border-subtle);
-  background:var(--surface);padding:22px 0;
-}
-.chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;}
-.chip{
-  display:inline-flex;align-items:center;gap:7px;
-  background:var(--raised);border:1px solid var(--border-subtle);
-  border-radius:999px;padding:8px 15px;
-  font-size:14px;font-weight:600;color:var(--text-2);white-space:nowrap;
-}
-
-/* ── Secciones ──────────────────────────────────────────────────── */
-section{padding:88px 0;}
-.eyebrow{
-  font-family:var(--body);font-weight:800;font-size:12px;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--action);
-  margin:0 0 14px;
-}
-h2{
-  font-family:var(--display);font-weight:700;
-  font-size:clamp(28px,4.2vw,42px);line-height:1.08;letter-spacing:-.025em;
-  margin:0;max-width:20ch;text-wrap:balance;
-}
-.lede{font-size:17.5px;color:var(--text-2);max-width:56ch;margin:18px 0 0;}
-
-.split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;}
-
-/* Dos columnas fijas y no auto-fit: con cuatro tarjetas, auto-fit daba tres
-   en una fila y una huérfana abajo. 2×2 además deja respirar el texto. */
-.feat{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:48px;}
-.card{
-  background:var(--surface);border:1px solid var(--border-subtle);
-  border-radius:18px;padding:26px 24px;
-}
-.card .ic{
-  width:42px;height:42px;border-radius:12px;
-  background:rgba(139,107,255,.16);color:var(--violet);
-  display:flex;align-items:center;justify-content:center;margin-bottom:16px;
-}
-.card .ic svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
-.card h3{font-family:var(--body);font-weight:700;font-size:17.5px;margin:0 0 7px;letter-spacing:-.01em;}
-.card p{font-size:15px;color:var(--text-2);margin:0;}
-
-/* ── Ticket: el motivo viene de MyPlansScreen (perforación + muescas) ── */
-.ticket{
-  background:var(--action);color:var(--on-action);
-  border-radius:20px;overflow:hidden;position:relative;
-  box-shadow:0 24px 60px -24px rgba(255,201,74,.3);
-  max-width:400px;
-}
-.ticket-top{padding:26px 26px 22px;}
-.ticket-top .k{
-  font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.62;
-}
-.ticket-top h4{font-family:var(--display);font-weight:700;font-size:25px;margin:9px 0 5px;letter-spacing:-.02em;}
-.ticket-top p{font-size:14.5px;margin:0;opacity:.72;font-weight:600;}
-.perf{position:relative;height:22px;}
-.perf::before,.perf::after{
-  content:'';position:absolute;top:50%;transform:translateY(-50%);
-  width:22px;height:22px;border-radius:50%;background:var(--bg);
-}
-.perf::before{left:-11px;} .perf::after{right:-11px;}
-.perf i{
-  position:absolute;top:50%;left:16px;right:16px;height:0;
-  border-top:2px dashed rgba(23,19,31,.26);
-}
-.ticket-foot{display:flex;gap:26px;padding:20px 26px 26px;}
-.ticket-foot div{display:flex;flex-direction:column;gap:2px;}
-.ticket-foot .k{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.6;}
-.ticket-foot .v{font-size:15.5px;font-weight:800;}
-
-/* ── Organizadores ──────────────────────────────────────────────── */
-.orgwrap{background:var(--surface);border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);}
-.bullets{list-style:none;padding:0;margin:30px 0 0;display:grid;gap:15px;}
-.bullets li{display:flex;gap:13px;align-items:flex-start;font-size:16px;color:var(--text-2);}
-.bullets svg{width:20px;height:20px;flex:none;margin-top:3px;stroke:var(--free);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
-
-/* ── Cierre ─────────────────────────────────────────────────────── */
-.close{text-align:center;}
-.close h2{margin:0 auto;}
-.close .cta{justify-content:center;}
-
-footer{
-  border-top:1px solid var(--border-subtle);
-  padding:44px 0 56px;color:var(--text-3);font-size:14px;
-}
-.frow{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center;}
-.flinks{display:flex;flex-wrap:wrap;gap:22px;}
-.flinks a{color:var(--text-3);text-decoration:none;}
-.flinks a:hover{color:var(--text);}
-
-@media (max-width:760px){
-  .split{grid-template-columns:1fr;gap:38px;}
-  .feat{grid-template-columns:1fr;}
-  section{padding:64px 0;}
-  .hero{padding:48px 0 64px;}
-  .ticket{margin:0 auto;}
-}
+:focus-visible{outline:2px solid #1F1C2C;outline-offset:3px;border-radius:6px;}
 </style>
 </head>
 <body>
+<div style="font-family:'DM Sans',sans-serif;color:#1F1C2C;background:#FBFAF7;min-height:100vh;">
 
-<header class="hero">
-  <div class="wrap">
-    <div class="brandrow">
-      <img src="./logo.png" alt="">
-      <span>Enfiestados</span>
-    </div>
-
-    <h1>Todos los planes de Costa&nbsp;Rica, en <em>un solo lugar</em>.</h1>
-    <p class="sub">
-      Conciertos, fiestas, ferias y planes cerca tuyo. Mirá qué hay esta noche
-      sin crear una cuenta — y cuando algo te guste, guardalo.
-    </p>
-    <p class="sub" style="margin-top:14px;font-size:16px;color:var(--text-3);">
-      Operado por 3-102-942588 S.R.L., sociedad costarricense inscrita en el
-      Registro Nacional. <a href="./empresa" style="color:var(--link);">Información de la empresa</a>.
-    </p>
-
-    <div class="cta">
-      <a class="store" href="#" aria-label="Próximamente en App Store">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.15 9.21.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.02-1.13 2.78-2.24.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.44-3.69zM14.8 5.5c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.76-.95 2.79 1.02.08 2.05-.52 2.68-1.27z"/></svg>
-        <span class="t"><small>Próximamente en</small><strong>App Store</strong></span>
+  <header style="position:sticky;top:0;z-index:20;background:rgba(251,250,247,0.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid #EDE8E1;">
+    <div class="pad-seccion" style="max-width:1240px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+      <a href="#" style="display:flex;align-items:center;gap:12px;">
+        <img src="assets/logo.png" alt="Enfiestados" style="width:40px;height:40px;border-radius:10px;display:block;">
+        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:22px;letter-spacing:-0.02em;">Enfiestados</span>
       </a>
-      <a class="store" href="#" aria-label="Próximamente en Google Play">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.4c-.3.3-.5.8-.5 1.4v16.4c0 .6.2 1.1.5 1.4l.1.1 9.2-9.2v-.2L3.7 2.3l-.1.1zm12.3 6.1L13 11.4v.2l2.9 2.9.1-.1 3.4-2c1-.5 1-1.4 0-2l-3.4-1.9zM13.3 11.9L4.1 21.1c.3.3.9.4 1.5 0l10.3-5.9-2.6-2.6v-.7zm0-.8l2.6-2.6L5.6 2.6c-.6-.3-1.2-.3-1.5 0l9.2 8.5z"/></svg>
-        <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
-      </a>
+      <nav class="nav-links" style="display:flex;align-items:center;gap:28px;font-size:15px;font-weight:500;">
+        <a href="#funciones" style="color:#5E5A70;">Funciones</a>
+        <a href="#organizadores" style="color:#5E5A70;">Organizadores</a>
+        <a class="btn-amarillo" href="#descargar" style="background:#FDC74A;color:#1F1C2C;padding:10px 22px;border-radius:999px;font-weight:600;">Descargar App</a>
+      </nav>
     </div>
-    <p class="soon"><i></i> La aplicación está en pruebas finales. Publicación prevista en las tiendas para noviembre de 2026.</p>
-  </div>
-</header>
+  </header>
 
-<div class="strip">
-  <div class="wrap">
-    <div class="chips">
-      <span class="chip">🎵 Música</span>
-      <span class="chip">🎉 Fiesta</span>
-      <span class="chip">⚽ Deportes</span>
-      <span class="chip">🎨 Arte &amp; Cultura</span>
-      <span class="chip">🍽️ Gastronomía</span>
-      <span class="chip">💻 Tecnología</span>
-      <span class="chip">🤝 Networking</span>
-      <span class="chip">📚 Educación</span>
-      <span class="chip">🎬 Cine</span>
-      <span class="chip">🧘 Bienestar</span>
-      <span class="chip">🌿 Naturaleza</span>
-      <span class="chip">👨‍👩‍👧 Familia</span>
-    </div>
-  </div>
-</div>
-
-<section>
-  <div class="wrap">
-    <p class="eyebrow">Sin vueltas</p>
-    <h2>Abrís la app y ya estás viendo planes.</h2>
-    <p class="lede">
-      Nada de registrarte para mirar. Enfiestados te deja entrar directo al feed —
-      la cuenta te la pedimos recién cuando querés guardar algo, confirmar que vas
-      o escribirle a alguien.
-    </p>
-
-    <div class="feat">
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-5.1-7-10a7 7 0 1 1 14 0c0 4.9-7 10-7 10z"/><circle cx="12" cy="11" r="2.6"/></svg></div>
-        <h3>Cerca tuyo, en el mapa</h3>
-        <p>Explorá por provincia o mirá en el mapa qué hay alrededor. Filtrá por categoría y por cuándo.</p>
+  <section class="pad-seccion" style="max-width:1240px;margin:0 auto;padding:72px 32px 96px;display:flex;flex-wrap:wrap;align-items:center;gap:56px;">
+    <div style="flex:1 1 460px;min-width:0;display:flex;flex-direction:column;gap:28px;align-items:flex-start;">
+      <div style="display:flex;align-items:center;gap:8px;background:#FFF3CC;color:#8A6408;padding:7px 16px;border-radius:999px;font-size:14px;font-weight:600;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#E8A400;"></span>
+        <span>Disponible noviembre 2026</span>
       </div>
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 5.6 6.1.5-4.6 4 1.4 5.9L12 15.9 6.7 19l1.4-5.9-4.6-4 6.1-.5L12 3z"/></svg></div>
-        <h3>Un feed que te conoce</h3>
-        <p>Elegís qué te interesa y el feed se acomoda. Pero nunca te encierra: siempre vas a ver qué más está pasando.</p>
-      </div>
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5V20l-8-4-8 4V5.5z"/></svg></div>
-        <h3>Guardá tus planes</h3>
-        <p>Lo que te gusta queda en Mis Planes, con la fecha y cuánto falta. Todo junto, sin capturas de pantalla.</p>
-      </div>
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.9A7.5 7.5 0 1 1 20 11.5z"/></svg></div>
-        <h3>Coordiná con tu gente</h3>
-        <p>Compartí un evento por chat o armá un grupo para ponerse de acuerdo sin salir de la app.</p>
+      <h1 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(42px,5.6vw,72px);line-height:1.04;letter-spacing:-0.035em;text-wrap:balance;">Los eventos empiezan en tu teléfono</h1>
+      <p style="margin:0;font-size:20px;line-height:1.55;color:#5E5A70;max-width:520px;text-wrap:pretty;">Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar. Descubrí, guardá y coordiná tus planes con amigos.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;">
+        <a class="btn-oscuro" href="#descargar" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.05 12.54c-0.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-0.14-2.76 0.83-3.48 0.83-0.72 0-1.83-0.81-3.01-0.79-1.55 0.02-2.98 0.9-3.78 2.29-1.61 2.8-0.41 6.94 1.15 9.21 0.76 1.11 1.67 2.36 2.86 2.31 1.15-0.05 1.58-0.74 2.97-0.74 1.39 0 1.78 0.74 2.99 0.72 1.23-0.02 2.02-1.13 2.78-2.24 0.88-1.29 1.24-2.54 1.26-2.6-0.03-0.01-2.41-0.93-2.44-3.69z m-2.25-7.04c0.63-0.77 1.06-1.83 0.94-2.89-0.91 0.04-2.02 0.61-2.67 1.37-0.58 0.67-1.09 1.76-0.95 2.79 1.02 0.08 2.05-0.52 2.68-1.27z"></path></svg>
+          <span style="display:flex;flex-direction:column;line-height:1.15;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">App Store</span></span>
+        </a>
+        <a class="btn-oscuro" href="#descargar" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3.6 2.4c-0.3 0.3-0.5 0.8-0.5 1.4v16.4c0 0.6 0.2 1.1 0.5 1.4l0.1 0.1 9.2-9.2v-0.2l-9.2-10-0.1 0.1z m12.3 6.1l-2.9 2.9v0.2l2.9 2.9 0.1-0.1 3.4-2c1-0.5 1-1.4 0-2l-3.4-1.9z m-2.6 3.4l-9.2 9.2c0.3 0.3 0.9 0.4 1.5 0l10.3-5.9-2.6-2.6v-0.7z m0-0.8l2.6-2.6-10.3-5.9c-0.6-0.3-1.2-0.3-1.5 0l9.2 8.5z"></path></svg>
+          <span style="display:flex;flex-direction:column;line-height:1.15;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">Google Play</span></span>
+        </a>
       </div>
     </div>
-  </div>
-</section>
 
-<section style="padding-top:0;">
-  <div class="wrap split">
-    <div>
-      <p class="eyebrow">Mis planes</p>
-      <h2>Tu entrada, siempre a mano.</h2>
-      <p class="lede">
-        Cada plan guardado se ve como un ticket: la fecha, el lugar y cuántos días
-        faltan. Con un toque abrís cómo llegar o se lo pasás a quien te acompaña.
-      </p>
-    </div>
-    <div>
-      <div class="ticket">
-        <div class="ticket-top">
-          <div class="k">Vas a ir</div>
-          <h4>Noche de Cumbia</h4>
-          <p>Barrio Escalante, San José</p>
+    <div style="flex:1 1 420px;min-width:0;display:flex;justify-content:center;">
+      <div style="position:relative;width:min(540px,100%);display:flex;justify-content:center;align-items:flex-end;padding:24px 0;">
+        <div style="position:absolute;inset:8% 4% 0 4%;background:#FDC74A;border-radius:48px;"></div>
+        <div style="position:relative;width:44%;margin-right:-10%;transform:rotate(-6deg) translateY(-6%);z-index:1;">
+          <div style="padding:7px;background:#16141C;border-radius:40px;box-shadow:0 30px 60px -24px rgba(31,28,44,0.5),inset 0 0 0 1.5px #3A3644;">
+            <div class="marco" style="border-radius:33px;">
+              <img src="assets/screen-3.jpg" alt="Pantalla Mis planes de Enfiestados, con la entrada de un evento guardado">
+              <div class="tapa"><div class="isla"></div></div>
+            </div>
+          </div>
         </div>
-        <div class="perf"><i></i></div>
-        <div class="ticket-foot">
-          <div><span class="k">Fecha</span><span class="v">Sáb 24 oct</span></div>
-          <div><span class="k">Hora</span><span class="v">9:00 p.m.</span></div>
-          <div><span class="k">Faltan</span><span class="v">6 días</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<div class="orgwrap">
-  <section>
-    <div class="wrap split">
-      <div>
-        <p class="eyebrow">Para organizadores</p>
-        <h2>Publicá tu evento gratis.</h2>
-        <p class="lede">
-          Da igual si armás una fiesta en tu casa o manejás un local con agenda
-          llena. Subís tu evento en tres pasos y aparece frente a gente que ya
-          está buscando qué hacer.
-        </p>
-        <ul class="bullets">
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Publicar es gratis, sin comisión por publicar</span></li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Mirá cuánta gente confirmó que va</span></li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Hasta 10 fotos por evento, con mapa y precio</span></li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span>Armá un grupo para avisarle a los que van</span></li>
-        </ul>
-      </div>
-      <div>
-        <div class="card" style="background:var(--raised);">
-          <p class="eyebrow" style="color:var(--violet);">En camino</p>
-          <h3 style="font-size:20px;">Vendé entradas desde la app</h3>
-          <p>Estamos trabajando en que puedas cobrar tus entradas por SINPE Móvil o tarjeta, y que la plata te llegue directo a tu cuenta.</p>
+        <div style="position:relative;width:52%;z-index:2;">
+          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -28px rgba(31,28,44,0.55),inset 0 0 0 1.5px #3A3644;">
+            <div class="marco">
+              <img src="assets/screen-2.jpg" alt="Pantalla de inicio de Enfiestados con el feed de eventos">
+              <div class="tapa"><div class="isla"></div></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
-</div>
 
-<div class="orgwrap">
-  <section>
-    <div class="wrap">
-      <p class="eyebrow">Cómo funciona el negocio</p>
-      <h2>Gratis para quien busca planes.</h2>
-      <p class="lede">
-        Descubrir eventos, guardarlos y coordinar con tu gente no cuesta nada, y
-        publicar un evento tampoco. Enfiestados cobra únicamente a los
-        organizadores, y solo por dos servicios concretos.
-      </p>
+  <section id="funciones" class="pad-seccion" style="background:#F3EFEA;padding:104px 32px;">
+    <div style="max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:96px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;">
+        <h2 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(32px,3.6vw,46px);letter-spacing:-0.03em;line-height:1.1;text-wrap:balance;">¿Qué podés hacer con Enfiestados?</h2>
+        <p style="margin:0;font-size:19px;line-height:1.55;color:#5E5A70;max-width:560px;text-wrap:pretty;">Más que una app de eventos. Es tu compañero para no perderte nada.</p>
+      </div>
 
-      <div class="feat">
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5V7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v3.5a2 2 0 0 0 0 3.9V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.6a2 2 0 0 0 0-3.9z"/><path d="M14 6v12"/></svg></div>
-          <h3>Comisión por venta de entradas</h3>
-          <p>Cuando un organizador vende entradas por la app, Enfiestados cobra un porcentaje sobre la venta. El organizador es el vendedor y recibe su dinero directamente en su cuenta bancaria.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:72px;">
+        <div style="flex:0 1 300px;min-width:240px;">
+          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -30px rgba(31,28,44,0.45),inset 0 0 0 1.5px #3A3644;">
+            <div class="marco">
+              <img src="assets/screen-1.jpg" alt="Mapa de Enfiestados con los eventos cercanos y su precio">
+              <div class="tapa"><div class="isla"></div></div>
+            </div>
+          </div>
         </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 8.5a5 5 0 0 1 0 7"/></svg></div>
-          <h3>Promoción de eventos</h3>
-          <p>Un organizador puede pagar para que su evento aparezca destacado dentro de la app, con un presupuesto que define él y puede detener cuando quiera.</p>
+        <div style="flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;">
+          <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#8A6408;">01 · Explorar</span>
+          <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;line-height:1.1;">Descubrí eventos cerca</h3>
+          <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;text-wrap:pretty;">Conciertos, fiestas, ferias, arte, gastronomía y más. Mirá en el mapa qué está pasando en tu zona, con su precio o si es gratis, y filtrá por provincia, fecha o categoría.</p>
         </div>
       </div>
 
-      <p class="lede" style="margin-top:28px;">
-        Los pagos se procesan con ONVO Pay y aceptamos SINPE Móvil, transferencia
-        y tarjeta. Enfiestados no almacena datos de tarjetas ni credenciales
-        bancarias. Los detalles de entrega y reembolsos están en
-        <a href="./empresa">información de la empresa</a> y en los
-        <a href="./terminos">Términos y Condiciones</a>.
-      </p>
+      <div style="display:flex;flex-wrap:wrap-reverse;align-items:center;justify-content:center;gap:72px;">
+        <div style="flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;">
+          <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#8A6408;">02 · Para vos</span>
+          <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;line-height:1.1;">Planes a tu medida</h3>
+          <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;text-wrap:pretty;">Un inicio con lo que te gusta y lo que hacen las personas que seguís. Filtrá por hoy, este finde o gratis, y marcá «Voy» con un toque.</p>
+        </div>
+        <div style="flex:0 1 300px;min-width:240px;">
+          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -30px rgba(31,28,44,0.45),inset 0 0 0 1.5px #3A3644;">
+            <div class="marco">
+              <img src="assets/screen-2.jpg" alt="Feed Para vos de Enfiestados">
+              <div class="tapa"><div class="isla"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:72px;">
+        <div style="flex:0 1 300px;min-width:240px;">
+          <div style="padding:8px;background:#16141C;border-radius:46px;box-shadow:0 40px 80px -30px rgba(31,28,44,0.45),inset 0 0 0 1.5px #3A3644;">
+            <div class="marco">
+              <img src="assets/screen-3.jpg" alt="Mis planes, con la entrada de un evento y la cuenta regresiva">
+              <div class="tapa"><div class="isla"></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1 1 380px;max-width:500px;display:flex;flex-direction:column;gap:18px;">
+          <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:#8A6408;">03 · Mis planes</span>
+          <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;line-height:1.1;">Guardá tus favoritos y coordiná con amigos</h3>
+          <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;text-wrap:pretty;">Tus eventos, guardados y entradas en un solo lugar, con cuenta regresiva y recordatorios. Compartí el plan y sacá cómo llegar sin salir de la app. La fiesta es mejor cuando van todos.</p>
+        </div>
+      </div>
     </div>
   </section>
+
+  <section class="pad-seccion" style="background:#1F1C2C;padding:72px 32px;">
+    <div style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:28px;text-align:center;">
+      <h2 style="margin:0;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(26px,2.6vw,34px);letter-spacing:-0.02em;">Eventos para todos los gustos</h2>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;">
+        <span class="chip"><i></i><span>Música</span></span>
+        <span class="chip"><i></i><span>Fiestas</span></span>
+        <span class="chip"><i></i><span>Deportes</span></span>
+        <span class="chip"><i></i><span>Arte y Cultura</span></span>
+        <span class="chip"><i></i><span>Gastronomía</span></span>
+        <span class="chip"><i></i><span>Tecnología</span></span>
+        <span class="chip"><i></i><span>Naturaleza</span></span>
+        <span class="chip"><i></i><span>Bienestar</span></span>
+        <span class="chip"><i></i><span>Familia</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="organizadores" class="pad-seccion" style="padding:104px 32px;">
+    <div class="card-org" style="max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:40px;padding:56px;border-radius:32px;background:#fff;border:1px solid #EDE8E1;">
+      <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:14px;">
+        <h2 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(28px,3vw,38px);letter-spacing:-0.025em;">¿Organizás eventos?</h2>
+        <p style="margin:0;font-size:18px;line-height:1.6;color:#5E5A70;max-width:540px;text-wrap:pretty;">Publicá tus eventos gratis y llegá a miles de personas en todo Costa Rica. Vendé tus entradas desde la app.</p>
+      </div>
+      <a class="btn-amarillo" href="#descargar" style="display:flex;align-items:center;gap:10px;background:#FDC74A;color:#1F1C2C;padding:16px 30px;border-radius:999px;font-size:17px;font-weight:600;">
+        <span>Publicar mi evento</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F1C2C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+      </a>
+    </div>
+  </section>
+
+  <section id="descargar" class="pad-seccion" style="background:#FDC74A;padding:96px 32px;">
+    <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center;">
+      <img src="assets/logo.png" alt="" style="width:104px;height:104px;border-radius:24px;display:block;box-shadow:0 18px 40px -16px rgba(31,28,44,0.45);">
+      <h2 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(36px,4.4vw,56px);letter-spacing:-0.035em;line-height:1.05;">¿Listo para la fiesta?</h2>
+      <p style="margin:0;font-size:19px;line-height:1.55;color:#3D3826;max-width:480px;text-wrap:pretty;">Descargá Enfiestados y empezá a descubrir los mejores planes de Costa Rica.</p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;">
+        <a class="btn-oscuro" href="#" aria-label="Próximamente en App Store" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.05 12.54c-0.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-0.14-2.76 0.83-3.48 0.83-0.72 0-1.83-0.81-3.01-0.79-1.55 0.02-2.98 0.9-3.78 2.29-1.61 2.8-0.41 6.94 1.15 9.21 0.76 1.11 1.67 2.36 2.86 2.31 1.15-0.05 1.58-0.74 2.97-0.74 1.39 0 1.78 0.74 2.99 0.72 1.23-0.02 2.02-1.13 2.78-2.24 0.88-1.29 1.24-2.54 1.26-2.6-0.03-0.01-2.41-0.93-2.44-3.69z m-2.25-7.04c0.63-0.77 1.06-1.83 0.94-2.89-0.91 0.04-2.02 0.61-2.67 1.37-0.58 0.67-1.09 1.76-0.95 2.79 1.02 0.08 2.05-0.52 2.68-1.27z"></path></svg>
+          <span style="display:flex;flex-direction:column;line-height:1.15;text-align:left;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">App Store</span></span>
+        </a>
+        <a class="btn-oscuro" href="#" aria-label="Próximamente en Google Play" style="display:flex;align-items:center;gap:10px;background:#1F1C2C;color:#fff;padding:12px 24px;border-radius:14px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3.6 2.4c-0.3 0.3-0.5 0.8-0.5 1.4v16.4c0 0.6 0.2 1.1 0.5 1.4l0.1 0.1 9.2-9.2v-0.2l-9.2-10-0.1 0.1z m12.3 6.1l-2.9 2.9v0.2l2.9 2.9 0.1-0.1 3.4-2c1-0.5 1-1.4 0-2l-3.4-1.9z m-2.6 3.4l-9.2 9.2c0.3 0.3 0.9 0.4 1.5 0l10.3-5.9-2.6-2.6v-0.7z m0-0.8l2.6-2.6-10.3-5.9c-0.6-0.3-1.2-0.3-1.5 0l9.2 8.5z"></path></svg>
+          <span style="display:flex;flex-direction:column;line-height:1.15;text-align:left;"><span style="font-size:11px;color:#CFCBD8;">Próximamente en</span><span style="font-size:17px;font-weight:600;">Google Play</span></span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="pad-seccion" style="background:#FBFAF7;padding:48px 32px 32px;">
+    <div style="max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px;">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:32px;">
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <img src="assets/logo.png" alt="" style="width:32px;height:32px;border-radius:8px;display:block;">
+            <span style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:18px;">Enfiestados</span>
+          </div>
+          <span style="font-size:14px;color:#6E6A7E;">3-102-942588 S.R.L.</span>
+          <span style="font-size:14px;color:#6E6A7E;">Alajuela, San Carlos, Costa Rica</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:56px;">
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
+            <span style="font-weight:600;color:#1F1C2C;">Legal</span>
+            <!-- En el diseño estos iban a "#"; acá apuntan a las páginas que
+                 ya existen en el sitio (cleanUrls está activo en hosting). -->
+            <a href="./privacidad" style="color:#6E6A7E;">Política de Privacidad</a>
+            <a href="./terminos" style="color:#6E6A7E;">Términos y Condiciones</a>
+            <a href="./empresa" style="color:#6E6A7E;">La empresa</a>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
+            <span style="font-weight:600;color:#1F1C2C;">Contacto</span>
+            <a href="mailto:info@enfiestados.net" style="color:#6E6A7E;">info@enfiestados.net</a>
+            <a href="tel:+50661103556" style="color:#6E6A7E;">+506 6110 3556</a>
+          </div>
+        </div>
+      </div>
+      <div style="height:1px;background:#EDE8E1;"></div>
+      <span style="font-size:13px;color:#6E6A7E;">© 2026 Enfiestados. Todos los derechos reservados.</span>
+    </div>
+  </footer>
 </div>
-
-<section class="close">
-  <div class="wrap">
-    <h2 style="max-width:18ch;margin-inline:auto;">¿Listo para no perderte nada?</h2>
-    <p class="lede" style="margin-inline:auto;">
-      Enfiestados es gratis y está hecho en Costa Rica, para lo que pasa en Costa Rica.
-    </p>
-    <div class="cta">
-      <a class="store" href="#" aria-label="Próximamente en App Store">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.54c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3.01-.79-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.15 9.21.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.39 0 1.78.74 2.99.72 1.23-.02 2.02-1.13 2.78-2.24.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.41-.93-2.44-3.69zM14.8 5.5c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.76-.95 2.79 1.02.08 2.05-.52 2.68-1.27z"/></svg>
-        <span class="t"><small>Próximamente en</small><strong>App Store</strong></span>
-      </a>
-      <a class="store" href="#" aria-label="Próximamente en Google Play">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.4c-.3.3-.5.8-.5 1.4v16.4c0 .6.2 1.1.5 1.4l.1.1 9.2-9.2v-.2L3.7 2.3l-.1.1zm12.3 6.1L13 11.4v.2l2.9 2.9.1-.1 3.4-2c1-.5 1-1.4 0-2l-3.4-1.9zM13.3 11.9L4.1 21.1c.3.3.9.4 1.5 0l10.3-5.9-2.6-2.6v-.7zm0-.8l2.6-2.6L5.6 2.6c-.6-.3-1.2-.3-1.5 0l9.2 8.5z"/></svg>
-        <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
-      </a>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap frow">
-    <div>
-      © 2026 Enfiestados · Costa Rica<br>
-      <span style="font-size:13px;">3-102-942588 S.R.L. · Alajuela, San Carlos · +506 6110 3556</span>
-    </div>
-    <nav class="flinks">
-      <a href="./empresa">La empresa</a>
-      <a href="./terminos">Términos</a>
-      <a href="./privacidad">Privacidad</a>
-      <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
-    </nav>
-  </div>
-</footer>
-
 </body>
 </html>
