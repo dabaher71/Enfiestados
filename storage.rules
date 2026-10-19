@@ -2,6 +2,14 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // IMPORTANTE: hasta ahora este archivo NO se desplegaba — faltaba la clave
+    // "storage" en firebase.json, así que Storage corría con lo que hubiera en
+    // la consola. Al conectarlo se detectó que varias rutas del código no
+    // calzaban con las reglas (avatars y covers subían sin el uid en la ruta,
+    // y ads no tenía regla), lo que habría roto esas subidas. El código ya se
+    // corrigió; cualquier ruta nueva tiene que agregarse acá o queda denegada
+    // por el catch-all del final.
+
     // ── Helpers ─────────────────────────────────────────────────────────────
     function isAuth() {
       return request.auth != null;
@@ -34,8 +42,28 @@ service firebase.storage {
       allow write: if isOwner(userId) && isImage() && underMB(3);
     }
 
-    // ── Imágenes de posts — posts/{userId}/... ──────────────────────────────
+    // ── Imágenes de publicaciones — posts/{userId}/... ──────────────────────
+    // Hasta 3 archivos por publicación; el límite de cantidad lo aplica
+    // Firestore (reglas de /posts), acá solo se controla tipo y tamaño.
     match /posts/{userId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) && isImage() && underMB(5);
+    }
+
+    // ── Imágenes de anuncios — ads/{userId}/... ─────────────────────────────
+    // Faltaba: CreateAdScreen ya subía acá y el catch-all lo habría denegado.
+    match /ads/{userId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isOwner(userId) && isImage() && underMB(5);
+    }
+
+    // ── Fotos enviadas en chats — chats/{userId}/... ────────────────────────
+    // Se agrupa por quien sube, no por chat: las reglas de Storage no pueden
+    // leer Firestore, así que acá no hay forma de comprobar que el usuario
+    // pertenezca al chat ni que sea el dueño del grupo. Ese control vive en
+    // las reglas de Firestore, sobre el documento del mensaje que referencia
+    // la imagen. Acá solo se garantiza que cada quien escribe en su carpeta.
+    match /chats/{userId}/{allPaths=**} {
       allow read: if isAuth();
       allow write: if isOwner(userId) && isImage() && underMB(5);
     }

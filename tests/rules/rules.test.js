@@ -323,6 +323,48 @@ describe('messages — marcar como leído', () => {
   });
 });
 
+describe('messages — fotos en chats', () => {
+  beforeEach(seed);
+
+  // grupo1: ownerId ANA, participantes [ANA, BETO], writePolicy 'all'.
+  const OK_URL  = 'https://firebasestorage.googleapis.com/v0/b/enfiestados-alpha.firebasestorage.app/o/chats%2Fuid_ana%2Fabc?alt=media';
+  const MAL_URL = 'https://evil.example.com/pixel.jpg';
+  const msg = (extra) => ({ chatId: 'grupo1', senderId: extra.senderId, text: '', timestamp: 'x', read: false, ...extra });
+
+  it('el dueño del grupo SÍ puede mandar una foto', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(ANA), 'messages', 'mf1'), msg({ senderId: ANA, imageUrl: OK_URL }))
+    );
+  });
+
+  it('un miembro que NO es el dueño no puede mandar fotos, aunque pueda escribir texto', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(BETO), 'messages', 'mf2'), msg({ senderId: BETO, text: 'hola' }))
+    );
+    await assertFails(
+      setDoc(doc(ctx(BETO), 'messages', 'mf3'), msg({ senderId: BETO, imageUrl: OK_URL }))
+    );
+  });
+
+  it('una foto sin texto es un mensaje válido', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(ANA), 'messages', 'mf4'), msg({ senderId: ANA, text: '', imageUrl: OK_URL }))
+    );
+  });
+
+  it('un mensaje sin texto y sin foto se rechaza', async () => {
+    await assertFails(
+      setDoc(doc(ctx(ANA), 'messages', 'mf5'), msg({ senderId: ANA, text: '' }))
+    );
+  });
+
+  it('una imageUrl alojada fuera de nuestro Storage se rechaza', async () => {
+    await assertFails(
+      setDoc(doc(ctx(ANA), 'messages', 'mf6'), msg({ senderId: ANA, imageUrl: MAL_URL }))
+    );
+  });
+});
+
 describe('ads — métricas', () => {
   beforeEach(seed);
 

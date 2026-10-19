@@ -15,12 +15,15 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { db, storage } from '../config/firebase';
 
 const chatsCollection = collection(db, 'chats');
 const messagesCollection = collection(db, 'messages');
 
 const MAX_MESSAGE_LENGTH = 1000;
+const CHAT_PHOTO_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_CHAT_PHOTO_BYTES = 5 * 1024 * 1024; // 5 MB, igual que storage.rules
 
 // Un chat es 'direct' (1 a 1) o 'group'. Los chats creados antes de que
 // existieran los grupos no tienen el campo `type` — por eso en toda la app se
@@ -76,7 +79,9 @@ export const createGroupChat = async (ownerId, name, participantIds, writePolicy
     throw new Error(`Máximo ${MAX_GROUP_PARTICIPANTS} personas por grupo`);
   }
 
-  const ref = await addDoc(chatsCollection, {
+  // docRef y no `ref`: este módulo ahora importa `ref` de firebase/storage y
+  // una variable local con ese nombre lo sombrea dentro de la función.
+  const docRef = await addDoc(chatsCollection, {
     type: 'group',
     name: trimmed,
     ownerId,
@@ -87,7 +92,7 @@ export const createGroupChat = async (ownerId, name, participantIds, writePolicy
     unreadFor: [],
     createdAt: serverTimestamp(),
   });
-  return ref.id;
+  return docRef.id;
 };
 
 export const updateGroupSettings = async (chatId, { name, writePolicy }) => {
@@ -146,9 +151,47 @@ export const subscribeToMessages = (chatId, callback) => {
   });
 };
 
-export const sendMessage = async (chatId, senderId, text) => {
-  if (!text || !text.trim()) throw new Error('Mensaje vacío');
-  const trimmed = text.trim().slice(0, MAX_MESSAGE_LENGTH);
+// Quién puede mandar fotos. En un directo, cualquiera de los dos. En un grupo,
+// solo el dueño — es el "admin" del grupo. Se deja aparte de canWriteInChat
+// porque son permisos distintos: en un grupo con writePolicy 'all' todos
+// escriben texto, pero las fotos siguen siendo solo del dueño.
+export const canSendPhotoInChat = (chat, uid) => {
+  if (!isGroupChat(chat)) return true;
+  return chat?.ownerId === uid;
+};
+
+// Sube una foto para mandarla por chat y devuelve su URL. La ruta lleva el uid
+// de quien sube porque storage.rules no puede consultar Firestore para saber
+// si pertenece al chat; ese control vive en las reglas del mensaje.
+export const uploadChatPhoto = async (uri, uid) => {
+  const blob = await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload  = () => resolve(xhr.response);
+    xhr.onerror = () => reject(new Error('No se pudo leer la imagen'));
+    xhr.responseType = 'blob';
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+  try {
+    if (!CHAT_PHOTO_MIME.includes(blob.type)) {
+      throw new Error('Solo se aceptan imágenes JPG, PNG, WebP o GIF.');
+    }
+    if (blob.size > MAX_CHAT_PHOTO_BYTES) {
+      throw new Error('La imagen supera el límite de 5 MB.');
+    }
+    const id = doc(collection(db, '_')).id;
+    const photoRef = ref(storage, `chats/${uid}/${id}`);
+    await uploadBytes(photoRef, blob, { contentType: blob.type });
+    return await getDownloadURL(photoRef);
+  } finally {
+    blob.close?.();
+  }
+};
+
+// `imageUrl` es opcional. Un mensaje vale si trae texto, imagen, o ambos.
+export const sendMessage = async (chatId, senderId, text, imageUrl = null) => {
+  const trimmed = (text ?? '').trim().slice(0, MAX_MESSAGE_LENGTH);
+  if (!trimmed && !imageUrl) throw new Error('Mensaje vacío');
 
   // Obtener participantes para marcar al receptor con mensaje no leído
   const chatSnap = await getDoc(doc(db, 'chats', chatId));
@@ -159,13 +202,22 @@ export const sendMessage = async (chatId, senderId, text) => {
   await setDoc(doc(messagesRef), {
     chatId,
     senderId,
+    // Siempre string, aunque vaya vacío: las reglas exigen que `text` exista y
+    // sea string, y una foto sin pie es un caso válido.
     text: trimmed,
+    ...(imageUrl ? { imageUrl } : {}),
     timestamp: new Date().toISOString(),
     read: false,
   });
 
+  // Vista previa en la lista de chats: sin texto, se anuncia la foto, para que
+  // la conversación no aparezca en blanco.
+  const preview = trimmed
+    ? (trimmed.length > 60 ? trimmed.slice(0, 60) + '…' : trimmed)
+    : '📷 Foto';
+
   await updateDoc(doc(db, 'chats', chatId), {
-    lastMessage: trimmed.length > 60 ? trimmed.slice(0, 60) + '…' : trimmed,
+    lastMessage: preview,
     lastMessageTime: new Date().toISOString(),
     unreadFor,
   });

@@ -147,6 +147,28 @@ service cloud.firestore {
         (
           !('text' in request.resource.data) ||
           (request.resource.data.text is string && request.resource.data.text.size() <= 1000)
+        ) &&
+        // Hasta 3 medios por publicación. El lenguaje de reglas no sabe
+        // iterar listas, así que acá solo se puede acotar la cantidad; la
+        // forma de cada elemento ({type, url}) la arma el cliente y el
+        // tamaño y tipo real del archivo los corta storage.rules al subirlo.
+        (
+          !('media' in request.resource.data) || (
+            request.resource.data.media is list &&
+            request.resource.data.media.size() <= 3
+          )
+        ) &&
+        // `image` es el primer medio, desnormalizado. Se valida que apunte a
+        // Storage de este proyecto para que el campo no sirva como vía de
+        // incrustar contenido alojado afuera.
+        (
+          !('image' in request.resource.data) ||
+          request.resource.data.image == null || (
+            request.resource.data.image is string &&
+            request.resource.data.image.matches(
+              'https://firebasestorage.googleapis.com/v0/b/enfiestados-alpha[.]firebasestorage[.]app/o/posts%2F.*'
+            )
+          )
         );
       allow update: if isAuth() && (
         // El autor puede editar su propio post
@@ -255,8 +277,30 @@ service cloud.firestore {
       allow create: if isAuth() &&
         request.resource.data.senderId == request.auth.uid &&
         request.resource.data.text is string &&
-        request.resource.data.text.size() > 0 &&
         request.resource.data.text.size() <= 1000 &&
+        // Antes se exigía text.size() > 0. Ahora un mensaje vale si trae texto
+        // o imagen: una foto sin pie es un caso legítimo. Lo que no se permite
+        // es un mensaje completamente vacío.
+        (request.resource.data.text.size() > 0 || 'imageUrl' in request.resource.data) &&
+        // La imagen tiene que ser una URL de Firebase Storage de ESTE proyecto.
+        // Sin esto, el campo aceptaría cualquier URL y el chat se volvería un
+        // vector para incrustar contenido alojado afuera.
+        (
+          !('imageUrl' in request.resource.data) || (
+            request.resource.data.imageUrl is string &&
+            request.resource.data.imageUrl.matches(
+              'https://firebasestorage.googleapis.com/v0/b/enfiestados-alpha[.]firebasestorage[.]app/o/chats%2F.*'
+            )
+          )
+        ) &&
+        // En un grupo, mandar fotos es solo del dueño (el admin), aunque el
+        // writePolicy sea 'all' y todos puedan escribir texto. En un directo
+        // no aplica: cualquiera de los dos puede.
+        (
+          !('imageUrl' in request.resource.data) ||
+          !isGroupData(get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data) ||
+          get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.ownerId == request.auth.uid
+        ) &&
         request.resource.data.keys().hasAll(['chatId', 'senderId', 'text', 'timestamp']) &&
         exists(/databases/$(database)/documents/chats/$(request.resource.data.chatId)) &&
         request.auth.uid in get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.participants &&

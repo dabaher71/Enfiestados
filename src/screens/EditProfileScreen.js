@@ -83,7 +83,13 @@ export default function EditProfileScreen({ route, navigation }) {
       xhr.open('GET', uri, true);
       xhr.send(null);
     });
-    const filename = `${path}/${Date.now()}_${Math.random().toString(36).slice(7)}.jpg`;
+    // El uid va en la ruta: storage.rules exige {carpeta}/{uid}/... para poder
+    // verificar que quien sube es el dueño. Antes el archivo quedaba suelto en
+    // `avatars/archivo.jpg`, que no calza con `match /avatars/{userId}/...` y
+    // habría sido rechazado apenas esas reglas se desplegaran.
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error('No autenticado');
+    const filename = `${path}/${uid}/${Date.now()}_${Math.random().toString(36).slice(7)}.jpg`;
     const storageRef = ref(storage, filename);
     await uploadBytes(storageRef, blob);
     const url = await getDownloadURL(storageRef);

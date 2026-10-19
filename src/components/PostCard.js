@@ -3,14 +3,15 @@
 // stats ocultos cuando son 0, eliminar detrás del "···", bg.surface + radius.lg.
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { memo, useCallback, useState } from 'react';
-import { Image } from 'expo-image';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import MediaCarousel from './ui/MediaCarousel';
 import PostDetailModal from './PostDetailModal';
 import Avatar from './ui/Avatar';
 import ReportModal from './ReportModal';
 import Text from './ui/Text';
 import { toDate } from '../lib/format';
+import { getPostMedia } from '../services/postService';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -41,6 +42,11 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
   const isOwner = post.userId === currentUserId;
   const likeCount    = post.likes?.length ?? 0;
   const commentCount = post.comments?.length ?? 0;
+
+  // useMemo y no un cálculo suelto: MediaCarousel recibe el arreglo por prop y
+  // un arreglo nuevo en cada render le reinicia el carrusel al primer slide
+  // mientras el usuario está pasando fotos.
+  const mediaUrls = useMemo(() => getPostMedia(post).map(m => m.url), [post]);
 
   const handleDelete = useCallback(() => {
     setShowMenu(false);
@@ -80,15 +86,18 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
         onUserPress={onUserPress}
       />
 
-      {/* Imagen — respeta relación de aspecto */}
-      {post.image ? (
-        <Image
-          source={{ uri: post.image }}
-          style={styles.postImage}
-          contentFit="cover"
-          transition={200}
+      {/* Medios — hasta 3. Se usa MediaCarousel, el mismo de las tarjetas de
+          evento: ya resuelve el swipe, los puntos, el contador y el encuadre
+          según la forma de cada foto. getPostMedia lee tanto el arreglo
+          `media` nuevo como el campo `image` suelto de las publicaciones
+          viejas, así que no hace falta migrar nada. */}
+      {mediaUrls.length > 0 && (
+        <MediaCarousel
+          images={mediaUrls}
+          aspectRatio={4 / 3}
+          labelPrefix={post.text ? 'de la publicación' : ''}
         />
-      ) : null}
+      )}
 
       <View style={styles.content}>
         {/* Header: avatar + nombre + tiempo + menú ··· */}
@@ -196,10 +205,6 @@ const styles = StyleSheet.create({
     marginBottom: space[4],
     borderRadius: radius.lg,
     overflow: 'hidden',
-  },
-  postImage: {
-    width: '100%',
-    aspectRatio: 4 / 3,   // respeta relación de aspecto, no altura fija
   },
   content: { padding: space[4] },
   header:  { flexDirection: 'row', alignItems: 'center', marginBottom: space[3], position: 'relative' },

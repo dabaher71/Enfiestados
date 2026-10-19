@@ -10,7 +10,7 @@ import {
   ScrollView, StyleSheet, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createPost } from '../services/postService';
+import { createPost, MAX_POST_MEDIA } from '../services/postService';
 import { auth, db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
@@ -31,43 +31,62 @@ const MAX_TEXT = INPUT_LIMITS?.POST_TEXT ?? 1000;
 export default function CreatePostScreen({ navigation }) {
   const { colors } = useTheme();
   const [text,       setText]       = useState('');
-  const [image,      setImage]      = useState(null);
+  const [media,      setMedia]      = useState([]);   // hasta 3 URIs locales
   const [visibility, setVisibility] = useState('public');
   const [loading,    setLoading]    = useState(false);
 
   const user = auth.currentUser;
-  const canPost = (text.trim().length > 0 || image) && !loading;
+  const libres = MAX_POST_MEDIA - media.length;
+  const canPost = (text.trim().length > 0 || media.length > 0) && !loading;
+
+  const avisarLleno = () =>
+    Alert.alert('Máximo alcanzado', `Podés adjuntar hasta ${MAX_POST_MEDIA} archivos por publicación.`);
 
   const pickImage = async () => {
+    if (libres <= 0) { avisarLleno(); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      // allowsMultipleSelection no convive con allowsEditing: si se piden las
+      // dos, el recorte gana y el selector vuelve a ser de a una.
+      allowsMultipleSelection: true,
+      selectionLimit: libres,
       quality: 0.8,
     });
-    if (!result.canceled) {
-      if (!validateImageSize(result.assets[0])) {
-        Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB');
-        return;
-      }
-      setImage(result.assets[0].uri);
+    if (result.canceled) return;
+
+    const validas = [];
+    let pesadas = 0;
+    for (const a of result.assets.slice(0, libres)) {
+      if (validateImageSize(a)) validas.push(a.uri); else pesadas++;
     }
+    if (pesadas > 0) {
+      Alert.alert(
+        'Archivos muy grandes',
+        pesadas === 1 ? 'Una imagen supera los 5 MB y no se agregó.'
+                      : `${pesadas} imágenes superan los 5 MB y no se agregaron.`
+      );
+    }
+    if (validas.length) setMedia(prev => [...prev, ...validas].slice(0, MAX_POST_MEDIA));
   };
 
   const takePhoto = async () => {
+    if (libres <= 0) { avisarLleno(); return; }
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permiso necesario', 'Necesitamos acceso a la cámara'); return; }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
     if (!result.canceled) {
       if (!validateImageSize(result.assets[0])) { Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB'); return; }
-      setImage(result.assets[0].uri);
+      setMedia(prev => [...prev, result.assets[0].uri].slice(0, MAX_POST_MEDIA));
     }
   };
+
+  const quitarMedia = (i) => setMedia(prev => prev.filter((_, idx) => idx !== i));
 
   const handlePost = async () => {
     if (!canPost) return;
     setLoading(true);
     try {
-      await createPost({ text: text.trim(), image, visibility });
+      await createPost({ text: text.trim(), media, visibility });
       navigation.goBack();
       const u = auth.currentUser;
       if (u) {
@@ -164,14 +183,38 @@ export default function CreatePostScreen({ navigation }) {
             </Text>
           )}
 
-          {/* Vista previa de imagen */}
-          {image && (
-            <View style={styles.imagePreview}>
-              <Image source={{ uri: image }} style={styles.previewImg} contentFit="cover" />
-              <Pressable style={styles.removeImg} onPress={() => setImage(null)} accessibilityLabel="Quitar imagen">
-                <Ionicons name="close-circle" size={28} color={colors['status.urgent']} />
-              </Pressable>
+          {/* Vista previa — una sola ocupa todo el ancho; dos o tres van en
+              fila, porque a tamaño completo había que scrollear para ver lo
+              que uno acababa de adjuntar. */}
+          {media.length > 0 && (
+            <View style={styles.mediaWrap}>
+              {media.map((uri, i) => (
+                <View
+                  key={`${uri}_${i}`}
+                  style={[styles.mediaItem, media.length === 1 && styles.mediaItemSolo]}
+                >
+                  <Image
+                    source={{ uri }}
+                    style={media.length === 1 ? styles.previewSolo : styles.previewChico}
+                    contentFit="cover"
+                  />
+                  <Pressable
+                    style={styles.removeImg}
+                    onPress={() => quitarMedia(i)}
+                    hitSlop={8}
+                    accessibilityLabel={`Quitar archivo ${i + 1} de ${media.length}`}
+                  >
+                    <Ionicons name="close-circle" size={26} color={colors['status.urgent']} />
+                  </Pressable>
+                </View>
+              ))}
             </View>
+          )}
+
+          {media.length > 0 && (
+            <Text variant="caption" color="text.tertiary" style={styles.contador}>
+              {media.length} de {MAX_POST_MEDIA}
+            </Text>
           )}
         </ScrollView>
 
@@ -200,9 +243,13 @@ const styles = StyleSheet.create({
   authorInfo: { flex: 1, gap: space[2] },
   visibilityWrap: { maxWidth: 200 },
   textInput: { fontSize: 17, lineHeight: 26, paddingHorizontal: space[5], paddingBottom: space[4], minHeight: 100, textAlignVertical: 'top' },
-  imagePreview: { marginHorizontal: space[5], borderRadius: radius.lg, overflow: 'hidden', position: 'relative', marginBottom: space[3] },
-  previewImg: { width: '100%', aspectRatio: 4/3 },
-  removeImg:  { position: 'absolute', top: space[2], right: space[2] },
+  mediaWrap:  { flexDirection: 'row', flexWrap: 'wrap', gap: space[2], paddingHorizontal: space[5], marginBottom: space[2] },
+  mediaItem:  { flex: 1, minWidth: 96, borderRadius: radius.md, overflow: 'visible', position: 'relative' },
+  mediaItemSolo: { flexBasis: '100%' },
+  previewSolo:  { width: '100%', aspectRatio: 4/3, borderRadius: radius.lg },
+  previewChico: { width: '100%', aspectRatio: 1,   borderRadius: radius.md },
+  contador:   { paddingHorizontal: space[5], marginBottom: space[3] },
+  removeImg:  { position: 'absolute', top: -8, right: -8 },
   toolbar:    { flexDirection: 'row', paddingHorizontal: space[5], paddingVertical: space[3], borderTopWidth: StyleSheet.hairlineWidth, gap: space[4] },
   toolBtn:    { flexDirection: 'row', alignItems: 'center', gap: space[2] },
 });

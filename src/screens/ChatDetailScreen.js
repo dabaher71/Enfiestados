@@ -2,10 +2,12 @@
 // LÓGICA INTACTA: mensajes en tiempo real, event-messages, date separators, mark-as-read.
 // PRESENTACIÓN: design system v1.1 — tokens, Avatar, Text.
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
+  Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +17,9 @@ import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
 import useBlockedUsers from '../hooks/useBlockedUsers';
-import { canWriteInChat, isGroupChat, markMessagesAsRead, sendMessage, subscribeToMessages } from '../services/chatService';
+import ImageViewerModal from '../components/ImageViewerModal';
+import { validateImageSize } from '../utils/security';
+import { canSendPhotoInChat, canWriteInChat, isGroupChat, markMessagesAsRead, sendMessage, subscribeToMessages, uploadChatPhoto } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
@@ -71,6 +75,8 @@ export default function ChatDetailScreen({ route, navigation }) {
   // Perfiles de los miembros, para poner nombre y avatar a cada burbuja: en
   // un grupo no alcanza con "mío / del otro".
   const [members,    setMembers]    = useState({});
+  const [sendingPhoto, setSendingPhoto] = useState(false);
+  const [viewerUri,  setViewerUri]  = useState(null);
   const listRef = useRef();
   const userId  = auth.currentUser?.uid;
   const { allBlocked } = useBlockedUsers();
@@ -81,6 +87,7 @@ export default function ChatDetailScreen({ route, navigation }) {
   // siendo miembro legítimo para el resto.
   const isBlocked = !group && allBlocked.has(otherUserId);
   const canWrite  = chat ? canWriteInChat(chat, userId) : true;
+  const canSendPhoto = chat ? canSendPhotoInChat(chat, userId) : true;
 
   useEffect(() => {
     const unsubChat = onSnapshot(doc(db, 'chats', chatId), snap => {
@@ -123,6 +130,32 @@ export default function ChatDetailScreen({ route, navigation }) {
     if (!text || isBlocked || !canWrite) return;
     setNewMessage('');
     try { await sendMessage(chatId, userId, text); } catch {}
+  };
+
+  // La foto se manda sola, sin arrastrar lo que haya escrito en el campo: si
+  // el texto viajara con ella, el usuario perdería el borrador que estaba
+  // redactando sin haberlo pedido.
+  const handlePickPhoto = async () => {
+    if (!canSendPhoto || isBlocked || sendingPhoto) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!validateImageSize(asset)) {
+      Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5 MB.');
+      return;
+    }
+    setSendingPhoto(true);
+    try {
+      const url = await uploadChatPhoto(asset.uri, userId);
+      await sendMessage(chatId, userId, '', url);
+    } catch (e) {
+      Alert.alert('No se pudo enviar', e?.message ?? 'Intentá de nuevo.');
+    } finally {
+      setSendingPhoto(false);
+    }
   };
 
   const handleEventPress = useCallback(async (eventId) => {
@@ -252,9 +285,27 @@ export default function ChatDetailScreen({ route, navigation }) {
                 {sender.name ?? 'Usuario'}
               </Text>
             )}
-            <Text variant="body" style={{ color: isMine ? ownText : colors['text.primary'] }}>
-              {item.text}
-            </Text>
+            {/* Foto, si el mensaje trae una. El texto queda como pie y puede
+                venir vacío: una foto sola es un mensaje válido. */}
+            {item.imageUrl ? (
+              <Pressable
+                onPress={() => setViewerUri(item.imageUrl)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Ver foto en grande"
+              >
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={styles.msgPhoto}
+                  contentFit="cover"
+                  transition={150}
+                />
+              </Pressable>
+            ) : null}
+            {item.text ? (
+              <Text variant="body" style={{ color: isMine ? ownText : colors['text.primary'] }}>
+                {item.text}
+              </Text>
+            ) : null}
             <Text variant="caption" style={{ color: isMine ? `${ownText}99` : colors['text.tertiary'], alignSelf: 'flex-end', marginTop: 3 }}>
               {formatTime(item.timestamp)}
             </Text>
@@ -266,6 +317,11 @@ export default function ChatDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
+      <ImageViewerModal
+        uri={viewerUri}
+        visible={!!viewerUri}
+        onClose={() => setViewerUri(null)}
+      />
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors['border.subtle'] }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel="Volver">
@@ -334,6 +390,25 @@ export default function ChatDetailScreen({ route, navigation }) {
               onChangeText={setNewMessage}
               multiline
             />
+            {/* Adjuntar foto. En un directo lo ve cualquiera de los dos; en
+                un grupo, solo el dueño. El corte real está en
+                firestore.rules — esto solo evita ofrecer algo que va a
+                fallar. */}
+            {canSendPhoto && (
+              <Pressable
+                style={styles.photoBtn}
+                onPress={handlePickPhoto}
+                disabled={sendingPhoto}
+                hitSlop={6}
+                accessibilityLabel="Enviar una foto"
+              >
+                <Ionicons
+                  name={sendingPhoto ? 'ellipsis-horizontal' : 'image-outline'}
+                  size={22}
+                  color={colors['text.secondary']}
+                />
+              </Pressable>
+            )}
             <Pressable
               style={[styles.sendBtn, { backgroundColor: colors['action.primary'] }]}
               onPress={handleSend}
@@ -355,6 +430,8 @@ const styles = StyleSheet.create({
   headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center' },
 
   list: { paddingHorizontal: space[4], paddingVertical: space[3], gap: space[2] },
+  msgPhoto: { width: 220, height: 220, borderRadius: radius.md, marginBottom: space[1] },
+  photoBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 
   dateSep: { flexDirection: 'row', alignItems: 'center', marginVertical: space[3], gap: space[2] },
   dateSepLine: { flex: 1, height: StyleSheet.hairlineWidth },
