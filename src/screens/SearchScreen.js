@@ -118,19 +118,29 @@ function PricePin({ event, selected, colors }) {
     : typeof event.price === 'number' ? `₡${event.price}` : '';
   if (!label) return null;
 
+  // El pin de precio se invierte con el tema en vez de ser oscuro fijo: en
+  // oscuro queda una píldora oscura con texto claro, y en claro una píldora
+  // blanca con texto oscuro. Antes el fondo era '#1C1726' hardcodeado, así
+  // que en tema claro aparecía un borrón casi negro sobre un mapa claro.
+  // El borde lo despega del mapa, que en claro es casi del mismo tono.
+  //
+  // El de "Gratis" lleva texto oscuro sobre el verde, no claro: sobre
+  // status.free el texto claro daba 2.4:1 de contraste en tema oscuro, muy
+  // por debajo de AA. Con texto oscuro sube a 7.6:1.
+  const bg = isFree ? colors['status.free'] : colors['bg.raised'];
+  const fg = isFree ? colors['text.onAction'] : colors['text.primary'];
+
   return (
     <View style={[
       styles.pin,
       selected && styles.pinSelected,
-      isFree
-        ? { backgroundColor: colors['status.free'] }
-        : { backgroundColor: '#1C1726' },         // oscuro para precio (§ 3.4)
+      { backgroundColor: bg, borderWidth: 1, borderColor: colors['border.strong'] },
       selected && { borderWidth: 2, borderColor: colors['action.primary'] },
     ]}>
       <Text style={{
         fontSize: 11.5,
         fontFamily: 'PlusJakartaSans_800ExtraBold',
-        color: '#FDFBF7',
+        color: fg,
       }}>
         {label}
       </Text>
