@@ -17,6 +17,8 @@ import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
+import useBlockedUsers from '../hooks/useBlockedUsers';
+import { blockUser, unblockUser } from '../services/blockService';
 import { getOrCreateChat } from '../services/chatService';
 import { subscribeToEvents } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
@@ -38,9 +40,13 @@ export default function UserProfileScreen({ route, navigation }) {
   const [loading,          setLoading]          = useState(true);
   const [isFollowing,      setIsFollowing]      = useState(false);
   const [hasPending,       setHasPending]       = useState(false);
-  const [isBlocked,        setIsBlocked]        = useState(false);
-  const [theyBlockedMe,    setTheyBlockedMe]    = useState(false);
   const [showReport,       setShowReport]       = useState(false);
+
+  // Se derivan de la colección blocks en tiempo real: ya no se leen del doc
+  // ajeno (donde la lista de bloqueados era pública).
+  const { blockedByMe, blockedMe } = useBlockedUsers();
+  const isBlocked     = blockedByMe.has(userId);
+  const theyBlockedMe = blockedMe.has(userId);
 
   const currentUserId  = auth.currentUser?.uid;
   const isOwnProfile   = currentUserId === userId;
@@ -61,9 +67,6 @@ export default function UserProfileScreen({ route, navigation }) {
         setUser(data);
         setIsFollowing(data.followers?.includes(currentUserId) || false);
         setHasPending(data.followRequests?.includes(currentUserId) || false);
-        setTheyBlockedMe(data.usuariosBloqueados?.includes(currentUserId) || false);
-        const mySnap = await getDoc(doc(db, 'users', currentUserId));
-        setIsBlocked(mySnap.data()?.usuariosBloqueados?.includes(userId) || false);
       }
     } catch {}
     setLoading(false);
@@ -119,16 +122,16 @@ export default function UserProfileScreen({ route, navigation }) {
         try {
           const myRef = doc(db, 'users', currentUserId);
           if (isBlocked) {
-            await updateDoc(myRef, { usuariosBloqueados: arrayRemove(userId) });
-            setIsBlocked(false);
+            await unblockUser(currentUserId, userId);
           } else {
-            await updateDoc(myRef, { usuariosBloqueados: arrayUnion(userId), following: arrayRemove(userId), followers: arrayRemove(userId) });
+            await blockUser(currentUserId, userId);
+            await updateDoc(myRef, { following: arrayRemove(userId), followers: arrayRemove(userId) });
             // En el doc ajeno solo se puede mover el propio uid y de a un
             // campo (regla de users, rama b): me saco de sus followers. Su
             // `following` queda con una entrada obsoleta, que es inofensiva
             // porque el filtro de bloqueo ya lo esconde en ambos sentidos.
             await updateDoc(doc(db, 'users', userId), { followers: arrayRemove(currentUserId) });
-            setIsBlocked(true); setIsFollowing(false); setHasPending(false);
+            setIsFollowing(false); setHasPending(false);
           }
         } catch { Alert.alert('Error', 'No se pudo completar la acción'); }
       }},

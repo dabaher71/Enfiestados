@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { compressForUpload } from '../lib/imageUpload';
 import { useState } from 'react';
 import {
   Alert, KeyboardAvoidingView, Modal,
@@ -65,12 +66,13 @@ export default function CreateAdScreen({ navigation }) {
     if (status !== 'granted') return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [16, 9], quality: 0.8,
+      allowsEditing: true, aspect: [16, 9], quality: 1,
     });
     if (result.canceled) return;
     setUploading(true);
     try {
-      const uri = result.assets[0].uri;
+      // Comprimir antes de subir: el tope de storage.rules para ads es 5 MB.
+      const { uri } = await compressForUpload(result.assets[0]);
       const res  = await fetch(uri);
       const blob = await res.blob();
       const storageRef = ref(storage, `ads/${userId}/${Date.now()}.jpg`);

@@ -173,7 +173,6 @@ export default function HomeScreen({ navigation }) {
   const [userInterests,  setUserInterests]  = useState([]);
   const [hiddenIds,      setHiddenIds]      = useState(new Set());
   const [internalAds,    setInternalAds]    = useState([]);
-  const [unreadMessages, setUnreadMessages] = useState(0);
   const [savedExternalIds, setSavedExternalIds] = useState(new Set());
   const { allBlocked } = useBlockedUsers();
 
@@ -365,7 +364,7 @@ export default function HomeScreen({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-        <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} />
+        <HomeHeader colors={colors} navigation={navigation} location={userLocation} />
         <HomeTabs activeTab={activeTab} onSelect={setActiveTab} />
         <HomeChips active={timeFilter} onSelect={() => {}} />
         <SkeletonList count={5} />
@@ -378,7 +377,7 @@ export default function HomeScreen({ navigation }) {
   if (error) {
     return (
       <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
-        <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} />
+        <HomeHeader colors={colors} navigation={navigation} location={userLocation} />
         <EmptyState
           icon={<Ionicons name="cloud-offline-outline" size={28} color={colors['text.tertiary']} />}
           title="No pudimos cargar el feed"
@@ -393,7 +392,7 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
 
       {/* 1 · HEADER — flexShrink 0, se compacta a 44px al scrollear (§ 3.3) */}
-      <HomeHeader colors={colors} navigation={navigation} unread={unreadMessages} location={userLocation} collapseAnim={collapseAnim} />
+      <HomeHeader colors={colors} navigation={navigation} location={userLocation} collapseAnim={collapseAnim} />
 
       {/* 2 · SEGMENTED — flexShrink 0 */}
       <HomeTabs activeTab={activeTab} onSelect={setActiveTab} />
@@ -459,7 +458,7 @@ export default function HomeScreen({ navigation }) {
 // § 3.3: header + wordmark + ubicación colapsan a una fila de 44px al
 // scrollear. collapseAnim es opcional (las pantallas de loading/error lo
 // omiten y quedan siempre expandidas — no scrollean).
-function HomeHeader({ colors, navigation, unread, location, collapseAnim }) {
+function HomeHeader({ colors, navigation, location, collapseAnim }) {
   const anim = collapseAnim ?? STATIC_ZERO;
   return (
     <Animated.View style={[
@@ -503,19 +502,7 @@ function HomeHeader({ colors, navigation, unread, location, collapseAnim }) {
         </Animated.View>
       </View>
 
-      {/* Mensajes con badge */}
-      <Pressable
-        onPress={() => navigation.navigate('Messages')}
-        style={styles.iconBtn}
-        hitSlop={2}
-        accessibilityLabel="Mensajes"
-      >
-        <Ionicons name="chatbubble-outline" size={22} color={colors['text.primary']} />
-        {unread > 0 && (
-          <View style={[styles.badge, { backgroundColor: colors['status.urgent'], borderColor: colors['bg.base'] }]} />
-        )}
-      </Pressable>
-
+      {/* Los mensajes viven en la pestaña Alertas (NotificationsScreen). */}
       {/* Botón "Crear" — amarillo con texto */}
       <Pressable
         onPress={() => {
@@ -584,22 +571,6 @@ const styles = StyleSheet.create({
   },
   logo: { width: 36, height: 36, borderRadius: 11 },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    right: 6,
-    top: 6,
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    borderWidth: 2,
-  },
   createChip: {
     flexDirection: 'row',
     alignItems: 'center',

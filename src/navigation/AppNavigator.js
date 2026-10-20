@@ -29,7 +29,6 @@ import AdvertiserRequestScreen from '../screens/AdvertiserRequestScreen';
 import InterestsScreen from '../screens/InterestsScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
 import ExternalEventDetailScreen from '../screens/ExternalEventDetailScreen';
-import MessagesScreen from '../screens/MessagesScreen';
 import NotificationsSettingsScreen from '../screens/NotificationsSettingsScreen';
 import OrganizerPanelScreen from '../screens/OrganizerPanelScreen';
 import DevCatalogScreen from '../screens/DevCatalogScreen';
@@ -161,7 +160,6 @@ export default function AppNavigator() {
               <Stack.Screen name="AdCenter" component={AdCenterScreen} />
               <Stack.Screen name="CreateAd" component={CreateAdScreen} />
               <Stack.Screen name="AdvertiserRequest" component={AdvertiserRequestScreen} />
-              <Stack.Screen name="Messages" component={MessagesScreen} />
               <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
               <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
               <Stack.Screen name="NotificationsSettings" component={NotificationsSettingsScreen} />

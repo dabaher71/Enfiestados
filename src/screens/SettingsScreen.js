@@ -76,7 +76,9 @@ export default function SettingsScreen({ navigation }) {
     setDeleteLoading(true);
     setDeleteError('');
     try {
-      await httpsCallable(functions, 'confirmAccountDeletion')({ code: deleteCode });
+      // El borrado completo (datos + Storage) puede pasar del timeout por
+      // defecto de 70s; la función tiene hasta 300s.
+      await httpsCallable(functions, 'confirmAccountDeletion', { timeout: 300000 })({ code: deleteCode });
       closeDeleteFlow();
       await signOut(auth);
       Alert.alert('Cuenta eliminada', 'Gracias por haber sido parte de Enfiestados.');

@@ -12,16 +12,14 @@ service cloud.firestore {
     function isVerified() {
       return isAuth() && request.auth.token.email_verified == true;
     }
-    function isBlocked(data) {
-      return request.auth.uid in data.get('usuariosBloqueados', []);
-    }
     // Bloqueo mutuo entre el usuario actual y otherUid: cualquiera de los dos
     // pudo haber bloqueado al otro. Usado para negar chats/mensajes entre
     // ambos aunque el cliente esté modificado — la UI ya oculta estas
     // acciones, esto es la barrera real del lado del servidor.
+    // Los bloqueos viven en blocks/{blockerId}_{blockedId} (ver más abajo).
     function isBlockedPair(otherUid) {
-      return isBlocked(get(/databases/$(database)/documents/users/$(otherUid)).data) ||
-        otherUid in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('usuariosBloqueados', []);
+      return exists(/databases/$(database)/documents/blocks/$(otherUid + '_' + request.auth.uid)) ||
+        exists(/databases/$(database)/documents/blocks/$(request.auth.uid + '_' + otherUid));
     }
     function otherParticipant(participants) {
       return participants[0] == request.auth.uid ? participants[1] : participants[0];
@@ -64,7 +62,11 @@ service cloud.firestore {
       // isAdmin nunca se toca desde el cliente: es el campo que autorizan
       // processReportAction/triggerScrape (functions/index.js). Solo se
       // otorga manualmente por el equipo (Firebase Console / Admin SDK).
-      allow create: if isOwner(userId) && !('isAdmin' in request.resource.data);
+      // `email` y `usuariosBloqueados` ya no se guardan acá: este doc lo lee
+      // cualquier usuario autenticado, así que eran públicos para todos. El
+      // correo vive en Firebase Auth y los bloqueos en /blocks.
+      allow create: if isOwner(userId) &&
+        !request.resource.data.keys().hasAny(['isAdmin', 'email', 'usuariosBloqueados']);
       allow update: if (
         // (a) El dueño edita su perfil. Antes esta rama solo bloqueaba
         // 'isAdmin', así que cualquiera podía auto-asignarse `verificado`
@@ -73,7 +75,7 @@ service cloud.firestore {
         isOwner(userId) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'isAdmin', 'isAdvertiser', 'adCredits', 'verificado',
-          'banned', 'bannedAt', 'bannedReason'
+          'banned', 'bannedAt', 'bannedReason', 'email', 'usuariosBloqueados'
         ]) &&
         // Sobre sus propios followers solo puede QUITAR (sacarse un seguidor
         // o la limpieza al bloquear). Agregar sería inflarse el contador.
@@ -323,6 +325,24 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/chats/$(resource.data.chatId)) &&
         request.auth.uid in get(/databases/$(database)/documents/chats/$(resource.data.chatId)).data.participants;
       allow delete: if false;
+    }
+
+    // ── blocks ────────────────────────────────────────────────────────────────
+    // Un doc por bloqueo, con ID {blockerId}_{blockedId} para que isBlockedPair
+    // lo encuentre con exists(). Solo lo ven las dos partes: quien bloquea
+    // (para su lista) y quien fue bloqueado (para ocultar en ambos sentidos).
+    match /blocks/{blockId} {
+      allow read: if isAuth() && (
+        resource.data.blockerId == request.auth.uid ||
+        resource.data.blockedId == request.auth.uid
+      );
+      allow create, update: if isAuth() &&
+        request.resource.data.keys().hasOnly(['blockerId', 'blockedId', 'createdAt']) &&
+        request.resource.data.blockerId == request.auth.uid &&
+        request.resource.data.blockedId is string &&
+        request.resource.data.blockedId != request.auth.uid &&
+        blockId == request.auth.uid + '_' + request.resource.data.blockedId;
+      allow delete: if isAuth() && resource.data.blockerId == request.auth.uid;
     }
 
     // ── eventos_externos ──────────────────────────────────────────────────────

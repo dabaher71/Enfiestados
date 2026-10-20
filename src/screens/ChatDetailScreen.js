@@ -18,7 +18,7 @@ import Text from '../components/ui/Text';
 import { auth, db } from '../config/firebase';
 import useBlockedUsers from '../hooks/useBlockedUsers';
 import ImageViewerModal from '../components/ImageViewerModal';
-import { validateImageSize } from '../utils/security';
+import { compressForUpload } from '../lib/imageUpload';
 import { canSendPhotoInChat, canWriteInChat, isGroupChat, markMessagesAsRead, sendMessage, subscribeToMessages, uploadChatPhoto } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -139,17 +139,15 @@ export default function ChatDetailScreen({ route, navigation }) {
     if (!canSendPhoto || isBlocked || sendingPhoto) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
+      quality: 1, // la compresión real la hace compressForUpload
     });
     if (result.canceled) return;
-    const asset = result.assets[0];
-    if (!validateImageSize(asset)) {
-      Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5 MB.');
-      return;
-    }
     setSendingPhoto(true);
     try {
-      const url = await uploadChatPhoto(asset.uri, userId);
+      // Comprimir antes de subir (ver lib/imageUpload.js): una foto de cámara
+      // sin comprimir pasa casi siempre del tope de 5 MB de storage.rules.
+      const { uri } = await compressForUpload(result.assets[0]);
+      const url = await uploadChatPhoto(uri, userId);
       await sendMessage(chatId, userId, '', url);
     } catch (e) {
       Alert.alert('No se pudo enviar', e?.message ?? 'Intentá de nuevo.');

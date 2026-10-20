@@ -34,8 +34,7 @@ retención, moderación y tratamiento de datos personales.
   `chats/{uid}/`.
 - **Cuánto tiempo se conserva** una foto enviada por chat, y qué pasa al
   borrar el mensaje, al salir del grupo o al eliminar la cuenta.
-  **Hoy no se borra nada de Storage** cuando se elimina una cuenta — ver más
-  abajo.
+  Al eliminar la cuenta se borra todo, incluido Storage (desde 2026-10-19).
 - **Metadatos EXIF**: las fotos pueden traer geolocalización. Hoy **no se
   limpian** antes de subirlas. Es un dato personal viajando sin declarar.
   Decidir entre limpiarlos al subir (preferible) o declararlo.
@@ -52,13 +51,15 @@ retención, moderación y tratamiento de datos personales.
 
 ## Deuda técnica relacionada
 
-- **Borrado en Storage**: `confirmAccountDeletion` elimina los documentos de
-  Firestore pero **no los archivos de Storage**. Con fotos de chat de por
-  medio, esto pasa de ser un descuido a un incumplimiento de lo que la
-  política vaya a prometer.
+- ~~**Borrado en Storage**~~ — resuelto el 2026-10-19: `confirmAccountDeletion`
+  ahora borra todo (Firestore + Storage) vía `deleteAllUserData`. Falta
+  desplegar las functions.
 - **Sin moderación de imágenes de chat**: no hay reporte ni revisión sobre las
   fotos enviadas en conversaciones.
-- **Sin limpieza de EXIF** al subir.
+- ~~**Sin limpieza de EXIF** al subir~~ — desde 2026-10-19 toda foto pasa por
+  `compressForUpload` (`src/lib/imageUpload.js`), que la recodifica a JPEG y
+  descarta los metadatos. Conviene confirmarlo con una foto con GPS antes de
+  declararlo en la política.
 - **Video apagado**: encenderlo requiere `expo-video`, que es módulo nativo y
   obliga a `prebuild` + `pod install` + build nuevo. Además hay que ampliar
   `storage.rules` (hoy solo acepta `image/*`) y definir límites de tamaño y

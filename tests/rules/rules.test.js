@@ -14,7 +14,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 let env;
 
@@ -47,9 +47,9 @@ after(async () => { await env?.cleanup(); });
 async function seed() {
   await env.clearFirestore();
   await open(async (db) => {
-    await setDoc(doc(db, 'users', ANA),   { uid: ANA,  name: 'Ana',  email: 'ana@x.com',  followers: [], following: [], followRequests: [], verificado: false, usuariosBloqueados: [] });
-    await setDoc(doc(db, 'users', BETO),  { uid: BETO, name: 'Beto', email: 'beto@x.com', followers: [], following: [], followRequests: [], verificado: false, usuariosBloqueados: [] });
-    await setDoc(doc(db, 'users', ADMIN), { uid: ADMIN, name: 'Admin', isAdmin: true, followers: [], usuariosBloqueados: [] });
+    await setDoc(doc(db, 'users', ANA),   { uid: ANA,  name: 'Ana',  followers: [], following: [], followRequests: [], verificado: false });
+    await setDoc(doc(db, 'users', BETO),  { uid: BETO, name: 'Beto', followers: [], following: [], followRequests: [], verificado: false });
+    await setDoc(doc(db, 'users', ADMIN), { uid: ADMIN, name: 'Admin', isAdmin: true, followers: [] });
 
     // Dos comentarios: con uno solo, "vaciar" y "borrar uno" dan el mismo
     // tamaño final y la prueba de borrado masivo no probaría nada.
@@ -407,6 +407,93 @@ describe('accountDeletionRequests — códigos de borrado', () => {
   it('ni siquiera el dueño de la cuenta puede escribirlos', async () => {
     await assertFails(
       setDoc(doc(ctx(ANA), 'accountDeletionRequests', ANA), { codeHash: 'x', attempts: 0 })
+    );
+  });
+});
+
+describe('users — datos privados fuera del perfil público', () => {
+  beforeEach(seed);
+
+  // users/{uid} lo lee cualquier autenticado (invitados incluidos), así que
+  // el correo y la lista de bloqueados no pueden vivir ahí.
+  it('un perfil nuevo NO puede traer el email', async () => {
+    await assertFails(
+      setDoc(doc(ctx(GUEST), 'users', GUEST), { uid: GUEST, name: 'Invitado', email: 'g@x.com' })
+    );
+  });
+
+  it('ni la lista de bloqueados', async () => {
+    await assertFails(
+      setDoc(doc(ctx(GUEST), 'users', GUEST), { uid: GUEST, name: 'Invitado', usuariosBloqueados: [] })
+    );
+  });
+
+  it('Ana NO puede volver a escribir su email en el perfil', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(ANA), 'users', ANA), { email: 'ana@x.com' })
+    );
+  });
+
+  it('pero SÍ se puede crear un perfil normal', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(GUEST), 'users', GUEST), { uid: GUEST, name: 'Invitado', followers: [] })
+    );
+  });
+});
+
+describe('blocks — bloqueos privados', () => {
+  beforeEach(seed);
+
+  const block = (uid, other) =>
+    setDoc(doc(ctx(uid), 'blocks', `${uid}_${other}`), { blockerId: uid, blockedId: other, createdAt: 'x' });
+
+  it('Ana SÍ puede bloquear a Beto', async () => {
+    await assertSucceeds(block(ANA, BETO));
+  });
+
+  it('Ana NO puede crear un bloqueo a nombre de Beto', async () => {
+    await assertFails(
+      setDoc(doc(ctx(ANA), 'blocks', `${BETO}_${ANA}`), { blockerId: BETO, blockedId: ANA, createdAt: 'x' })
+    );
+  });
+
+  it('el ID tiene que calzar con quién bloquea a quién', async () => {
+    await assertFails(
+      setDoc(doc(ctx(ANA), 'blocks', `${ANA}_${GUEST}`), { blockerId: ANA, blockedId: BETO, createdAt: 'x' })
+    );
+  });
+
+  it('Beto SÍ ve que Ana lo bloqueó (para ocultarla en ambos sentidos)', async () => {
+    await block(ANA, BETO);
+    await assertSucceeds(
+      getDocs(query(collection(ctx(BETO), 'blocks'), where('blockedId', '==', BETO)))
+    );
+  });
+
+  it('un tercero NO puede ver a quién bloqueó Ana', async () => {
+    await block(ANA, BETO);
+    await assertFails(
+      getDocs(query(collection(ctx(GUEST), 'blocks'), where('blockerId', '==', ANA)))
+    );
+  });
+
+  it('Beto NO puede borrar el bloqueo que le puso Ana', async () => {
+    await block(ANA, BETO);
+    await assertFails(
+      deleteDoc(doc(ctx(BETO), 'blocks', `${ANA}_${BETO}`))
+    );
+  });
+
+  it('con un bloqueo de por medio NO se puede abrir un chat directo', async () => {
+    await block(ANA, BETO);
+    await assertFails(
+      setDoc(doc(ctx(BETO), 'chats', 'directo1'), { participants: [BETO, ANA], createdAt: 'x' })
+    );
+  });
+
+  it('sin bloqueo SÍ', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(BETO), 'chats', 'directo1'), { participants: [BETO, ANA], createdAt: 'x' })
     );
   });
 });

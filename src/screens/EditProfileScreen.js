@@ -20,7 +20,7 @@ import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 
 import { auth, db, storage } from '../config/firebase';
-import { validateImageSize } from '../utils/security';
+import { compressForUpload } from '../lib/imageUpload';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 
@@ -61,16 +61,19 @@ export default function EditProfileScreen({ route, navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: type === 'avatar' ? [1, 1] : [16, 9],
-      quality: 0.8,
+      quality: 1, // la compresión real la hace compressForUpload
     });
     if (!result.canceled) {
-      const maxBytes = type === 'avatar' ? 2 * 1024 * 1024 : 3 * 1024 * 1024;
-      if (!validateImageSize(result.assets[0], maxBytes)) {
-        Alert.alert('Imagen demasiado grande', `La imagen debe ser menor a ${type === 'avatar' ? 2 : 3}MB`);
-        return;
+      // Comprimida queda muy por debajo de los topes de storage.rules (2 MB
+      // avatar, 3 MB portada); antes se descartaba la foto original si los
+      // pasaba, que con fotos de cámara era lo normal.
+      try {
+        const { uri } = await compressForUpload(result.assets[0]);
+        if (type === 'avatar') setAvatar(uri);
+        else setCover(uri);
+      } catch {
+        Alert.alert('No se pudo agregar', 'La imagen no se pudo procesar.');
       }
-      if (type === 'avatar') setAvatar(result.assets[0].uri);
-      else setCover(result.assets[0].uri);
     }
   };
 

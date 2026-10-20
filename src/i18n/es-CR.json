@@ -76,6 +76,7 @@
     "title": "Alertas",
     "tabs": {
       "notifications": "Notificaciones",
+      "messages": "Mensajes",
       "requests": "Solicitudes"
     },
     "empty": {

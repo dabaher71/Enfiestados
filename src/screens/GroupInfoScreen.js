@@ -97,7 +97,8 @@ export default function GroupInfoScreen({ route, navigation }) {
           onPress: async () => {
             try {
               await removeParticipant(chatId, userId);
-              navigation.navigate('Messages');
+              // Los chats viven en la pestaña Mensajes de Alertas.
+              navigation.navigate('MainApp', { screen: 'Notifications', params: { tab: 'mensajes' } });
             } catch { Alert.alert('Error', 'No se pudo salir del grupo.'); }
           },
         },

@@ -3,7 +3,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
-import { validateImageSize, INPUT_LIMITS } from '../utils/security';
+import { INPUT_LIMITS } from '../utils/security';
+import { compressForUpload } from '../lib/imageUpload';
 import { useState } from 'react';
 import {
   Alert, KeyboardAvoidingView, Platform, Pressable,
@@ -50,33 +51,38 @@ export default function CreatePostScreen({ navigation }) {
       // dos, el recorte gana y el selector vuelve a ser de a una.
       allowsMultipleSelection: true,
       selectionLimit: libres,
-      quality: 0.8,
+      quality: 1, // la compresión real la hace compressForUpload
     });
     if (result.canceled) return;
 
-    const validas = [];
-    let pesadas = 0;
+    // Se comprime antes de agregar (1440px, JPEG 0.85 — ver lib/imageUpload.js).
+    // Antes se descartaba toda foto de más de 5 MB tal como salía de la
+    // galería, que con fotos de cámara era casi siempre.
+    const listas = [];
+    let fallidas = 0;
     for (const a of result.assets.slice(0, libres)) {
-      if (validateImageSize(a)) validas.push(a.uri); else pesadas++;
+      try { listas.push((await compressForUpload(a)).uri); } catch { fallidas++; }
     }
-    if (pesadas > 0) {
-      Alert.alert(
-        'Archivos muy grandes',
-        pesadas === 1 ? 'Una imagen supera los 5 MB y no se agregó.'
-                      : `${pesadas} imágenes superan los 5 MB y no se agregaron.`
-      );
+    if (fallidas > 0) {
+      Alert.alert('No se pudo agregar', fallidas === 1
+        ? 'Una imagen no se pudo procesar.'
+        : `${fallidas} imágenes no se pudieron procesar.`);
     }
-    if (validas.length) setMedia(prev => [...prev, ...validas].slice(0, MAX_POST_MEDIA));
+    if (listas.length) setMedia(prev => [...prev, ...listas].slice(0, MAX_POST_MEDIA));
   };
 
   const takePhoto = async () => {
     if (libres <= 0) { avisarLleno(); return; }
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permiso necesario', 'Necesitamos acceso a la cámara'); return; }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 1 });
     if (!result.canceled) {
-      if (!validateImageSize(result.assets[0])) { Alert.alert('Imagen demasiado grande', 'La imagen debe ser menor a 5MB'); return; }
-      setMedia(prev => [...prev, result.assets[0].uri].slice(0, MAX_POST_MEDIA));
+      try {
+        const { uri } = await compressForUpload(result.assets[0]);
+        setMedia(prev => [...prev, uri].slice(0, MAX_POST_MEDIA));
+      } catch {
+        Alert.alert('No se pudo agregar', 'La foto no se pudo procesar.');
+      }
     }
   };
 

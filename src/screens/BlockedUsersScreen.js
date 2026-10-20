@@ -2,7 +2,7 @@
 // Es la única forma de revertir un bloqueo una vez que HomeScreen/SearchScreen/
 // CommentsSection/Chat dejan de mostrar a esa persona en cualquier lado.
 import { Ionicons } from '@expo/vector-icons';
-import { arrayRemove, doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
+import { subscribeToMyBlocks, unblockUser } from '../services/blockService';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 
@@ -27,9 +28,7 @@ export default function BlockedUsersScreen({ navigation }) {
 
   useEffect(() => {
     if (!userId) return;
-    const unsub = onSnapshot(doc(db, 'users', userId), snap => {
-      setBlockedIds(snap.data()?.usuariosBloqueados || []);
-    });
+    const unsub = subscribeToMyBlocks(userId, setBlockedIds);
     return () => unsub();
   }, [userId]);
 
@@ -54,7 +53,7 @@ export default function BlockedUsersScreen({ navigation }) {
         onPress: async () => {
           setUnblocking(targetId);
           try {
-            await updateDoc(doc(db, 'users', userId), { usuariosBloqueados: arrayRemove(targetId) });
+            await unblockUser(userId, targetId);
           } catch {
             Alert.alert('Error', 'No se pudo desbloquear. Intentá de nuevo.');
           }

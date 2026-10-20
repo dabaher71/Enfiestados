@@ -52,7 +52,6 @@ export async function signInWithGoogle() {
     await setDoc(userRef, {
       uid: user.uid,
       name: user.displayName ?? 'Usuario',
-      email: user.email ?? '',
       avatar: user.photoURL ?? '',
       coverImage: '',
       bio: '',
@@ -65,7 +64,6 @@ export async function signInWithGoogle() {
       eventsAttending: [],
       perfilPublico: true,
       verificado: false,
-      usuariosBloqueados: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

@@ -76,8 +76,14 @@ export function UnderlineTabs({ options, selected, onSelect }) {
             accessibilityState={{ selected: isActive }}
             style={styles.underlineTab}
           >
+            {/* Con 3 pestañas ("Notificaciones · Mensajes (2) · Solicitudes (1)")
+                el ancho por pestaña en un teléfono de 360dp no alcanza a 15px:
+                se achica un poco antes que partir en dos líneas. */}
             <Text
               variant="label"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
               style={{
                 color: isActive ? colors['text.primary'] : colors['text.secondary'],
                 fontSize: 15,

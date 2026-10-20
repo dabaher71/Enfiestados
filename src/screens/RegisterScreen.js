@@ -37,13 +37,15 @@ function getFriendlyError(code) {
 
 // Perfil que espera el resto de la app (Profile, EditProfile, etc.) — el
 // mismo shape tanto si el uid es nuevo como si viene de un link de invitado.
-function newProfileDoc(user, trimName, trimEmail) {
+// Sin `email`: users/{uid} es legible por cualquier usuario autenticado, y el
+// correo ya vive en Firebase Auth. Los bloqueos tampoco van acá (ver blocks).
+function newProfileDoc(user, trimName) {
   return {
-    uid: user.uid, name: trimName, email: trimEmail,
+    uid: user.uid, name: trimName,
     avatar: user.photoURL ?? '', coverImage: '', bio: '', location: '',
     interests: [], followers: [], following: [], followRequests: [],
     eventsOrganized: [], eventsAttending: [],
-    perfilPublico: true, verificado: false, usuariosBloqueados: [],
+    perfilPublico: true, verificado: false,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   };
 }
@@ -110,7 +112,7 @@ export default function RegisterScreen({ navigation }) {
         Alert.alert('Ya tenés una cuenta', `Ya existía una cuenta con ${trimEmail}. Entramos con esa.`);
       } else {
         await updateProfile(user, { displayName: trimName });
-        await setDoc(doc(db, 'users', user.uid), newProfileDoc(user, trimName, trimEmail));
+        await setDoc(doc(db, 'users', user.uid), newProfileDoc(user, trimName));
         await sendEmailVerification(user);
         Alert.alert('¡Cuenta creada!', `Hola ${trimName}, te enviamos un correo de verificación. Revisá tu bandeja antes de iniciar sesión.`);
       }

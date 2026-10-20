@@ -3,7 +3,6 @@
 // EditEventScreen) — comprime, sube con progreso y reintento por imagen, y
 // deja reordenar arrastrando (la primera queda como portada, sin diálogo).
 import { Ionicons } from '@expo/vector-icons';
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
@@ -11,30 +10,16 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { auth, storage } from '../../config/firebase';
-import { validateImageSize } from '../../utils/security';
+import { compressForUpload } from '../../lib/imageUpload';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import Text from './Text';
 
 const MAX_IMAGES = 10;
-const MAX_LONG_SIDE = 1440;
 const THUMB = 80;
 
 let seq = 0;
 const genId = () => `img_${Date.now()}_${seq++}`;
-
-// Redimensiona al lado largo (máx 1440) + comprime a 0.85 antes de subir —
-// 10 fotos de cámara sin comprimir son 40MB y el usuario está en datos móviles.
-async function compress(asset) {
-  const longSide = Math.max(asset.width || MAX_LONG_SIDE, asset.height || MAX_LONG_SIDE);
-  const actions = longSide > MAX_LONG_SIDE
-    ? [{ resize: asset.width >= asset.height ? { width: MAX_LONG_SIDE } : { height: MAX_LONG_SIDE } }]
-    : [];
-  return ImageManipulator.manipulateAsync(asset.uri, actions, {
-    compress: 0.85,
-    format: ImageManipulator.SaveFormat.JPEG,
-  });
-}
 
 function uploadToStorage(uri, id, onProgress) {
   return new Promise((resolve, reject) => {
@@ -85,11 +70,16 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
     setItems(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));
   };
 
+  // Comprime (1440px, JPEG 0.85 — ver lib/imageUpload.js) y sube. Se guarda
+  // la URI YA comprimida en localUri: antes se guardaba la original, y
+  // "Reintentar" subía la foto sin comprimir, que storage.rules rechaza si
+  // pasa de 5 MB — o sea, el reintento fallaba siempre con fotos de cámara.
   const runUpload = async (id, localUri, assetForCompress) => {
-    updateItem(id, { status: 'uploading', progress: 0, localUri });
+    updateItem(id, { status: 'uploading', progress: 0 });
     try {
-      const manipulated = assetForCompress ? await compress(assetForCompress) : { uri: localUri };
-      const url = await uploadToStorage(manipulated.uri, id, (progress) => updateItem(id, { progress }));
+      const uploadUri = assetForCompress ? (await compressForUpload(assetForCompress)).uri : localUri;
+      updateItem(id, { localUri: uploadUri });
+      const url = await uploadToStorage(uploadUri, id, (progress) => updateItem(id, { progress }));
       updateItem(id, { status: 'done', url });
     } catch {
       updateItem(id, { status: 'error' });
@@ -105,23 +95,26 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       selectionLimit: remaining,
-      quality: 1, // la compresión real la hace expo-image-manipulator después
+      quality: 1, // la compresión real la hace compressForUpload después
     });
     if (result.canceled) return;
 
-    const valid = result.assets.filter(validateImageSize);
-    if (valid.length < result.assets.length) {
-      Alert.alert('Alguna imagen es muy grande', 'Se omitieron las imágenes de más de 5MB.');
-    }
-    valid.forEach(asset => {
+    // Sin filtro de tamaño acá: el peso que importa es el de después de
+    // comprimir, no el del archivo original (que en fotos de cámara casi
+    // siempre pasa de 5 MB).
+    result.assets.forEach(asset => {
       const id = genId();
-      setItems(prev => [...prev, { id, uri: asset.uri, status: 'uploading', progress: 0 }]);
+      setItems(prev => [...prev, { id, uri: asset.uri, asset, status: 'uploading', progress: 0 }]);
       runUpload(id, asset.uri, asset);
     });
   };
 
   const removeItem = (id) => setItems(prev => prev.filter(i => i.id !== id));
-  const retryItem  = (item) => runUpload(item.id, item.localUri ?? item.uri, null);
+  // Si ya se comprimió, se reintenta solo la subida; si falló la compresión
+  // misma, se vuelve a comprimir desde el asset original.
+  const retryItem  = (item) => (item.localUri
+    ? runUpload(item.id, item.localUri, null)
+    : runUpload(item.id, item.uri, item.asset ?? { uri: item.uri }));
 
   const renderItem = ({ item, drag, isActive, getIndex }) => {
     const isCover = getIndex() === 0;

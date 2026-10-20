@@ -1,9 +1,9 @@
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
-import { auth, db } from '../config/firebase';
+import { auth } from '../config/firebase';
+import { subscribeToBlockedMe, subscribeToMyBlocks } from '../services/blockService';
 
-// Combina ambas direcciones de bloqueo: a quién bloqueé yo (mi propio doc)
-// y quién me bloqueó a mí (query array-contains sobre toda la colección).
+// Combina ambas direcciones de bloqueo: a quién bloqueé yo y quién me
+// bloqueó a mí, las dos sobre la colección blocks (ver blockService.js).
 // allBlocked es lo que hay que usar para filtrar feed/comentarios/chat —
 // el bloqueo tiene que ser invisible en ambos sentidos, no solo el mío.
 //
@@ -15,8 +15,8 @@ import { auth, db } from '../config/firebase';
 // abajo y el guardar arrays ordenados en el estado en vez de Sets sueltos.
 const EMPTY = [];
 
-// Evita re-render si el contenido no cambió: onSnapshot re-dispara ante
-// cualquier escritura del doc (incluidas las que no tocan usuariosBloqueados).
+// Evita re-render si el contenido no cambió: onSnapshot puede re-disparar
+// con el mismo conjunto de ids (p. ej. al reconectar).
 function sameIds(a, b) {
   return a.length === b.length && a.every((id, i) => id === b[i]);
 }
@@ -38,14 +38,8 @@ export default function useBlockedUsers() {
       setter(prev => (sameIds(prev, sorted) ? prev : sorted));
     };
 
-    const unsubMine = onSnapshot(doc(db, 'users', uid), snap => {
-      update(setBlockedByMeIds)(snap.data()?.usuariosBloqueados || []);
-    });
-
-    const unsubOthers = onSnapshot(
-      query(collection(db, 'users'), where('usuariosBloqueados', 'array-contains', uid)),
-      snap => update(setBlockedMeIds)(snap.docs.map(d => d.id))
-    );
+    const unsubMine   = subscribeToMyBlocks(uid, update(setBlockedByMeIds));
+    const unsubOthers = subscribeToBlockedMe(uid, update(setBlockedMeIds));
 
     return () => { unsubMine(); unsubOthers(); };
   }, [uid]);

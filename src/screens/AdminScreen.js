@@ -278,7 +278,9 @@ function UserItem({ item, navigation }) {
       onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
     >
       <Text variant="title">{item.name}</Text>
-      <Text variant="caption" color="text.tertiary" style={styles.cardMeta}>{item.email}</Text>
+      {/* El email ya no vive en users/{uid} (era legible por cualquiera);
+          se consulta en Firebase Auth. Acá se muestra el uid para buscarlo. */}
+      <Text variant="caption" color="text.tertiary" style={styles.cardMeta}>{item.id}</Text>
       <View style={styles.userBadges}>
         {item.isAdmin && <StatusBadge label="Admin" variant="promo" />}
         {item.isAdvertiser && <StatusBadge label="Anunciante" variant="free" />}

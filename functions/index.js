@@ -182,26 +182,42 @@ exports.refreshMyFeed = onCall(
 // ─── Auto-ocultar contenido con 5+ reportes ───────────────────────────────────
 // Se dispara cada vez que se crea un nuevo reporte.
 
+const AUTO_HIDE_DISTINCT_REPORTERS = 5;
+
 exports.onReportCreated = onDocumentCreated("reports/{reportId}", async (event) => {
   const report = event.data?.data();
   if (!report) return;
 
   const { targetId, targetType } = report;
+  if (typeof targetId !== "string" || !targetId) return;
 
-  // Contar reportes pendientes para este contenido
+  const collectionMap = { event: "events", post: "posts", user: "users" };
+  const col = collectionMap[targetType];
+  if (!col) return;
+
+  // Se cuentan PERSONAS distintas, no reportes. El freno contra duplicados de
+  // reportService.js es solo del cliente, así que contando documentos una
+  // sola cuenta con un cliente modificado podía mandar 5 reportes y ocultar
+  // cualquier evento, publicación o perfil.
   const reportsSnap = await db.collection("reports")
     .where("targetId", "==", targetId)
     .where("status", "==", "pending")
     .get();
 
-  if (reportsSnap.size < 5) return;
+  const reporters = new Set(
+    reportsSnap.docs
+      .filter((d) => d.data().targetType === targetType)
+      .map((d) => d.data().reporterId)
+      .filter(Boolean)
+  );
+  if (reporters.size < AUTO_HIDE_DISTINCT_REPORTERS) return;
 
-  // Ocultar el contenido automáticamente hasta revisión admin
-  const collectionMap = { event: "events", post: "posts", user: "users" };
-  const col = collectionMap[targetType];
-  if (!col) return;
+  // Ocultar el contenido automáticamente hasta revisión admin. Si el destino
+  // ya no existe (borrado), no hay nada que ocultar.
+  const targetRef = db.collection(col).doc(targetId);
+  if (!(await targetRef.get()).exists) return;
 
-  await db.collection(col).doc(targetId).update({
+  await targetRef.update({
     hidden: true,
     hiddenReason: "auto_reports",
     hiddenAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -912,8 +928,122 @@ exports.requestAccountDeletion = onCall(
   }
 );
 
+// ─── Borrado completo de los datos de una cuenta ─────────────────────────────
+// Antes confirmAccountDeletion solo borraba users/{uid} y la cuenta de Auth:
+// quedaban eventos, publicaciones, mensajes, fotos de chat, notificaciones,
+// señales, bloqueos y todo Storage. Google Play exige borrado completo y la
+// política de privacidad (Ley 8968) va a prometerlo.
+//
+// Es idempotente: si falla a la mitad, reintentar con el mismo código termina
+// el trabajo.
+
+// Carpetas de Storage organizadas por uid (ver storage.rules).
+const USER_STORAGE_PREFIXES = ["events", "avatars", "covers", "posts", "ads", "chats"];
+
+const commentAuthorId = (c) => c?.userId || c?.uid || c?.authorId;
+
+async function deleteAllUserData(uid) {
+  const { FieldValue } = admin.firestore;
+  const writer = db.bulkWriter();
+
+  // BulkWriter no admite dos escrituras al mismo doc, y un mismo doc puede
+  // aparecer en varias consultas (p. ej. un mensaje propio dentro de un chat
+  // que también se borra). Se acumula todo y se escribe una vez por doc.
+  const toDelete = new Map(); // path → ref
+  const toUpdate = new Map(); // path → { ref, data }
+
+  const markDelete = (ref) => toDelete.set(ref.path, ref);
+  const markUpdate = (ref, data) => {
+    const prev = toUpdate.get(ref.path);
+    toUpdate.set(ref.path, { ref, data: { ...(prev?.data || {}), ...data } });
+  };
+  const deleteWhere = async (col, field, op, value) => {
+    const snap = await db.collection(col).where(field, op, value).get();
+    snap.docs.forEach((d) => markDelete(d.ref));
+  };
+
+  // 1. Lo que la persona creó
+  await deleteWhere("events", "organizerId", "==", uid);
+  await deleteWhere("posts", "userId", "==", uid);
+  await deleteWhere("messages", "senderId", "==", uid);
+  await deleteWhere("notifications", "toUserId", "==", uid);
+  await deleteWhere("notifications", "fromUserId", "==", uid);
+  await deleteWhere("reports", "reporterId", "==", uid);
+  await deleteWhere("ads", "advertiserId", "==", uid);
+  await deleteWhere("advertiserRequests", "userId", "==", uid);
+  await deleteWhere("blocks", "blockerId", "==", uid);
+  await deleteWhere("blocks", "blockedId", "==", uid);
+
+  // 2. Chats. Los directos y los grupos propios se borran completos, con los
+  // mensajes de todos: sin la otra parte (o sin el dueño) la conversación
+  // queda huérfana. De los grupos ajenos solo se sale.
+  const chatsSnap = await db.collection("chats").where("participants", "array-contains", uid).get();
+  for (const chat of chatsSnap.docs) {
+    const c = chat.data();
+    if (c.type === "group" && c.ownerId !== uid) {
+      markUpdate(chat.ref, {
+        participants: FieldValue.arrayRemove(uid),
+        unreadFor: FieldValue.arrayRemove(uid),
+      });
+    } else {
+      const msgs = await db.collection("messages").where("chatId", "==", chat.id).get();
+      msgs.docs.forEach((m) => markDelete(m.ref));
+      markDelete(chat.ref);
+    }
+  }
+
+  // 3. Su uid dentro de documentos ajenos
+  for (const field of ["followers", "following", "followRequests"]) {
+    const snap = await db.collection("users").where(field, "array-contains", uid).get();
+    snap.docs.forEach((d) => markUpdate(d.ref, { [field]: FieldValue.arrayRemove(uid) }));
+  }
+  for (const field of ["likes", "attendees", "savedBy"]) {
+    const snap = await db.collection("events").where(field, "array-contains", uid).get();
+    snap.docs.forEach((d) => markUpdate(d.ref, { [field]: FieldValue.arrayRemove(uid) }));
+  }
+  const likedPosts = await db.collection("posts").where("likes", "array-contains", uid).get();
+  likedPosts.docs.forEach((d) => markUpdate(d.ref, { likes: FieldValue.arrayRemove(uid) }));
+
+  // Comentarios: viven en arrays de objetos, que Firestore no deja consultar
+  // por autor, así que hay que recorrer las colecciones. Aceptable a esta
+  // escala; cuando crezca, mover comentarios a subcolección (ver la nota en
+  // firestore.rules) y borrar con una consulta.
+  for (const col of ["events", "posts"]) {
+    const snap = await db.collection(col).select("comments").get();
+    for (const d of snap.docs) {
+      const comments = d.data().comments;
+      if (!Array.isArray(comments)) continue;
+      const kept = comments.filter((c) => commentAuthorId(c) !== uid);
+      if (kept.length !== comments.length) markUpdate(d.ref, { comments: kept });
+    }
+  }
+
+  // 4. Docs propios
+  markDelete(db.collection("feeds").doc(uid));
+  markDelete(db.collection("users").doc(uid));
+
+  // close() no rechaza si falla una escritura suelta; esperando cada promesa
+  // el error sube y la función devuelve "internal" para que se reintente.
+  const ops = [];
+  toDelete.forEach((ref) => ops.push(writer.delete(ref)));
+  toUpdate.forEach(({ ref, data }, path) => {
+    if (!toDelete.has(path)) ops.push(writer.update(ref, data));
+  });
+  await writer.close();
+  await Promise.all(ops);
+
+  // userSignals/{uid} tiene la subcolección interactions
+  await db.recursiveDelete(db.collection("userSignals").doc(uid));
+
+  // 5. Storage: fotos de eventos, avatar, portada, publicaciones, anuncios y chats
+  const bucket = admin.storage().bucket();
+  await Promise.all(
+    USER_STORAGE_PREFIXES.map((p) => bucket.deleteFiles({ prefix: `${p}/${uid}/` }))
+  );
+}
+
 exports.confirmAccountDeletion = onCall(
-  { timeoutSeconds: 30 },
+  { timeoutSeconds: 300, memory: "512MiB" },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Debés estar autenticado");
@@ -943,9 +1073,16 @@ exports.confirmAccountDeletion = onCall(
       throw new HttpsError("invalid-argument", "Código incorrecto");
     }
 
+    // El pedido se borra al final: si algo falla a la mitad, el código sigue
+    // vigente y la persona puede reintentar sin pedir otro.
+    try {
+      await deleteAllUserData(uid);
+      await admin.auth().deleteUser(uid);
+    } catch (err) {
+      console.error(`confirmAccountDeletion(${uid}) falló:`, err);
+      throw new HttpsError("internal", "No se pudo terminar de eliminar tu cuenta. Intentá de nuevo.");
+    }
     await reqRef.delete();
-    await db.collection("users").doc(uid).delete().catch(() => {});
-    await admin.auth().deleteUser(uid).catch(() => {});
 
     return { deleted: true };
   }

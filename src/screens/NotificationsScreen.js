@@ -1,5 +1,6 @@
-// NotificationsScreen — Notificaciones · Solicitudes
-// Mensajes movido a MessagesScreen (design system § 5.1).
+// NotificationsScreen — Notificaciones · Mensajes · Solicitudes
+// Los mensajes volvieron acá como pestaña (antes eran una pantalla aparte,
+// MessagesScreen, con acceso desde el header de Inicio).
 // LÓGICA INTACTA: suscripciones, mark-as-read, accept/reject follow.
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,6 +12,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import ChatList, { filterVisibleChats, goToCreateGroup } from '../components/ChatList';
 import Avatar from '../components/ui/Avatar';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
@@ -19,6 +21,8 @@ import Text from '../components/ui/Text';
 import { UnderlineTabs } from '../components/ui/SegmentedControl';
 
 import { auth, db } from '../config/firebase';
+import useBlockedUsers from '../hooks/useBlockedUsers';
+import { subscribeToChats } from '../services/chatService';
 import { createNotification, deleteNotification, markAllAsRead, markAsRead, NOTIFICATION_TYPES, subscribeToNotifications } from '../services/notificationService';
 import { toDate } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
@@ -147,15 +151,34 @@ const FollowRequestItem = memo(function FollowRequestItem({ item, onAccept, onRe
 
 const TABS = [
   { label: t.alerts.tabs.notifications, value: 'notificaciones' },
+  { label: t.alerts.tabs.messages,      value: 'mensajes' },
   { label: t.alerts.tabs.requests,      value: 'solicitudes' },
 ];
 
-export default function NotificationsScreen({ navigation }) {
+export default function NotificationsScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const [tab, setTab] = useState('notificaciones');
+  const [tab, setTab] = useState(route?.params?.tab ?? 'notificaciones');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [chats, setChats] = useState([]);
+  const [chatsLoading, setChatsLoading] = useState(true);
   const userId = auth.currentUser?.uid;
+  const { allBlocked } = useBlockedUsers();
+
+  // Otras pantallas pueden mandar a una pestaña concreta, p. ej. GroupInfo
+  // al salir de un grupo: navigate('Notifications', { tab: 'mensajes' }).
+  useEffect(() => {
+    if (route?.params?.tab) setTab(route.params.tab);
+  }, [route?.params?.tab]);
+
+  useEffect(() => {
+    if (!userId) { setChatsLoading(false); return; }
+    const unsub = subscribeToChats(userId, (data) => {
+      setChats(data);
+      setChatsLoading(false);
+    });
+    return () => unsub();
+  }, [userId]);
 
   useFocusEffect(useCallback(() => {
     if (userId && tab === 'notificaciones') {
@@ -238,6 +261,10 @@ export default function NotificationsScreen({ navigation }) {
   const requests = notifications.filter(n => n.type === NOTIFICATION_TYPES.FOLLOW_REQUEST);
   const regular  = notifications.filter(n => n.type !== NOTIFICATION_TYPES.FOLLOW_REQUEST);
   const unread   = regular.filter(n => !n.read).length;
+  const unreadChats = useMemo(
+    () => filterVisibleChats(chats, userId, allBlocked).filter(c => c.unreadFor?.includes(userId)).length,
+    [chats, userId, allBlocked]
+  );
 
   // Agrupación por día: inyecta separadores en la lista plana
   const regularWithDays = useMemo(() => {
@@ -295,6 +322,16 @@ export default function NotificationsScreen({ navigation }) {
             <Text variant="label" color="nav.selected">{t.alerts.markAll}</Text>
           </Pressable>
         )}
+        {tab === 'mensajes' && (
+          <Pressable
+            onPress={() => goToCreateGroup(navigation)}
+            style={styles.headerIcon}
+            accessibilityRole="button"
+            accessibilityLabel="Crear grupo"
+          >
+            <Ionicons name="people-outline" size={24} color={colors['text.primary']} />
+          </Pressable>
+        )}
       </View>
 
       {/* Tabs */}
@@ -304,7 +341,9 @@ export default function NotificationsScreen({ navigation }) {
             ...x,
             label: x.value === 'solicitudes' && requests.length > 0
               ? `${x.label} (${requests.length})`
-              : x.label,
+              : x.value === 'mensajes' && unreadChats > 0
+                ? `${x.label} (${unreadChats})`
+                : x.label,
           }))}
           selected={tab}
           onSelect={setTab}
@@ -312,7 +351,14 @@ export default function NotificationsScreen({ navigation }) {
       </View>
 
       {/* Contenido */}
-      {loading ? (
+      {tab === 'mensajes' ? (
+        <ChatList
+          chats={chats}
+          loading={chatsLoading}
+          navigation={navigation}
+          contentContainerStyle={LIST_PROPS.contentContainerStyle}
+        />
+      ) : loading ? (
         <SkeletonList count={5} />
       ) : tab === 'notificaciones' ? (
         regular.length === 0 ? (
@@ -343,7 +389,8 @@ export default function NotificationsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe:   { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4] },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space[5], paddingVertical: space[4], minHeight: 76 },
+  headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginVertical: -space[2] },
   tabsWrap: { paddingHorizontal: space[5] },
   daySep: {
     paddingHorizontal: space[5],

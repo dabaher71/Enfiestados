@@ -38,7 +38,13 @@ eas update                                        # OTA update push
 
 **State management**: No global store. Each screen uses local `useState` + Firestore `onSnapshot()` real-time listeners. Auth state flows from AppNavigator down via navigation params.
 
-**Firestore collections**: `users`, `events`, `posts`, `chats`, `messages`, `notifications`
+**Firestore collections**: `users`, `events`, `posts`, `chats`, `messages`, `notifications`, `blocks`
+
+**Privacidad de `users/{uid}`**: cualquier usuario autenticado (invitados incluidos) lee cualquier perfil, así que ahí NO van datos privados. El email vive solo en Firebase Auth; los bloqueos viven en `blocks/{blockerId}_{blockedId}` (`blockService.js`, `useBlockedUsers`). Las reglas rechazan `email` y `usuariosBloqueados` en `users`.
+
+**Mensajes**: la lista de chats es la pestaña "Mensajes" de NotificationsScreen (componente `ChatList`), no una pantalla aparte. Para abrirla desde otra pantalla: `navigate('MainApp', { screen: 'Notifications', params: { tab: 'mensajes' } })`.
+
+**Borrado de cuenta**: `deleteAllUserData` en `functions/index.js` limpia Firestore + Storage. Cualquier colección o carpeta de Storage nueva con datos de usuario tiene que agregarse ahí.
 
 **Key service patterns**:
 - All service functions are standalone (not class-based)
@@ -76,3 +82,11 @@ veces y deja una banda muerta sobre la barra que recorta botones y texto.
 - Android notch/padding handled manually in each screen (Settings, Notifications, CreateEvent, Chat)
 - `google-services.json` required for Android Firebase + AdMob
 - Maps use react-native-maps with Google Maps API key in `app.json`
+
+## firebase.json: nada de comillas simples literales
+
+`@react-native-firebase/app` (`ios_config.sh`) mete el contenido de `firebase.json` dentro de un string de Ruby con comillas simples durante el build de iOS. Una `'` literal rompe el build ("Failed to parse firebase.json"). Por eso la Content-Security-Policy de hosting escribe `'self'`, `'none'`, etc. como `'self'`: es el mismo JSON para Firebase CLI. Cualquier valor nuevo con comillas simples tiene que ir escapado igual.
+
+## iOS: parches del Podfile (Xcode 27)
+
+`plugins/withPodfileStaticFrameworkFix.js` también sube a 15.1 el deployment target de todos los pods (Xcode 27 rechaza < 15.0) y compila el pod `fmt` en C++17 (fmt 11.0.2 no compila en C++20 con el Clang de Xcode 27). Se reinyecta en cada `expo prebuild`.
