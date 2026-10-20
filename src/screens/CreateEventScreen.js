@@ -6,8 +6,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePreventRemove } from '@react-navigation/native';
 import {
-  Alert, KeyboardAvoidingView, Modal, Platform,
+  Alert, BackHandler, KeyboardAvoidingView, Modal, Platform,
   Pressable, ScrollView, StyleSheet, TextInput, View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
@@ -19,6 +20,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
+import { clearEventDraft, loadEventDraft, saveEventDraft } from '../lib/eventDraft';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 import { createEvent } from '../services/eventService';
 import { CATEGORIES } from '../constants/categories';
@@ -123,6 +125,97 @@ export default function CreateEventScreen({ navigation }) {
   const [price,           setPrice]          = useState('');
   const [loading,         setLoading]        = useState(false);
   const [currentLocation, setCurrentLocation]= useState({ latitude: 9.9281, longitude: -84.0907, latitudeDelta: 0.05, longitudeDelta: 0.05 });
+  // pickerKey remonta ImageGridPicker con las imágenes del borrador: solo
+  // lee initialUrls al montar.
+  const [pickerKey,       setPickerKey]      = useState(0);
+  const [fromDraft,       setFromDraft]      = useState(false);
+  // leaving = ya se decidió salir (publicado, descartado o guardado): apaga
+  // la pregunta de usePreventRemove para que la navegación pendiente pase.
+  const [leaving,         setLeaving]        = useState(false);
+  const pendingExitRef = useRef(null);
+  const uid = auth.currentUser?.uid;
+
+  // Al abrir: si hay un borrador guardado, ofrecer retomarlo.
+  useEffect(() => {
+    loadEventDraft(uid).then(draft => {
+      if (!draft) return;
+      Alert.alert('Tenés un borrador', '¿Querés seguir con el evento que dejaste guardado?', [
+        { text: 'Empezar de cero', style: 'destructive', onPress: () => clearEventDraft(uid) },
+        { text: 'Seguir con el borrador', onPress: () => applyDraft(draft) },
+      ], { cancelable: false });
+    });
+  }, []);
+
+  const applyDraft = (d) => {
+    setStep(d.step || 1);
+    setTitle(d.title || '');
+    setDescription(d.description || '');
+    setCategory(d.category || '');
+    setImages(d.images || []);
+    setPickerKey(k => k + 1);
+    setDate(d.date);
+    setTime(d.time);
+    setIsVirtual(!!d.isVirtual);
+    setVirtualLink(d.virtualLink || '');
+    setLocationName(d.locationName || '');
+    setLocationCoords(d.locationCoords || null);
+    setIsFree(d.isFree !== false);
+    setPrice(d.price || '');
+    setFromDraft(true);
+  };
+
+  const currentDraft = () => ({
+    step, title, description, category, images, date, time,
+    isVirtual, virtualLink, locationName, locationCoords, isFree, price,
+  });
+
+  // ¿Hay algo que se perdería al salir?
+  const isDirty = !!(
+    title.trim() || description.trim() || category || images.length ||
+    virtualLink.trim() || locationName.trim() || locationCoords || price.trim?.()
+  );
+
+  // Sale de la pantalla sin volver a preguntar. La navegación espera al
+  // render con leaving=true, porque usePreventRemove lee el valor del render.
+  const exitWith = (fn) => {
+    pendingExitRef.current = fn;
+    setLeaving(true);
+  };
+  useEffect(() => {
+    if (!leaving || !pendingExitRef.current) return;
+    const fn = pendingExitRef.current;
+    pendingExitRef.current = null;
+    fn();
+  }, [leaving]);
+
+  // Cualquier salida (X, botón atrás de Android, gesto de cerrar el modal en
+  // iOS) pasa por acá. Antes solo la X preguntaba, y el "Guardar borrador"
+  // no guardaba nada: el atrás de Android borraba todo sin avisar.
+  usePreventRemove(isDirty && !leaving, ({ data }) => {
+    Alert.alert('¿Salir sin publicar?', 'Podés guardar lo que llevás como borrador y seguir después.', [
+      { text: 'Seguir editando', style: 'cancel' },
+      {
+        text: 'Descartar',
+        style: 'destructive',
+        onPress: () => exitWith(() => { clearEventDraft(uid); navigation.dispatch(data.action); }),
+      },
+      {
+        text: 'Guardar borrador',
+        onPress: () => exitWith(async () => { await saveEventDraft(uid, currentDraft()); navigation.dispatch(data.action); }),
+      },
+    ]);
+  });
+
+  // Atrás de Android en el paso 2 o 3: vuelve un paso, como la flecha del
+  // header, en vez de intentar cerrar el formulario.
+  useEffect(() => {
+    if (step === 1) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setStep(s => s - 1);
+      return true;
+    });
+    return () => sub.remove();
+  }, [step]);
 
   useEffect(() => {
     Location.requestForegroundPermissionsAsync()
@@ -176,11 +269,12 @@ export default function CreateEventScreen({ navigation }) {
       };
 
       const newEventId = await createEvent(eventData);
+      clearEventDraft(uid);
 
       Alert.alert('¡Publicado!', 'Tu evento ya está en Enfiestados', [
-        { text: 'Ver evento', onPress: () => { navigation.goBack(); navigation.navigate('EventDetail', { event: { id: newEventId, ...eventData } }); } },
-        { text: 'Listo', onPress: () => navigation.goBack() },
-      ]);
+        { text: 'Ver evento', onPress: () => exitWith(() => { navigation.goBack(); navigation.navigate('EventDetail', { event: { id: newEventId, ...eventData } }); }) },
+        { text: 'Listo', onPress: () => exitWith(() => navigation.goBack()) },
+      ], { cancelable: false });
 
       getDoc(doc(db, 'users', user.uid)).then(snap => {
         const followers = snap.data()?.followers || [];
@@ -210,11 +304,8 @@ export default function CreateEventScreen({ navigation }) {
     if (step > 1) setStep(s => s - 1);
   };
 
-  const confirmClose = () => Alert.alert('¿Salir?', '¿Querés guardar el borrador o descartarlo?', [
-    { text: 'Descartar', style: 'destructive', onPress: () => navigation.goBack() },
-    { text: 'Guardar borrador', onPress: () => navigation.goBack() },
-    { text: 'Seguir editando', style: 'cancel' },
-  ]);
+  // La pregunta (seguir / descartar / guardar) la hace usePreventRemove.
+  const confirmClose = () => navigation.goBack();
 
   const stepTitles = ['¿Qué vas a organizar?', '¿Cuándo y dónde?', '¿Cuánto cuesta?'];
   const continueLabel = step === 3
@@ -236,7 +327,8 @@ export default function CreateEventScreen({ navigation }) {
         <View style={{ flex: 1, gap: space[2] }}>
           <View style={styles.progressRow}>
             <Text variant="caption" color="text.tertiary">Paso {step} de 3</Text>
-            <Text variant="caption" color="text.tertiary">Borrador guardado</Text>
+            {/* Antes decía "Borrador guardado" siempre, sin que se guardara nada. */}
+            {fromDraft && <Text variant="caption" color="text.tertiary">Borrador recuperado</Text>}
           </View>
           {/* Barra de progreso amarilla */}
           <View style={[styles.progressTrack, { backgroundColor: colors['bg.surface'] }]}>
@@ -268,7 +360,10 @@ export default function CreateEventScreen({ navigation }) {
               {/* Imágenes — opcional, hasta 10, reordenables (FIX_ROUND_5 § 5) */}
               <Field>
                 <FieldLabel label="Foto o afiche" optional colors={colors} />
-                <ImageGridPicker onUploadedChange={setImages} onBusyChange={setImagesUploading} />
+                {/* initialUrls={images}: el picker se desmonta en los pasos 2 y 3
+                    y, al volver al 1, arrancaba vacío y borraba las imágenes ya
+                    subidas (onUploadedChange([])). */}
+                <ImageGridPicker key={pickerKey} initialUrls={images} onUploadedChange={setImages} onBusyChange={setImagesUploading} />
               </Field>
 
               {/* Título */}

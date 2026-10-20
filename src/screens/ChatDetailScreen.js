@@ -7,7 +7,7 @@ import { Image } from 'expo-image';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -76,6 +76,8 @@ export default function ChatDetailScreen({ route, navigation }) {
   // un grupo no alcanza con "mío / del otro".
   const [members,    setMembers]    = useState({});
   const [sendingPhoto, setSendingPhoto] = useState(false);
+  // Foto elegida y ya comprimida, esperando a que el usuario toque Enviar.
+  const [pendingPhoto, setPendingPhoto] = useState(null);
   const [viewerUri,  setViewerUri]  = useState(null);
   const listRef = useRef();
   const userId  = auth.currentUser?.uid;
@@ -127,14 +129,35 @@ export default function ChatDetailScreen({ route, navigation }) {
 
   const handleSend = async () => {
     const text = newMessage.trim();
-    if (!text || isBlocked || !canWrite) return;
+    if (isBlocked || !canWrite || sendingPhoto) return;
+
+    // Con foto pendiente, el texto del campo viaja como pie de foto. El
+    // usuario ya vio la vista previa con su texto debajo, así que es lo que
+    // espera al tocar Enviar.
+    if (pendingPhoto) {
+      setSendingPhoto(true);
+      try {
+        const url = await uploadChatPhoto(pendingPhoto.uri, userId);
+        await sendMessage(chatId, userId, text, url);
+        setPendingPhoto(null);
+        setNewMessage('');
+      } catch (e) {
+        // Se deja la foto y el texto como estaban, para reintentar.
+        Alert.alert('No se pudo enviar', e?.message ?? 'Intentá de nuevo.');
+      } finally {
+        setSendingPhoto(false);
+      }
+      return;
+    }
+
+    if (!text) return;
     setNewMessage('');
     try { await sendMessage(chatId, userId, text); } catch {}
   };
 
-  // La foto se manda sola, sin arrastrar lo que haya escrito en el campo: si
-  // el texto viajara con ella, el usuario perdería el borrador que estaba
-  // redactando sin haberlo pedido.
+  // Elegir una foto ya no la manda: queda en una vista previa encima del
+  // campo y sale recién al tocar Enviar. Antes se enviaba apenas se elegía,
+  // sin chance de arrepentirse si era la foto equivocada.
   const handlePickPhoto = async () => {
     if (!canSendPhoto || isBlocked || sendingPhoto) return;
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -142,17 +165,13 @@ export default function ChatDetailScreen({ route, navigation }) {
       quality: 1, // la compresión real la hace compressForUpload
     });
     if (result.canceled) return;
-    setSendingPhoto(true);
     try {
       // Comprimir antes de subir (ver lib/imageUpload.js): una foto de cámara
       // sin comprimir pasa casi siempre del tope de 5 MB de storage.rules.
-      const { uri } = await compressForUpload(result.assets[0]);
-      const url = await uploadChatPhoto(uri, userId);
-      await sendMessage(chatId, userId, '', url);
+      const compressed = await compressForUpload(result.assets[0]);
+      setPendingPhoto(compressed);
     } catch (e) {
-      Alert.alert('No se pudo enviar', e?.message ?? 'Intentá de nuevo.');
-    } finally {
-      setSendingPhoto(false);
+      Alert.alert('No se pudo cargar la foto', e?.message ?? 'Intentá de nuevo.');
     }
   };
 
@@ -379,10 +398,39 @@ export default function ChatDetailScreen({ route, navigation }) {
             </Text>
           </View>
         ) : (
+          <View style={{ backgroundColor: colors['bg.base'] }}>
+          {pendingPhoto && (
+            <View style={[styles.pendingBar, { borderTopColor: colors['border.subtle'] }]}>
+              <View>
+                <Image
+                  source={{ uri: pendingPhoto.uri }}
+                  style={[styles.pendingPhoto, { backgroundColor: colors['bg.surface'] }]}
+                  contentFit="cover"
+                />
+                {sendingPhoto ? (
+                  <View style={[styles.pendingOverlay, { backgroundColor: colors['bg.overlay'] }]}>
+                    <ActivityIndicator color={colors['text.primary']} />
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => setPendingPhoto(null)}
+                    style={[styles.pendingRemove, { backgroundColor: colors['bg.raised'], borderColor: colors['border.strong'] }]}
+                    hitSlop={8}
+                    accessibilityLabel="Quitar foto"
+                  >
+                    <Ionicons name="close" size={16} color={colors['text.primary']} />
+                  </Pressable>
+                )}
+              </View>
+              <Text variant="caption" color="text.tertiary" style={{ flex: 1 }}>
+                {sendingPhoto ? 'Enviando foto…' : 'Escribí un pie de foto si querés y tocá enviar.'}
+              </Text>
+            </View>
+          )}
           <View style={[styles.inputBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
             <TextInput
               style={[styles.input, { backgroundColor: colors['bg.surface'], color: colors['text.primary'] }]}
-              placeholder="Escribí un mensaje…"
+              placeholder={pendingPhoto ? 'Agregá un pie de foto…' : 'Escribí un mensaje…'}
               placeholderTextColor={colors['text.tertiary']}
               value={newMessage}
               onChangeText={setNewMessage}
@@ -401,7 +449,7 @@ export default function ChatDetailScreen({ route, navigation }) {
                 accessibilityLabel="Enviar una foto"
               >
                 <Ionicons
-                  name={sendingPhoto ? 'ellipsis-horizontal' : 'image-outline'}
+                  name={pendingPhoto ? 'swap-horizontal-outline' : 'image-outline'}
                   size={22}
                   color={colors['text.secondary']}
                 />
@@ -410,10 +458,14 @@ export default function ChatDetailScreen({ route, navigation }) {
             <Pressable
               style={[styles.sendBtn, { backgroundColor: colors['action.primary'] }]}
               onPress={handleSend}
-              accessibilityLabel="Enviar mensaje"
+              disabled={sendingPhoto}
+              accessibilityLabel={pendingPhoto ? 'Enviar foto' : 'Enviar mensaje'}
             >
-              <Ionicons name="send" size={20} color={colors['text.onAction']} />
+              {sendingPhoto
+                ? <ActivityIndicator size="small" color={colors['text.onAction']} />
+                : <Ionicons name="send" size={20} color={colors['text.onAction']} />}
             </Pressable>
+          </View>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -470,6 +522,32 @@ const styles = StyleSheet.create({
     paddingVertical: space[3],
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: space[3],
+  },
+  pendingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    paddingHorizontal: space[4],
+    paddingTop: space[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  pendingPhoto: { width: 88, height: 88, borderRadius: radius.md },
+  pendingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingRemove: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   blockedBar: {
     paddingHorizontal: space[4],

@@ -16,6 +16,7 @@ import Sheet from '../components/ui/Sheet';
 import Text from '../components/ui/Text';
 
 import { auth, functions } from '../config/firebase';
+import { useZonePreference } from '../lib/zonePreference';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 import t from '../i18n/es-CR.json';
@@ -29,6 +30,7 @@ const TERMS_URL   = 'https://enfiestados.net/terminos';
 
 export default function SettingsScreen({ navigation }) {
   const { colors, mode, setThemeMode } = useTheme();
+  const { zone } = useZonePreference();
   const [notifCount,  setNotifCount]  = useState(3);  // "3 de 3" por defecto
   const [showLogout, setShowLogout] = useState(false);
 
@@ -160,11 +162,10 @@ export default function SettingsScreen({ navigation }) {
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           <Row icon="person-outline"    label="Editar perfil"       subtitle="Foto, nombre, biografía"        onPress={() => navigation.navigate('EditProfile', { user: null })} />
           <Row icon="sparkles-outline"  label="Mis intereses"       subtitle="Qué tipo de eventos querés ver"  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
-          {/* Sin `value`: antes mostraba "15 km" fijo, como si estuviera
-              configurado, pero al tocarlo decía "Próximamente". Un valor
-              inventado es peor que ninguno — el usuario cree que hay un
-              radio activo filtrándole el feed. */}
-          <Row icon="location-outline"  label="Zona y distancia"    subtitle="Próximamente"                     onPress={() => Alert.alert('Zona y distancia', 'Todavía no está disponible. Por ahora el feed te muestra eventos de todo el país.')} />
+          {/* El valor sale de la zona guardada de verdad (zonePreference);
+              sin zona no se muestra ninguno, para no sugerir un radio que no
+              está filtrando nada. */}
+          <Row icon="location-outline"  label="Zona y distancia"    subtitle={zone ? 'Eventos cerca del pin que elegiste' : 'Todo el país'} value={zone ? `${zone.radiusKm} km` : undefined} onPress={() => navigation.navigate('ZoneSettings')} />
           <Row icon="lock-closed-outline" label="Usuarios bloqueados" subtitle="Ver y desbloquear"              onPress={() => navigation.navigate('BlockedUsers')} />
         </View>
 

@@ -1,0 +1,26 @@
+diff --git a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
+index b755f9b..e994cf1 100644
+--- a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
++++ b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
+@@ -522,8 +522,19 @@ public class MapMarker extends MapFeature {
+   }
+ 
+   private Bitmap createDrawable() {
+-    int width = this.width <= 0 ? 100 : this.width;
+-    int height = this.height <= 0 ? 100 : this.height;
++    // Enfiestados (patches/react-native-maps+1.20.1.patch): con la nueva
++    // arquitectura el SizeReportingShadowNode no corre, update(w, h) nunca se
++    // llama y el marcador quedaba en 100x100 px, recortando la vista custom.
++    // Si no hay tamaño reportado se usa el de la vista hija ya medida.
++    int width = this.width;
++    int height = this.height;
++    if ((width <= 0 || height <= 0) && getChildCount() > 0) {
++      View child = getChildAt(0);
++      if (width <= 0) width = child.getWidth();
++      if (height <= 0) height = child.getHeight();
++    }
++    if (width <= 0) width = 100;
++    if (height <= 0) height = 100;
+     this.buildDrawingCache();
+ 
+     // Do not create the doublebuffer-bitmap each time. reuse it to save memory.

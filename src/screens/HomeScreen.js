@@ -27,6 +27,7 @@ import useBlockedUsers from '../hooks/useBlockedUsers';
 import useExternalEvents from '../hooks/useExternalEvents';
 import { formatDaySeparator } from '../lib/format';
 import { requireAccount } from '../lib/requireAccount';
+import { isInZone, useZonePreference } from '../lib/zonePreference';
 import { fetchActiveAds } from '../services/adService';
 import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
 import { registerForPushNotifications } from '../services/pushNotificationService';
@@ -175,6 +176,7 @@ export default function HomeScreen({ navigation }) {
   const [internalAds,    setInternalAds]    = useState([]);
   const [savedExternalIds, setSavedExternalIds] = useState(new Set());
   const { allBlocked } = useBlockedUsers();
+  const { zone } = useZonePreference();
 
   const visibleSinceRef   = useRef({});
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 });
@@ -263,16 +265,16 @@ export default function HomeScreen({ navigation }) {
 
   const displayedEvents = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const native = events.filter(ev => !isExpired(ev) && !allBlocked.has(ev.organizerId));
+    const native = events.filter(ev => !isExpired(ev) && !allBlocked.has(ev.organizerId) && isInZone(ev, zone));
     let base;
     if (activeTab === 'siguiendo') {
       base = sortAsc(native.filter(ev => following?.includes(ev.organizerId)));
     } else {
-      const validExternal = externalEvents.filter(e => e.dateISO ? new Date(e.dateISO) >= today : true);
+      const validExternal = externalEvents.filter(e => (e.dateISO ? new Date(e.dateISO) >= today : true) && isInZone(e, zone));
       base = scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
     }
     return applyTimeFilter(base, timeFilter);
-  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired, allBlocked]);
+  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired, allBlocked, zone]);
 
   const sections = useMemo(
     () => groupByDay(displayedEvents, internalAds),
@@ -460,6 +462,12 @@ export default function HomeScreen({ navigation }) {
 // omiten y quedan siempre expandidas — no scrollean).
 function HomeHeader({ colors, navigation, location, collapseAnim }) {
   const anim = collapseAnim ?? STATIC_ZERO;
+  const { zone } = useZonePreference();
+  // Con zona activa se muestra el radio, para que quede claro por qué el
+  // feed tiene menos eventos que el de todo el país.
+  const locationLabel = zone
+    ? `${location || 'Mi zona'} · ${zone.radiusKm} km`
+    : (location || 'Costa Rica');
   return (
     <Animated.View style={[
       styles.header,
@@ -484,9 +492,9 @@ function HomeHeader({ colors, navigation, location, collapseAnim }) {
           overflow: 'hidden',
         }}>
           <Pressable
-            onPress={() => {}}
+            onPress={() => navigation.navigate('ZoneSettings')}
             accessibilityRole="button"
-            accessibilityLabel="Cambiar ubicación"
+            accessibilityLabel="Cambiar zona y distancia"
           >
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
@@ -494,7 +502,7 @@ function HomeHeader({ colors, navigation, location, collapseAnim }) {
                   la métrica de la fuente y el alto queda impredecible dentro
                   del contenedor con overflow:'hidden' de arriba. */}
               <Text style={{ fontSize: 14, lineHeight: 18, fontFamily: 'PlusJakartaSans_500Medium', color: colors['text.tertiary'] }}>
-                {location || 'Costa Rica'}
+                {locationLabel}
               </Text>
               <Ionicons name="chevron-down" size={12} color={colors['text.tertiary']} />
             </View>

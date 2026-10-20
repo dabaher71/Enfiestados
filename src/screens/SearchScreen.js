@@ -25,6 +25,7 @@ import { subscribeToEvents } from '../services/eventService';
 import { CATEGORIES } from '../constants/categories';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { buildMapStyle } from '../lib/mapStyle';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -50,27 +51,6 @@ const TIME_OPTS = [
   { id: 'week',     label: 'Esta semana' },
   { id: 'month',    label: 'Este mes' },
 ];
-
-// Estilo de MapView — FIX_ROUND_4 § 8: sale de tokens, con variante clara y
-// oscura (antes fijo en oscuro, el mapa quedaba negro dentro de una pantalla
-// crema en tema claro). road.highway y water no tienen token semántico
-// equivalente — son paleta propia del mapa, igual que el #DCE6F2 sugerido.
-function buildMapStyle(colors, isDark) {
-  const road    = isDark ? colors['bg.raised']   : colors['bg.surface'];
-  const highway = isDark ? '#3D3650'             : colors['border.strong'];
-  const water   = isDark ? '#0F0C18'             : '#DCE6F2';
-  return [
-    { elementType: 'geometry',           stylers: [{ color: colors['bg.base'] }] },
-    { elementType: 'labels.text.fill',   stylers: [{ color: colors['text.tertiary'] }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: colors['bg.base'] }] },
-    { featureType: 'road',               elementType: 'geometry',        stylers: [{ color: road }] },
-    { featureType: 'road',               elementType: 'geometry.stroke', stylers: [{ color: colors['bg.base'] }] },
-    { featureType: 'road.highway',       elementType: 'geometry',        stylers: [{ color: highway }] },
-    { featureType: 'water',              elementType: 'geometry',        stylers: [{ color: water }] },
-    { featureType: 'poi',                stylers: [{ visibility: 'off' }] },
-    { featureType: 'transit',            stylers: [{ visibility: 'off' }] },
-  ];
-}
 
 // ─── Helpers de filtrado ──────────────────────────────────────────────────────
 
@@ -111,12 +91,62 @@ function isInTimeRange(dateStr, filter) {
 
 // ─── Marcador de precio — § 3.4: oscuro para precio, verde para gratis ───────
 
+// En Android, react-native-maps no dibuja la vista del marcador en vivo: saca
+// una imagen de ella y pinta esa imagen. Con la nueva arquitectura
+// (react-native-maps 1.20) el tamaño de esa imagen sale de la primera
+// medición de la vista raíz, antes de que los hijos se acomoden, y el pin
+// quedaba cortado ("Gra") sin importar el padding. La solución que funciona
+// es darle ancho y alto explícitos a la vista raíz (pinWrap). Además
+// tracksViewChanges queda activo un momento después de montar y de cada
+// cambio de selección (para que se vea el borde y la escala), y después se
+// apaga: dejarlo siempre prendido re-renderiza el mapa en cada frame.
+const PIN_SETTLE_MS = 500;
+const PIN_WRAP_PAD = 6;
+
+function PriceMarker({ event, selected, colors, onPress }) {
+  const [tracking, setTracking] = useState(true);
+  const label = pinLabel(event);
+  useEffect(() => {
+    setTracking(true);
+    const id = setTimeout(() => setTracking(false), PIN_SETTLE_MS);
+    return () => clearTimeout(id);
+  }, [selected, colors]);
+
+  return (
+    <Marker
+      coordinate={{ latitude: event.location.lat, longitude: event.location.lng }}
+      onPress={onPress}
+      tracksViewChanges={tracking}
+    >
+      {/* Margen alrededor del pin: la imagen se recorta al tamaño de la vista
+          raíz, y sin este margen se comen la sombra y la escala de 1.12 del
+          seleccionado. collapsable={false} evita que Android aplane la vista. */}
+      <View
+        style={[styles.pinWrap, { width: pinWidth(label || ' ') + PIN_WRAP_PAD * 2, height: PIN_HEIGHT + PIN_WRAP_PAD * 2 }]}
+        collapsable={false}
+      >
+        <PricePin event={event} selected={selected} colors={colors} />
+      </View>
+    </Marker>
+  );
+}
+
+function pinLabel(event) {
+  if (event.isFree === true || event.price === 0) return 'Gratis';
+  return typeof event.price === 'number' ? `₡${event.price}` : '';
+}
+
+// Ancho fijo calculado a partir del texto. 7.4px por carácter alcanza para
+// PlusJakarta ExtraBold a 11.5px; el resto es padding y borde.
+const PIN_HEIGHT = 26;
+function pinWidth(label) {
+  return Math.ceil(label.length * 7.4) + 24;
+}
+
 function PricePin({ event, selected, colors }) {
-  const isFree = event.isFree === true || event.price === 0;
-  const label  = isFree
-    ? 'Gratis'
-    : typeof event.price === 'number' ? `₡${event.price}` : '';
+  const label  = pinLabel(event);
   if (!label) return null;
+  const isFree = label === 'Gratis';
 
   // El pin de precio se invierte con el tema en vez de ser oscuro fijo: en
   // oscuro queda una píldora oscura con texto claro, y en claro una píldora
@@ -133,14 +163,23 @@ function PricePin({ event, selected, colors }) {
   return (
     <View style={[
       styles.pin,
+      { width: pinWidth(label), height: PIN_HEIGHT },
       selected && styles.pinSelected,
       { backgroundColor: bg, borderWidth: 1, borderColor: colors['border.strong'] },
       selected && { borderWidth: 2, borderColor: colors['action.primary'] },
     ]}>
-      <Text style={{
+      <Text numberOfLines={1} style={{
         fontSize: 11.5,
         fontFamily: 'PlusJakartaSans_800ExtraBold',
         color: fg,
+        textAlign: 'center',
+        // Centrado vertical: en Android includeFontPadding agrega aire arriba
+        // de la fuente y el texto quedaba bajo dentro de la píldora de alto
+        // fijo. lineHeight fijo + sin ese padding lo centra en las dos
+        // plataformas.
+        lineHeight: 14,
+        includeFontPadding: false,
+        textAlignVertical: 'center',
       }}>
         {label}
       </Text>
@@ -465,13 +504,13 @@ export default function SearchScreen({ navigation }) {
             showsMyLocationButton={false}
           >
             {filteredNative.map(ev => (
-              <Marker
+              <PriceMarker
                 key={ev.id}
-                coordinate={{ latitude: ev.location.lat, longitude: ev.location.lng }}
+                event={ev}
+                selected={selectedEvent?.id === ev.id}
+                colors={colors}
                 onPress={() => handleMarkerPress(ev)}
-              >
-                <PricePin event={ev} selected={selectedEvent?.id === ev.id} colors={colors} />
-              </Marker>
+              />
             ))}
           </MapView>
 
@@ -696,14 +735,18 @@ const styles = StyleSheet.create({
 
   // Pines de mapa — § 3.4: oscuro para precio, verde para gratis
   pin: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 4,
+  },
+  pinWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // § 3.4: seleccionado escala 1.12 + borde action.primary
   pinSelected: {

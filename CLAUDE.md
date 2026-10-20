@@ -42,6 +42,8 @@ eas update                                        # OTA update push
 
 **Privacidad de `users/{uid}`**: cualquier usuario autenticado (invitados incluidos) lee cualquier perfil, así que ahí NO van datos privados. El email vive solo en Firebase Auth; los bloqueos viven en `blocks/{blockerId}_{blockedId}` (`blockService.js`, `useBlockedUsers`). Las reglas rechazan `email` y `usuariosBloqueados` en `users`.
 
+**Zona y distancia**: `src/lib/zonePreference.js` guarda `{ lat, lng, radiusKm }` en AsyncStorage (no en `users/{uid}`, que es público: el pin suele ser la casa del usuario). `useZonePreference()` avisa a todas las pantallas al guardar; `isInZone(ev, zone)` filtra el feed del Inicio (los virtuales siempre entran, los que no tienen coordenadas no). Se edita en `ZoneSettingsScreen` (Configuración o la ubicación del header del Inicio).
+
 **Mensajes**: la lista de chats es la pestaña "Mensajes" de NotificationsScreen (componente `ChatList`), no una pantalla aparte. Para abrirla desde otra pantalla: `navigate('MainApp', { screen: 'Notifications', params: { tab: 'mensajes' } })`.
 
 **Borrado de cuenta**: `deleteAllUserData` en `functions/index.js` limpia Firestore + Storage. Cualquier colección o carpeta de Storage nueva con datos de usuario tiene que agregarse ahí.
