@@ -18,23 +18,23 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';  // § 4.3
 import PostCard from '../components/PostCard';
 
 import { auth, db } from '../config/firebase';
-import { subscribeToEvents } from '../services/eventService';
+import { subscribeToOrganizerEvents } from '../services/eventService';
 import { fetchExternalEventsByIds } from '../services/externalEventService';
 import { addPostComment, deletePost, subscribeToUserPosts, togglePostLike } from '../services/postService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import { formatEventDate } from '../lib/format';
-import t from '../i18n/es-CR.json';
-
-const TABS = [
-  { label: 'Organizo',       value: 'eventos' },
-  { label: 'Publicaciones',  value: 'publicaciones' },
-  { label: 'Guardados',      value: 'guardados' },   // § 4.3: tercera pestaña
-];
+import { useTranslation } from 'react-i18next';
 
 export default function ProfileScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
+  const TABS = [
+    { label: t('profile.tabOrganize'), value: 'eventos' },
+    { label: t('profile.tabPosts'),    value: 'publicaciones' },
+    { label: t('profile.tabSaved'),    value: 'guardados' },   // § 4.3: tercera pestaña
+  ];
   const [user,           setUser]           = useState(null);
   const [events,         setEvents]         = useState([]);
   const [posts,          setPosts]          = useState([]);
@@ -59,9 +59,7 @@ export default function ProfileScreen({ navigation }) {
     loadUser();
 
     // Eventos que organizó el usuario
-    const unsubEvents = subscribeToEvents(all => {
-      setEvents(all.filter(e => e.organizerId === currentUser.uid));
-    });
+    const unsubEvents = subscribeToOrganizerEvents(currentUser.uid, currentUser.uid, {}, setEvents);
 
     // Posts del usuario
     let unsubPosts;
@@ -165,7 +163,7 @@ export default function ProfileScreen({ navigation }) {
     return (
       <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
         <View style={styles.topBar}>
-          <Text variant="h2">Perfil</Text>
+          <Text variant="h2">{t('profile.title')}</Text>
         </View>
         <SkeletonList count={4} />
       </SafeAreaView>
@@ -180,18 +178,18 @@ export default function ProfileScreen({ navigation }) {
     return (
       <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
         <View style={styles.topBar}>
-          <Text variant="h2">Perfil</Text>
+          <Text variant="h2">{t('profile.title')}</Text>
         </View>
         <EmptyState
           icon={<Ionicons name="person-circle-outline" size={28} color={colors['text.tertiary']} />}
-          title="Todavía no tenés cuenta"
-          description="Creá una cuenta gratis para guardar eventos, organizar los tuyos y armar tu mochila."
-          actionLabel="Crear cuenta"
+          title={t('profile.noAccountTitle')}
+          description={t('profile.noAccountDesc')}
+          actionLabel={t('auth.createAccount')}
           onAction={() => navigation.navigate('Register')}
         />
         <Pressable onPress={() => navigation.navigate('Login')} style={styles.guestLoginLink} accessibilityRole="link">
           <Text variant="body" color="text.secondary" align="center">
-            ¿Ya tenés cuenta? <Text variant="bodyStrong" color="link">Iniciá sesión</Text>
+            {t('auth.haveAccount')} <Text variant="bodyStrong" color="link">{t('auth.signIn')}</Text>
           </Text>
         </Pressable>
       </SafeAreaView>
@@ -206,9 +204,9 @@ export default function ProfileScreen({ navigation }) {
   const followerCount = user?.followers?.length ?? 0;
 
   const STATS = [
-    { label: 'Voy',       value: attendingEvents.length, onPress: () => navigation.navigate('MyPlans') },
-    { label: 'Guardados', value: savedEvents.length + savedExternal.length, onPress: () => navigation.navigate('MyPlans') },
-    { label: 'Seguidores',value: followerCount,           onPress: () => {} },
+    { label: t('profile.statGoing'), value: attendingEvents.length, onPress: () => navigation.navigate('MyPlans') },
+    { label: t('profile.statSaved'), value: savedEvents.length + savedExternal.length, onPress: () => navigation.navigate('MyPlans') },
+    { label: t('profile.statFollowers'), value: followerCount,           onPress: () => {} },
   ];
 
   return (
@@ -220,11 +218,11 @@ export default function ProfileScreen({ navigation }) {
 
         {/* ── TOP BAR: título + settings ─────────────────────────────── */}
         <View style={styles.topBar}>
-          <Text variant="h2">Perfil</Text>
+          <Text variant="h2">{t('profile.title')}</Text>
           <Pressable
             onPress={() => navigation.navigate('Settings')}
             style={styles.iconBtn}
-            accessibilityLabel="Configuración"
+            accessibilityLabel={t('settings.title')}
             accessibilityRole="button"
           >
             <Ionicons name="settings-outline" size={24} color={colors['text.primary']} />
@@ -246,14 +244,14 @@ export default function ProfileScreen({ navigation }) {
             onPress={() => navigation.navigate('UserProfile', { userId: currentUser.uid })}
             style={[styles.avatarRing, { borderColor: colors['bg.base'] }]}
             accessibilityRole="button"
-            accessibilityLabel="Ver perfil público"
+            accessibilityLabel={t('profile.viewPublic')}
           >
             <Avatar uri={user?.avatar} name={user?.name || currentUser.displayName} size={88} />
           </Pressable>
 
           {/* Nombre en Bricolage h2 */}
           <Text style={[styles.name, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
-            {user?.name || 'Usuario'}
+            {user?.name || t('profile.user')}
           </Text>
 
           {/* @handle · Ciudad */}
@@ -266,7 +264,7 @@ export default function ProfileScreen({ navigation }) {
             <Text variant="body" color="text.secondary" align="center" style={styles.bio}>{user.bio}</Text>
           ) : (
             <Pressable onPress={() => navigation.navigate('EditProfile', { user: null })} style={{ marginTop: space[2] }}>
-              <Text variant="caption" color="link">Agregá una bio</Text>
+              <Text variant="caption" color="link">{t('profile.addBio')}</Text>
             </Pressable>
           )}
 
@@ -275,7 +273,7 @@ export default function ProfileScreen({ navigation }) {
             <Button
               variant="secondary"
               size="sm"
-              label="Editar perfil"
+              label={t('profile.editProfile')}
               onPress={() => navigation.navigate('EditProfile', { user: null })}
               style={{ flex: 1 }}
             />
@@ -288,15 +286,15 @@ export default function ProfileScreen({ navigation }) {
               <Button
                 variant="secondary"
                 size="sm"
-                label="Herramientas"
+                label={t('profile.toolsBtn')}
                 onPress={() => navigation.navigate('OrganizerPanel')}
                 style={{ flex: 1 }}
               />
             )}
             <Pressable
               style={[styles.shareBtn, { backgroundColor: colors['bg.surface'] }]}
-              onPress={() => Share.share({ message: `Seguime en Enfiestados: @${handle}` }).catch(() => {})}
-              accessibilityLabel="Compartir perfil"
+              onPress={() => Share.share({ message: t('profile.shareMessage', { handle }) }).catch(() => {})}
+              accessibilityLabel={t('profile.shareProfile')}
             >
               <Ionicons name="share-outline" size={20} color={colors['text.primary']} />
             </Pressable>
@@ -305,14 +303,14 @@ export default function ProfileScreen({ navigation }) {
           {/* Accesos especiales solo para admin */}
           {user?.isAdmin && (
             <View style={styles.specialRow}>
-              <Button variant="primary" size="sm" label="Panel Admin" leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
+              <Button variant="primary" size="sm" label={t('profile.adminPanel')} leadingIcon={<Ionicons name="shield-checkmark" size={14} color={colors['text.onAction']} />} onPress={() => navigation.navigate('Admin')} />
             </View>
           )}
 
           {/* § 4.4 — Tu próximo plan: tarjeta boleto, va debajo de las acciones */}
           {nextPlan && (
             <View style={styles.nextPlanWrap}>
-              <Text variant="overline" color="text.tertiary" style={styles.nextPlanLabel}>Tu próximo plan</Text>
+              <Text variant="overline" color="text.tertiary" style={styles.nextPlanLabel}>{t('profile.nextPlan')}</Text>
               <Pressable
                 onPress={() => navigation.navigate('EventDetail', { event: nextPlan })}
                 style={({ pressed }) => [
@@ -320,7 +318,7 @@ export default function ProfileScreen({ navigation }) {
                   { backgroundColor: colors['action.primary'], opacity: pressed ? 0.92 : 1 },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`Ver tu próximo plan: ${nextPlan.title}`}
+                accessibilityLabel={t('profile.nextPlanA11y', { title: nextPlan.title })}
               >
                 <View style={styles.nextPlanRow}>
                   <View style={[styles.nextPlanThumb, { backgroundColor: colors['bg.surface'] }]}>
@@ -352,9 +350,9 @@ export default function ProfileScreen({ navigation }) {
                 </View>
 
                 <View style={styles.nextPlanFooter}>
-                  <Text variant="label" color="text.onAction">Vas a ir</Text>
+                  <Text variant="label" color="text.onAction">{t('event.attending')}</Text>
                   <View style={[styles.nextPlanCta, { backgroundColor: colors['bg.base'] }]}>
-                    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['action.primary'] }}>Ver</Text>
+                    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['action.primary'] }}>{t('event.view')}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -384,9 +382,9 @@ export default function ProfileScreen({ navigation }) {
           events.length === 0 ? (
             <EmptyState
               icon={<Ionicons name="calendar-outline" size={28} color={colors['text.tertiary']} />}
-              title="No organizaste eventos aún"
-              description="Creá tu primer evento y empezá a recibir asistentes."
-              actionLabel="Crear evento"
+              title={t('profile.noEventsTitle')}
+              description={t('profile.noEventsDesc')}
+              actionLabel={t('home.createEvent')}
               onAction={() => navigation.navigate('CreateEvent')}
             />
           ) : (
@@ -395,7 +393,7 @@ export default function ProfileScreen({ navigation }) {
                 <>
                   <View style={[styles.sectionHeader, { borderBottomColor: colors['border.subtle'] }]}>
                     <View style={[styles.dot, { backgroundColor: colors['status.free'] }]} />
-                    <Text variant="overline" color="text.tertiary">ACTIVOS · {active.length}</Text>
+                    <Text variant="overline" color="text.tertiary">{t('profile.activeCount', { count: active.length })}</Text>
                   </View>
                   {active.map(ev => (
                     <EventRow key={ev.id} event={ev} trailing="auto" onPress={() => navigation.navigate('EventDetail', { event: ev })} />
@@ -406,7 +404,7 @@ export default function ProfileScreen({ navigation }) {
                 <>
                   <View style={[styles.sectionHeader, { borderBottomColor: colors['border.subtle'] }]}>
                     <View style={[styles.dot, { backgroundColor: colors['text.tertiary'] }]} />
-                    <Text variant="overline" color="text.tertiary">PASADOS · {expired.length}</Text>
+                    <Text variant="overline" color="text.tertiary">{t('profile.pastCount', { count: expired.length })}</Text>
                   </View>
                   {expired.map(ev => (
                     <View key={ev.id} style={{ opacity: 0.5 }}>
@@ -426,13 +424,13 @@ export default function ProfileScreen({ navigation }) {
               accessibilityRole="button"
             >
               <Ionicons name="add-circle-outline" size={22} color={colors['nav.selected']} />
-              <Text variant="label" color="nav.selected">Crear publicación</Text>
+              <Text variant="label" color="nav.selected">{t('profile.createPost')}</Text>
             </Pressable>
             {posts.length === 0 ? (
               <EmptyState
                 icon={<Ionicons name="grid-outline" size={28} color={colors['text.tertiary']} />}
-                title="Sin publicaciones"
-                description="Compartí algo con tus seguidores."
+                title={t('profile.noPostsTitle')}
+                description={t('profile.noPostsDesc')}
               />
             ) : (
               posts.map(post => (
@@ -453,9 +451,9 @@ export default function ProfileScreen({ navigation }) {
           savedEvents.length === 0 && savedExternal.length === 0 ? (
             <EmptyState
               icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
-              title="Sin guardados todavía"
-              description="Guardá los planes que te gusten y aparecen acá con recordatorio."
-              actionLabel="Explorar eventos"
+              title={t('myPlans.empty.saved.title')}
+              description={t('myPlans.empty.going.desc')}
+              actionLabel={t('myPlans.empty.saved.action')}
               onAction={() => navigation.navigate('Explore')}
             />
           ) : (

@@ -14,7 +14,8 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import assert from 'node:assert/strict';
 
 let env;
 
@@ -495,5 +496,81 @@ describe('blocks — bloqueos privados', () => {
     await assertSucceeds(
       setDoc(doc(ctx(BETO), 'chats', 'directo1'), { participants: [BETO, ANA], createdAt: 'x' })
     );
+  });
+});
+
+describe('events — perfiles privados', () => {
+  // PRIV es un perfil privado con un seguidor aprobado (FAN). EXT no lo
+  // sigue. Los campos organizerPrivate/viewers los ponen las Cloud Functions.
+  const PRIV = 'uid_privado';
+  const FAN  = 'uid_fan';
+  const EXT  = 'uid_extrano';
+
+  beforeEach(async () => {
+    await env.clearFirestore();
+    await open(async (db) => {
+      await setDoc(doc(db, 'users', PRIV), { uid: PRIV, perfilPublico: false, followers: [FAN], following: [], followRequests: [] });
+      await setDoc(doc(db, 'events', 'privado'), {
+        organizerId: PRIV, organizerPrivate: true, viewers: [PRIV, FAN],
+        title: 'Privado', createdAt: 2, attendees: [], savedBy: [], likes: [], comments: [],
+      });
+      await setDoc(doc(db, 'events', 'publico'), {
+        organizerId: ANA, organizerPrivate: false, viewers: [],
+        title: 'Público', createdAt: 1, attendees: [], savedBy: [], likes: [], comments: [],
+      });
+    });
+  });
+
+  const events = (uid) => collection(ctx(uid), 'events');
+
+  it('quien no sigue al perfil privado NO puede abrir su evento', async () => {
+    await assertFails(getDoc(doc(ctx(EXT), 'events', 'privado')));
+  });
+
+  it('un seguidor SÍ puede abrir el evento privado, y el organizador también', async () => {
+    await assertSucceeds(getDoc(doc(ctx(FAN), 'events', 'privado')));
+    await assertSucceeds(getDoc(doc(ctx(PRIV), 'events', 'privado')));
+  });
+
+  it('una consulta sin filtro de privacidad falla (no puede devolver privados)', async () => {
+    await assertFails(getDocs(query(events(EXT), orderBy('createdAt', 'desc'), limit(20))));
+  });
+
+  it('el feed general (organizerPrivate == false) funciona y no trae privados', async () => {
+    const snap = await assertSucceeds(getDocs(query(events(EXT), where('organizerPrivate', '==', false), orderBy('createdAt', 'desc'), limit(20))));
+    assert.deepEqual(snap.docs.map(d => d.id), ['publico']);
+  });
+
+  it('un seguidor recibe el privado con viewers array-contains; un extraño no puede pedir el de otro', async () => {
+    const snap = await assertSucceeds(getDocs(query(events(FAN), where('viewers', 'array-contains', FAN))));
+    assert.deepEqual(snap.docs.map(d => d.id), ['privado']);
+    await assertFails(getDocs(query(events(EXT), where('viewers', 'array-contains', FAN))));
+  });
+
+  it('pedir los eventos del organizador privado sin ser seguidor falla', async () => {
+    await assertFails(getDocs(query(events(EXT), where('organizerId', '==', PRIV))));
+    await assertSucceeds(getDocs(query(events(EXT), where('organizerId', '==', PRIV), where('organizerPrivate', '==', false))));
+  });
+
+  it('el organizador lista todos sus eventos', async () => {
+    await assertSucceeds(getDocs(query(events(PRIV), where('organizerId', '==', PRIV))));
+  });
+
+  it('quien no lo sigue NO puede anotarse ni guardarlo (así no gana acceso)', async () => {
+    await assertFails(updateDoc(doc(ctx(EXT), 'events', 'privado'), { attendees: [EXT] }));
+    await assertFails(updateDoc(doc(ctx(EXT), 'events', 'privado'), { savedBy: [EXT] }));
+    await assertFails(updateDoc(doc(ctx(EXT), 'events', 'privado'), { likes: [EXT] }));
+  });
+
+  it('un seguidor sí puede anotarse, y después lo ve en Mis planes aunque deje de seguir', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(FAN), 'events', 'privado'), { attendees: [FAN] }));
+    await open(db => updateDoc(doc(db, 'events', 'privado'), { viewers: [PRIV] }));
+    await assertSucceeds(getDocs(query(events(FAN), where('attendees', 'array-contains', FAN))));
+    await assertSucceeds(getDoc(doc(ctx(FAN), 'events', 'privado')));
+  });
+
+  it('el evento público lo ve y lo toca cualquiera', async () => {
+    await assertSucceeds(getDoc(doc(ctx(GUEST), 'events', 'publico')));
+    await assertSucceeds(updateDoc(doc(ctx(GUEST), 'events', 'publico'), { likes: [GUEST] }));
   });
 });

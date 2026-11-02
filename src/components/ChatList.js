@@ -25,6 +25,8 @@ import { requireAccount } from '../lib/requireAccount';
 import { isGroupChat } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 // Tiempo relativo humano: "hace 2 h", "ayer", "lun 21 jul"
 function chatTime(ts) {
@@ -34,11 +36,11 @@ function chatTime(ts) {
   const diff = now - d;
   const h = diff / 3600000;
   const days = diff / 86400000;
-  if (h < 1) return 'Ahora';
+  if (h < 1) return i18n.t('alerts.now');
   if (h < 24) return `${Math.floor(h)} h`;
-  if (days < 2) return 'Ayer';
-  const DAYS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  if (days < 2) return i18n.t('common.yesterday');
+  const DAYS = i18n.t('format.daysShort', { returnObjects: true });
+  const MONTHS = i18n.t('format.monthsShort', { returnObjects: true });
   if (days < 7) return DAYS[d.getDay()];
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
@@ -55,12 +57,13 @@ export function filterVisibleChats(chats, userId, allBlocked) {
 }
 
 export const goToCreateGroup = (navigation) => {
-  if (!requireAccount(navigation, 'Creá una cuenta para armar un grupo.')) return;
+  if (!requireAccount(navigation, i18n.t('messages.needAccountGroup'))) return;
   navigation.navigate('CreateGroup');
 };
 
 export default function ChatList({ chats, loading, navigation, contentContainerStyle }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [usersData, setUsersData] = useState({});
   const userId = auth.currentUser?.uid;
   const { allBlocked } = useBlockedUsers();
@@ -90,7 +93,7 @@ export default function ChatList({ chats, loading, navigation, contentContainerS
     const other    = otherId ? usersData[otherId] : null;
     const isUnread = item.unreadFor?.includes(userId);
 
-    const title  = group ? (item.name || 'Grupo') : (other?.name ?? 'Usuario');
+    const title  = group ? (item.name || t('chat.group')) : (other?.name ?? t('profile.user'));
     const avatar = group ? null : other?.avatar;
 
     return (
@@ -116,8 +119,8 @@ export default function ChatList({ chats, loading, navigation, contentContainerS
           </View>
           <Text variant="caption" color={isUnread ? 'text.primary' : 'text.tertiary'} numberOfLines={1}>
             {group
-              ? `${item.participants?.length ?? 0} miembros · ${item.lastMessage || 'Sin mensajes'}`
-              : (item.lastMessage || 'Sin mensajes')}
+              ? t('messages.groupPreview', { count: item.participants?.length ?? 0, last: item.lastMessage || t('messages.noMessages') })
+              : (item.lastMessage || t('messages.noMessages'))}
           </Text>
         </View>
         {isUnread && (
@@ -125,7 +128,7 @@ export default function ChatList({ chats, loading, navigation, contentContainerS
         )}
       </Pressable>
     );
-  }, [userId, usersData, colors, navigation]);
+  }, [userId, usersData, colors, navigation, t]);
 
   const visibleChats = useMemo(
     () => filterVisibleChats(chats, userId, allBlocked),
@@ -138,9 +141,9 @@ export default function ChatList({ chats, loading, navigation, contentContainerS
     return (
       <EmptyState
         icon={<Ionicons name="chatbubbles-outline" size={28} color={colors['text.tertiary']} />}
-        title="Sin conversaciones"
-        description="Armá un grupo con tus amistades, o compartí un evento con alguien para empezar a chatear."
-        actionLabel="Crear un grupo"
+        title={t('messages.empty.title')}
+        description={t('messages.emptyDesc')}
+        actionLabel={t('messages.createGroup')}
         onAction={() => goToCreateGroup(navigation)}
       />
     );

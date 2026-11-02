@@ -13,13 +13,14 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { useFonts } from 'expo-font';
 import * as Updates from 'expo-updates';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SnackbarProvider } from './src/components/ui/Snackbar';
 import { ThemeProvider } from './src/theme/ThemeProvider';
+import { loadSavedLanguage } from './src/i18n';
 import { installGlobalErrorHandler } from './src/lib/crashReporting';
 import { sanitizeError } from './src/utils/security';
 
@@ -57,6 +58,11 @@ export default function App() {
     PlusJakartaSans_700Bold,
     PlusJakartaSans_800ExtraBold,
   });
+
+  // Idioma guardado (Configuración → Idioma). Se espera junto con las fuentes
+  // para que la app no arranque un instante en otro idioma.
+  const [languageReady, setLanguageReady] = useState(false);
+  useEffect(() => { loadSavedLanguage().finally(() => setLanguageReady(true)); }, []);
 
   const notificationListener = useRef();
   const responseListener = useRef();
@@ -158,7 +164,7 @@ export default function App() {
   }, []);
 
   // Esperar fuentes antes de renderizar (evita flash con fuente del sistema)
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !languageReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

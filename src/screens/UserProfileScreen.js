@@ -20,14 +20,16 @@ import { auth, db } from '../config/firebase';
 import useBlockedUsers from '../hooks/useBlockedUsers';
 import { blockUser, unblockUser } from '../services/blockService';
 import { getOrCreateChat } from '../services/chatService';
-import { subscribeToEvents } from '../services/eventService';
+import { subscribeToOrganizerEvents } from '../services/eventService';
 import { createNotification, NOTIFICATION_TYPES } from '../services/notificationService';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function UserProfileScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { userId } = route.params;
 
   if (!userId || typeof userId !== 'string' || userId.length < 4) {
@@ -51,13 +53,17 @@ export default function UserProfileScreen({ route, navigation }) {
   const currentUserId  = auth.currentUser?.uid;
   const isOwnProfile   = currentUserId === userId;
 
+  useEffect(() => { loadUser(); }, [userId]);
+
+  // Eventos del perfil según lo que este usuario puede ver: si el perfil es
+  // privado y lo sigo, los que me incluyen en viewers; si no, solo los
+  // públicos (ver subscribeToOrganizerEvents). Antes leía la primera página
+  // del feed general y filtraba acá, con lo que faltaban eventos.
+  const followsPrivate = user?.perfilPublico === false && isFollowing;
   useEffect(() => {
-    loadUser();
-    const unsub = subscribeToEvents((all) => {
-      setEvents(all.filter(e => e.organizerId === userId));
-    });
-    return () => unsub?.();
-  }, [userId]);
+    if (!user && !isOwnProfile) return;
+    return subscribeToOrganizerEvents(userId, currentUserId, { followsPrivate }, setEvents);
+  }, [userId, currentUserId, isOwnProfile, followsPrivate, !!user]);
 
   const loadUser = async () => {
     try {
@@ -73,7 +79,7 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleFollow = async () => {
-    if (!requireAccount(navigation, 'Creá una cuenta para seguir a otros usuarios.')) return;
+    if (!requireAccount(navigation, t('userProfile.needAccountFollow'))) return;
     try {
       const userRef    = doc(db, 'users', userId);
       const currentRef = doc(db, 'users', currentUserId);
@@ -103,7 +109,7 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleMessage = async () => {
-    if (!requireAccount(navigation, 'Creá una cuenta para enviar mensajes.')) return;
+    if (!requireAccount(navigation, t('userProfile.needAccountMessage'))) return;
     if (isBlocked || theyBlockedMe) return;
     try {
       const chat = await getOrCreateChat(currentUserId, userId);
@@ -112,12 +118,12 @@ export default function UserProfileScreen({ route, navigation }) {
   };
 
   const handleBlock = useCallback(() => {
-    const action = isBlocked ? 'Desbloquear' : 'Bloquear';
+    const action = isBlocked ? t('userProfile.unblock') : t('userProfile.block');
     const msg    = isBlocked
-      ? `¿Desbloquear a ${user?.name}? Podrá volver a seguirte.`
-      : `¿Bloquear a ${user?.name}? No podrá ver tu perfil.`;
+      ? t('userProfile.unblockMsg', { name: user?.name })
+      : t('userProfile.blockMsg', { name: user?.name });
     Alert.alert(action, msg, [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
       { text: action, style: isBlocked ? 'default' : 'destructive', onPress: async () => {
         try {
           const myRef = doc(db, 'users', currentUserId);
@@ -133,10 +139,10 @@ export default function UserProfileScreen({ route, navigation }) {
             await updateDoc(doc(db, 'users', userId), { followers: arrayRemove(currentUserId) });
             setIsFollowing(false); setHasPending(false);
           }
-        } catch { Alert.alert('Error', 'No se pudo completar la acción'); }
+        } catch { Alert.alert(t('common.error'), t('userProfile.actionError')); }
       }},
     ]);
-  }, [isBlocked, userId, currentUserId, user]);
+  }, [isBlocked, userId, currentUserId, user, t]);
 
   const { active, expired } = useMemo(() => {
     const parse = e => { const [d,m,y] = e.date.split('/'); return new Date(y,m-1,d); };
@@ -147,7 +153,7 @@ export default function UserProfileScreen({ route, navigation }) {
     };
   }, [events]);
 
-  const followLabel  = isFollowing ? 'Siguiendo' : hasPending ? 'Solicitado' : 'Seguir';
+  const followLabel  = isFollowing ? t('userProfile.following') : hasPending ? t('userProfile.requested') : t('userProfile.follow');
   const followVariant = isFollowing || hasPending ? 'secondary' : 'primary';
   const blockedEitherWay = isBlocked || theyBlockedMe;
   const canView = !blockedEitherWay && (isOwnProfile || isFollowing || user?.perfilPublico !== false);
@@ -165,7 +171,7 @@ export default function UserProfileScreen({ route, navigation }) {
       <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
         <EmptyState
           icon={<Ionicons name="person-outline" size={28} color={colors['text.tertiary']} />}
-          title="Usuario no encontrado"
+          title={t('userProfile.notFound')}
         />
       </SafeAreaView>
     );
@@ -180,7 +186,7 @@ export default function UserProfileScreen({ route, navigation }) {
             onPress={() => navigation.goBack()}
             style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
             hitSlop={2}
-            accessibilityLabel="Volver"
+            accessibilityLabel={t('common.back')}
           >
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </Pressable>
@@ -208,9 +214,9 @@ export default function UserProfileScreen({ route, navigation }) {
           {/* Stats */}
           <View style={[styles.statsRow, { borderTopColor: colors['border.subtle'], borderBottomColor: colors['border.subtle'] }]}>
             {[
-              { label: 'Eventos',     value: canView ? events.length : '-' },
-              { label: 'Seguidores',  value: user.followers?.length ?? 0 },
-              { label: 'Siguiendo',   value: user.following?.length  ?? 0 },
+              { label: t('userProfile.events'), value: canView ? events.length : '-' },
+              { label: t('profile.statFollowers'), value: user.followers?.length ?? 0 },
+              { label: t('userProfile.following'), value: user.following?.length  ?? 0 },
             ].map((s, i) => (
               <View key={i} style={styles.stat}>
                 <Text variant="h3">{s.value}</Text>
@@ -225,7 +231,7 @@ export default function UserProfileScreen({ route, navigation }) {
               {!isBlocked && !theyBlockedMe && (
                 <>
                   <Button variant={followVariant} size="md" label={followLabel} onPress={handleFollow} style={{ flex: 1 }} />
-                  <Button variant="secondary" size="icon" leadingIcon={<Ionicons name="chatbubble-outline" size={20} color={colors['text.primary']} />} onPress={handleMessage} accessibilityLabel="Enviar mensaje" />
+                  <Button variant="secondary" size="icon" leadingIcon={<Ionicons name="chatbubble-outline" size={20} color={colors['text.primary']} />} onPress={handleMessage} accessibilityLabel={t('userProfile.sendMessage')} />
                 </>
               )}
               <Button
@@ -233,20 +239,20 @@ export default function UserProfileScreen({ route, navigation }) {
                 size="icon"
                 leadingIcon={<Ionicons name={isBlocked ? 'ban-outline' : 'ban'} size={20} color={isBlocked ? colors['text.tertiary'] : colors['status.urgent']} />}
                 onPress={handleBlock}
-                accessibilityLabel={isBlocked ? 'Desbloquear' : 'Bloquear'}
+                accessibilityLabel={isBlocked ? t('userProfile.unblock') : t('userProfile.block')}
               />
               <Button
                 variant="secondary"
                 size="icon"
                 leadingIcon={<Ionicons name="flag-outline" size={20} color={colors['text.tertiary']} />}
                 onPress={() => setShowReport(true)}
-                accessibilityLabel="Reportar"
+                accessibilityLabel={t('common.report')}
               />
             </View>
           )}
           {theyBlockedMe && (
             <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[3] }}>
-              No podés interactuar con este usuario.
+              {t('userProfile.cantInteract')}
             </Text>
           )}
         </View>
@@ -256,7 +262,7 @@ export default function UserProfileScreen({ route, navigation }) {
           events.length === 0 ? (
             <EmptyState
               icon={<Ionicons name="calendar-outline" size={28} color={colors['text.tertiary']} />}
-              title="Sin eventos organizados"
+              title={t('userProfile.noEvents')}
             />
           ) : (
             <>
@@ -264,7 +270,7 @@ export default function UserProfileScreen({ route, navigation }) {
                 <>
                   <View style={[styles.sectionHead, { borderBottomColor: colors['border.subtle'] }]}>
                     <View style={[styles.dot, { backgroundColor: colors['status.free'] }]} />
-                    <Text variant="overline" color="text.tertiary">ACTIVOS · {active.length}</Text>
+                    <Text variant="overline" color="text.tertiary">{t('profile.activeCount', { count: active.length })}</Text>
                   </View>
                   {active.map(ev => <EventRow key={ev.id} event={ev} trailing="price" onPress={() => navigation.navigate('EventDetail', { event: ev })} />)}
                 </>
@@ -273,7 +279,7 @@ export default function UserProfileScreen({ route, navigation }) {
                 <>
                   <View style={[styles.sectionHead, { borderBottomColor: colors['border.subtle'] }]}>
                     <View style={[styles.dot, { backgroundColor: colors['text.tertiary'] }]} />
-                    <Text variant="overline" color="text.tertiary">PASADOS · {expired.length}</Text>
+                    <Text variant="overline" color="text.tertiary">{t('profile.pastCount', { count: expired.length })}</Text>
                   </View>
                   {expired.map(ev => (
                     <View key={ev.id} style={{ opacity: 0.5 }}>
@@ -287,15 +293,15 @@ export default function UserProfileScreen({ route, navigation }) {
         ) : blockedEitherWay ? (
           <EmptyState
             icon={<Ionicons name="ban-outline" size={28} color={colors['text.tertiary']} />}
-            title="No disponible"
-            description="No podés ver el contenido de este usuario."
+            title={t('userProfile.unavailable')}
+            description={t('userProfile.unavailableDesc')}
           />
         ) : (
           <EmptyState
             icon={<Ionicons name="lock-closed-outline" size={28} color={colors['nav.selected']} />}
-            title="Esta cuenta es privada"
-            description="Seguí a este usuario para ver sus eventos y actividad."
-            actionLabel="Seguir"
+            title={t('userProfile.privateTitle')}
+            description={t('userProfile.privateDesc')}
+            actionLabel={t('userProfile.follow')}
             onAction={handleFollow}
           />
         )}

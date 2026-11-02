@@ -6,20 +6,13 @@
 <title>Términos y Condiciones — Enfiestados</title>
 <style>
   :root{
-    --bg:#faf9fd;
-    --text:#1c1a2e;
-    --text-dim:#5b5675;
-    --accent:#5b46d9;
-    --border:#e4e0f4;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:#141220;
-      --text:#f2eefc;
-      --text-dim:#aca6cc;
-      --accent:#9c8bfb;
-      --border:#2e2a4a;
-    }
+    /* Blanco y negro a propósito: es un documento legal y tiene que leerse
+       como tal, sin los colores de la marca. Sin modo oscuro por lo mismo. */
+    --bg:#ffffff;
+    --text:#111111;
+    --text-dim:#555555;
+    --accent:#111111;
+    --border:#dddddd;
   }
   *{box-sizing:border-box;}
   body{
@@ -27,18 +20,20 @@
     background:var(--bg);
     color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    line-height:1.6;
+    line-height:1.65;
+    color-scheme:light;
   }
   .wrap{max-width:720px;margin:0 auto;padding:48px 24px 96px;}
   header{margin-bottom:32px;}
   .brand{
     font-weight:800;
-    font-size:22px;
-    color:var(--accent);
-    letter-spacing:-.01em;
+    font-size:15px;
+    color:var(--text);
+    letter-spacing:.18em;
   }
   .tag{font-size:14px;color:var(--text-dim);margin:2px 0 0;}
-  h1{font-size:26px;margin:14px 0 4px;}
+  header{padding-bottom:24px;border-bottom:2px solid var(--text);}
+  h1{font-size:28px;margin:18px 0 6px;letter-spacing:-.01em;}
   .updated{color:var(--text-dim);font-size:14px;margin:0;}
   h2{
     font-size:18px;
@@ -49,12 +44,13 @@
   section:first-of-type h2{border-top:none;padding-top:0;}
   p, li{font-size:15px;color:var(--text);}
   ul{padding-left:20px;}
-  a{color:var(--accent);}
+  a{color:var(--text);text-decoration:underline;text-underline-offset:2px;}
+  a:hover{color:var(--text-dim);}
   .contact{
     margin-top:40px;
     padding:18px 20px;
     border:1px solid var(--border);
-    border-radius:10px;
+    border-radius:0;
     font-size:14px;
     color:var(--text-dim);
   }

@@ -5,15 +5,16 @@
 // Uso: if (!requireAccount(navigation, 'Creá una cuenta para guardar eventos')) return;
 import { Alert } from 'react-native';
 import { auth } from '../config/firebase';
+import i18n from '../i18n';
 
-export function requireAccount(navigation, message = 'Creá una cuenta para continuar.') {
+export function requireAccount(navigation, message) {
   if (!auth.currentUser?.isAnonymous) return true;
   Alert.alert(
-    'Creá tu cuenta',
-    message,
+    i18n.t('requireAccount.title'),
+    message ?? i18n.t('requireAccount.default'),
     [
-      { text: 'Ahora no', style: 'cancel' },
-      { text: 'Crear cuenta', onPress: () => navigation.navigate('Register') },
+      { text: i18n.t('requireAccount.notNow'), style: 'cancel' },
+      { text: i18n.t('auth.createAccount'), onPress: () => navigation.navigate('Register') },
     ]
   );
   return false;

@@ -27,7 +27,8 @@ import { createNotification, deleteNotification, markAllAsRead, markAsRead, NOTI
 import { toDate } from '../lib/format';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
-import t from '../i18n/es-CR.json';
+import { useTranslation } from 'react-i18next';
+import i18n, { intlLocale } from '../i18n';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,22 +49,36 @@ function getNotifIcon(type, colors) {
   }
 }
 
+// El texto de la notificación se arma según el tipo, en el idioma de quien
+// la LEE. El campo message que se guarda en Firestore queda en el idioma de
+// quien la generó, así que solo se usa para tipos sin plantilla (p. ej. el
+// aviso de moderación, que trae el motivo que escribió el admin).
+function notifText(item) {
+  if (item.type === NOTIFICATION_TYPES.NEW_EVENT) {
+    const title = item.eventData?.title;
+    return title ? i18n.t('alerts.types.new_event', { title }) : i18n.t('alerts.types.new_event_untitled');
+  }
+  if (item.type && i18n.exists(`alerts.types.${item.type}`)) return i18n.t(`alerts.types.${item.type}`);
+  return item.message;
+}
+
 function formatRelTime(dateStr) {
   if (!dateStr) return '';
   const diff = Date.now() - toDate(dateStr);
   const m = Math.floor(diff / 60000);
   const h = Math.floor(diff / 3600000);
   const d = Math.floor(diff / 86400000);
-  if (m < 1) return 'Ahora';
+  if (m < 1) return i18n.t('alerts.now');
   if (m < 60) return `${m}m`;
   if (h < 24) return `${h}h`;
   if (d < 7)  return `${d}d`;
-  return toDate(dateStr).toLocaleDateString('es-CR');
+  return toDate(dateStr).toLocaleDateString(intlLocale());
 }
 
 // ─── NotificationItem ─────────────────────────────────────────────────────────
 
 const NotificationItem = memo(function NotificationItem({ item, onPress, onDelete, colors }) {
+  const { t } = useTranslation();
   const swipeRef = useRef(null);
   const icon = getNotifIcon(item.type, colors);
 
@@ -73,7 +88,7 @@ const NotificationItem = memo(function NotificationItem({ item, onPress, onDelet
       <Pressable
         style={[styles.swipeDelete, { backgroundColor: colors['status.urgent'] }]}
         onPress={() => { swipeRef.current?.close(); onDelete(item.id); }}
-        accessibilityLabel="Eliminar notificación"
+        accessibilityLabel={t('alerts.deleteNotif')}
       >
         <Animated.View style={{ transform: [{ scale }] }}>
           <Ionicons name="trash-outline" size={20} color="#fff" />
@@ -101,7 +116,7 @@ const NotificationItem = memo(function NotificationItem({ item, onPress, onDelet
         <View style={styles.notifContent}>
           <Text variant="body" numberOfLines={2}>
             <Text variant="bodyStrong">{item.fromUserName} </Text>
-            {item.message}
+            {notifText(item)}
           </Text>
           <Text variant="caption" color="text.tertiary" style={{ marginTop: 3 }}>
             {formatRelTime(item.createdAt)}
@@ -118,6 +133,7 @@ const NotificationItem = memo(function NotificationItem({ item, onPress, onDelet
 // ─── FollowRequestItem ────────────────────────────────────────────────────────
 
 const FollowRequestItem = memo(function FollowRequestItem({ item, onAccept, onReject, onNavigate, colors }) {
+  const { t } = useTranslation();
   const [processing, setProcessing] = useState(false);
 
   const handle = async (fn) => {
@@ -132,15 +148,15 @@ const FollowRequestItem = memo(function FollowRequestItem({ item, onAccept, onRe
         <Avatar uri={item.fromUserAvatar} name={item.fromUserName} size={48} />
         <View style={styles.requestInfo}>
           <Text variant="title" numberOfLines={1}>{item.fromUserName}</Text>
-          <Text variant="caption" color="text.tertiary">Quiere seguirte</Text>
+          <Text variant="caption" color="text.tertiary">{t('alerts.wantsToFollow')}</Text>
         </View>
       </Pressable>
       {processing ? (
         <ActivityIndicator color={colors['action.primary']} />
       ) : (
         <View style={styles.requestBtns}>
-          <Button variant="primary" size="sm" label="Aceptar" onPress={() => handle(onAccept)} />
-          <Button variant="secondary" size="sm" label="Rechazar" onPress={() => handle(onReject)} />
+          <Button variant="primary" size="sm" label={t('alerts.accept')} onPress={() => handle(onAccept)} />
+          <Button variant="secondary" size="sm" label={t('alerts.reject')} onPress={() => handle(onReject)} />
         </View>
       )}
     </View>
@@ -150,13 +166,14 @@ const FollowRequestItem = memo(function FollowRequestItem({ item, onAccept, onRe
 // ─── NotificationsScreen ──────────────────────────────────────────────────────
 
 const TABS = [
-  { label: t.alerts.tabs.notifications, value: 'notificaciones' },
-  { label: t.alerts.tabs.messages,      value: 'mensajes' },
-  { label: t.alerts.tabs.requests,      value: 'solicitudes' },
+  { labelKey: 'alerts.tabs.notifications', value: 'notificaciones' },
+  { labelKey: 'alerts.tabs.messages',      value: 'mensajes' },
+  { labelKey: 'alerts.tabs.requests',      value: 'solicitudes' },
 ];
 
 export default function NotificationsScreen({ navigation, route }) {
   const { colors } = useTheme();
+  const { t, i18n: i18nInstance } = useTranslation();
   const [tab, setTab] = useState(route?.params?.tab ?? 'notificaciones');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -224,7 +241,7 @@ export default function NotificationsScreen({ navigation, route }) {
   }, [navigation, navigateToEvent]);
 
   const handleDelete = useCallback(async (id) => {
-    try { await deleteNotification(id); } catch { Alert.alert('Error', 'No se pudo eliminar la notificación'); }
+    try { await deleteNotification(id); } catch { Alert.alert(t('common.error'), t('alerts.deleteError')); }
   }, []);
 
   const handleAccept = useCallback(async (notif) => {
@@ -277,9 +294,9 @@ export default function NotificationsScreen({ navigation, route }) {
       const today = new Date(); today.setHours(0,0,0,0);
       const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
       let label;
-      if (d >= today) label = 'Hoy';
-      else if (d >= yesterday) label = 'Ayer';
-      else label = d.toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' });
+      if (d >= today) label = t('common.today');
+      else if (d >= yesterday) label = t('common.yesterday');
+      else label = d.toLocaleDateString(intlLocale(), { weekday: 'long', day: 'numeric', month: 'long' });
       if (label !== lastDay) {
         result.push({ _isDaySep: true, id: `day_${label}`, label });
         lastDay = label;
@@ -287,7 +304,7 @@ export default function NotificationsScreen({ navigation, route }) {
       result.push(n);
     });
     return result;
-  }, [regular]);
+  }, [regular, i18nInstance.language]);
 
   const renderNotif = useCallback(({ item }) => {
     if (item._isDaySep) {
@@ -298,7 +315,7 @@ export default function NotificationsScreen({ navigation, route }) {
       );
     }
     return <NotificationItem item={item} onPress={handlePress} onDelete={handleDelete} colors={colors} />;
-  }, [handlePress, handleDelete, colors]);
+  }, [handlePress, handleDelete, colors, i18nInstance.language]);
 
   const renderRequest = useCallback(({ item }) => (
     <FollowRequestItem item={item} onAccept={handleAccept} onReject={handleReject} onNavigate={handleRequestNav} colors={colors} />
@@ -316,10 +333,10 @@ export default function NotificationsScreen({ navigation, route }) {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text variant="h2">{t.alerts.title}</Text>
+        <Text variant="h2">{t('alerts.title')}</Text>
         {unread > 0 && tab === 'notificaciones' && (
           <Pressable onPress={() => markAllAsRead(userId)} accessibilityRole="button">
-            <Text variant="label" color="nav.selected">{t.alerts.markAll}</Text>
+            <Text variant="label" color="nav.selected">{t('alerts.markAll')}</Text>
           </Pressable>
         )}
         {tab === 'mensajes' && (
@@ -327,7 +344,7 @@ export default function NotificationsScreen({ navigation, route }) {
             onPress={() => goToCreateGroup(navigation)}
             style={styles.headerIcon}
             accessibilityRole="button"
-            accessibilityLabel="Crear grupo"
+            accessibilityLabel={t('alerts.createGroup')}
           >
             <Ionicons name="people-outline" size={24} color={colors['text.primary']} />
           </Pressable>
@@ -340,10 +357,10 @@ export default function NotificationsScreen({ navigation, route }) {
           options={TABS.map(x => ({
             ...x,
             label: x.value === 'solicitudes' && requests.length > 0
-              ? `${x.label} (${requests.length})`
+              ? t('alerts.tabCount', { label: t(x.labelKey), count: requests.length })
               : x.value === 'mensajes' && unreadChats > 0
-                ? `${x.label} (${unreadChats})`
-                : x.label,
+                ? t('alerts.tabCount', { label: t(x.labelKey), count: unreadChats })
+                : t(x.labelKey),
           }))}
           selected={tab}
           onSelect={setTab}
@@ -364,9 +381,9 @@ export default function NotificationsScreen({ navigation, route }) {
         regular.length === 0 ? (
           <EmptyState
             icon={<Ionicons name="notifications-outline" size={28} color={colors['text.tertiary']} />}
-            title="Todavía no hay nada"
-            description="Seguí a un organizador o guardá un evento y acá te avisamos de todo lo que pase."
-            actionLabel="Explorar eventos"
+            title={t('alerts.empty.title')}
+            description={t('alerts.empty.desc')}
+            actionLabel={t('alerts.empty.action')}
             onAction={() => navigation.navigate('Home')}
           />
         ) : (
@@ -376,8 +393,8 @@ export default function NotificationsScreen({ navigation, route }) {
         requests.length === 0 ? (
           <EmptyState
             icon={<Ionicons name="person-add-outline" size={28} color={colors['text.tertiary']} />}
-            title="Sin solicitudes"
-            description="Las solicitudes de seguimiento aparecen acá."
+            title={t('alerts.noRequestsTitle')}
+            description={t('alerts.noRequestsDesc')}
           />
         ) : (
           <FlashList data={requests} keyExtractor={i => i.id} renderItem={renderRequest} {...LIST_PROPS} />

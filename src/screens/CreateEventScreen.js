@@ -29,14 +29,15 @@ import {
 } from '../utils/security';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 // ─── Formateo de fecha/hora humano ───────────────────────────────────────────
 
-const DAYS  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-const MONTHS= ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
 function humanDate(d) {
-  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const days = i18n.t('format.daysShort', { returnObjects: true });
+  const months = i18n.t('format.monthsShort', { returnObjects: true });
+  return i18n.t('format.eventDate', { day: days[d.getDay()], date: d.getDate(), month: months[d.getMonth()] });
 }
 function humanTime(t) {
   let h = t.getHours(), m = t.getMinutes();
@@ -55,6 +56,7 @@ function storageTime(t) {
 // ─── Componentes inline ───────────────────────────────────────────────────────
 
 function FieldLabel({ label, optional = false, colors }) {
+  const { t } = useTranslation();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 }}>
       <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.secondary'] }}>
@@ -62,7 +64,7 @@ function FieldLabel({ label, optional = false, colors }) {
       </Text>
       {optional && (
         <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.tertiary'] }}>
-          · opcional
+          {t('createEvent.optional')}
         </Text>
       )}
     </View>
@@ -104,6 +106,7 @@ function TextBox({ value, onChangeText, placeholder, multiline, maxLength, keybo
 
 export default function CreateEventScreen({ navigation }) {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const [step,            setStep]           = useState(1);
@@ -139,9 +142,9 @@ export default function CreateEventScreen({ navigation }) {
   useEffect(() => {
     loadEventDraft(uid).then(draft => {
       if (!draft) return;
-      Alert.alert('Tenés un borrador', '¿Querés seguir con el evento que dejaste guardado?', [
-        { text: 'Empezar de cero', style: 'destructive', onPress: () => clearEventDraft(uid) },
-        { text: 'Seguir con el borrador', onPress: () => applyDraft(draft) },
+      Alert.alert(t('createEvent.draftFound'), t('createEvent.draftFoundMsg'), [
+        { text: t('createEvent.startOver'), style: 'destructive', onPress: () => clearEventDraft(uid) },
+        { text: t('createEvent.continueDraft'), onPress: () => applyDraft(draft) },
       ], { cancelable: false });
     });
   }, []);
@@ -192,15 +195,15 @@ export default function CreateEventScreen({ navigation }) {
   // iOS) pasa por acá. Antes solo la X preguntaba, y el "Guardar borrador"
   // no guardaba nada: el atrás de Android borraba todo sin avisar.
   usePreventRemove(isDirty && !leaving, ({ data }) => {
-    Alert.alert('¿Salir sin publicar?', 'Podés guardar lo que llevás como borrador y seguir después.', [
-      { text: 'Seguir editando', style: 'cancel' },
+    Alert.alert(t('createEvent.leaveTitle'), t('createEvent.leaveMsg'), [
+      { text: t('createEvent.keepEditing'), style: 'cancel' },
       {
-        text: 'Descartar',
+        text: t('createEvent.discard'),
         style: 'destructive',
         onPress: () => exitWith(() => { clearEventDraft(uid); navigation.dispatch(data.action); }),
       },
       {
-        text: 'Guardar borrador',
+        text: t('createEvent.saveDraftBtn'),
         onPress: () => exitWith(async () => { await saveEventDraft(uid, currentDraft()); navigation.dispatch(data.action); }),
       },
     ]);
@@ -238,8 +241,8 @@ export default function CreateEventScreen({ navigation }) {
 
   const handlePublish = async () => {
     if (!step3Valid) return;
-    if (!isVirtual && !locationCoords) { Alert.alert('Error', 'Seleccioná la ubicación en el paso 2'); return; }
-    if (isVirtual && !isValidWebURL(virtualLink)) { Alert.alert('Error', 'El link debe comenzar con https:// o http://'); return; }
+    if (!isVirtual && !locationCoords) { Alert.alert(t('common.error'), t('createEvent.selectLocationStep2')); return; }
+    if (isVirtual && !isValidWebURL(virtualLink)) { Alert.alert(t('common.error'), t('createEvent.linkProtocol')); return; }
 
     setLoading(true);
     try {
@@ -271,9 +274,9 @@ export default function CreateEventScreen({ navigation }) {
       const newEventId = await createEvent(eventData);
       clearEventDraft(uid);
 
-      Alert.alert('¡Publicado!', 'Tu evento ya está en Enfiestados', [
-        { text: 'Ver evento', onPress: () => exitWith(() => { navigation.goBack(); navigation.navigate('EventDetail', { event: { id: newEventId, ...eventData } }); }) },
-        { text: 'Listo', onPress: () => exitWith(() => navigation.goBack()) },
+      Alert.alert(t('createEvent.published'), t('createEvent.publishedMsg'), [
+        { text: t('createEvent.viewEvent'), onPress: () => exitWith(() => { navigation.goBack(); navigation.navigate('EventDetail', { event: { id: newEventId, ...eventData } }); }) },
+        { text: t('createEvent.done'), onPress: () => exitWith(() => navigation.goBack()) },
       ], { cancelable: false });
 
       getDoc(doc(db, 'users', user.uid)).then(snap => {
@@ -289,7 +292,7 @@ export default function CreateEventScreen({ navigation }) {
         });
       }).catch(() => {});
     } catch {
-      Alert.alert('Error', 'No se pudo crear el evento. Intentá de nuevo.');
+      Alert.alert(t('common.error'), t('createEvent.createError'));
     }
     setLoading(false);
   };
@@ -307,10 +310,10 @@ export default function CreateEventScreen({ navigation }) {
   // La pregunta (seguir / descartar / guardar) la hace usePreventRemove.
   const confirmClose = () => navigation.goBack();
 
-  const stepTitles = ['¿Qué vas a organizar?', '¿Cuándo y dónde?', '¿Cuánto cuesta?'];
+  const stepTitles = [t('createEvent.stepWhat'), t('createEvent.stepWhen'), t('createEvent.stepPrice')];
   const continueLabel = step === 3
-    ? (loading ? 'Publicando…' : (imagesUploading ? 'Subiendo imágenes…' : 'Publicar'))
-    : 'Continuar';
+    ? (loading ? t('createEvent.publishing') : (imagesUploading ? t('createEvent.uploadingImages') : t('createEvent.publish')))
+    : t('createEvent.continue');
   const stepIsValid = [step1Valid, step2Valid, step3Valid][step - 1];
 
   return (
@@ -319,16 +322,16 @@ export default function CreateEventScreen({ navigation }) {
       {/* ── HEADER: progreso + cerrar ─────────────────────────────────── */}
       <View style={[styles.header, { paddingTop: insets.top + space[2] }]}>
         {step > 1 ? (
-          <Pressable onPress={goBack} style={styles.iconBtn} accessibilityLabel="Volver">
+          <Pressable onPress={goBack} style={styles.iconBtn} accessibilityLabel={t('common.back')}>
             <Ionicons name="arrow-back" size={22} color={colors['text.primary']} />
           </Pressable>
         ) : <View style={styles.iconBtn} />}
 
         <View style={{ flex: 1, gap: space[2] }}>
           <View style={styles.progressRow}>
-            <Text variant="caption" color="text.tertiary">Paso {step} de 3</Text>
+            <Text variant="caption" color="text.tertiary">{t('createEvent.stepOf', { step })}</Text>
             {/* Antes decía "Borrador guardado" siempre, sin que se guardara nada. */}
-            {fromDraft && <Text variant="caption" color="text.tertiary">Borrador recuperado</Text>}
+            {fromDraft && <Text variant="caption" color="text.tertiary">{t('createEvent.draftRecovered')}</Text>}
           </View>
           {/* Barra de progreso amarilla */}
           <View style={[styles.progressTrack, { backgroundColor: colors['bg.surface'] }]}>
@@ -336,7 +339,7 @@ export default function CreateEventScreen({ navigation }) {
           </View>
         </View>
 
-        <Pressable onPress={confirmClose} style={styles.iconBtn} accessibilityLabel="Cerrar">
+        <Pressable onPress={confirmClose} style={styles.iconBtn} accessibilityLabel={t('common.close')}>
           <Ionicons name="close" size={22} color={colors['text.primary']} />
         </Pressable>
       </View>
@@ -359,7 +362,7 @@ export default function CreateEventScreen({ navigation }) {
             <>
               {/* Imágenes — opcional, hasta 10, reordenables (FIX_ROUND_5 § 5) */}
               <Field>
-                <FieldLabel label="Foto o afiche" optional colors={colors} />
+                <FieldLabel label={t('createEvent.photo')} optional colors={colors} />
                 {/* initialUrls={images}: el picker se desmonta en los pasos 2 y 3
                     y, al volver al 1, arrancaba vacío y borraba las imágenes ya
                     subidas (onUploadedChange([])). */}
@@ -368,22 +371,22 @@ export default function CreateEventScreen({ navigation }) {
 
               {/* Título */}
               <Field>
-                <FieldLabel label="Nombre del evento" colors={colors} />
+                <FieldLabel label={t('createEvent.eventName')} colors={colors} />
                 <TextBox
                   value={title}
-                  onChangeText={t => setTitle(t.slice(0, INPUT_LIMITS.EVENT_TITLE))}
-                  placeholder="Ej. Festival de la Luz 2026"
+                  onChangeText={v => setTitle(v.slice(0, INPUT_LIMITS.EVENT_TITLE))}
+                  placeholder={t('createEvent.eventNamePlaceholder')}
                   colors={colors}
                 />
               </Field>
 
               {/* Descripción — opcional */}
               <Field>
-                <FieldLabel label="Descripción" optional colors={colors} />
+                <FieldLabel label={t('createEvent.description')} optional colors={colors} />
                 <TextBox
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Contá de qué se trata el evento…"
+                  placeholder={t('createEvent.descriptionPlaceholder')}
                   multiline
                   maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
                   colors={colors}
@@ -395,7 +398,7 @@ export default function CreateEventScreen({ navigation }) {
 
               {/* Categoría — chips horizontales, nunca grilla */}
               <Field>
-                <FieldLabel label="Categoría" colors={colors} />
+                <FieldLabel label={t('createEvent.category')} colors={colors} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: space[2], alignItems: 'center' }}>
                   {CATEGORIES.map(cat => {
                     const active = category === cat.id;
@@ -434,7 +437,7 @@ export default function CreateEventScreen({ navigation }) {
             <>
               {/* Fecha — un solo control, picker en Modal (§ 1.2) */}
               <Field>
-                <FieldLabel label="Fecha" colors={colors} />
+                <FieldLabel label={t('createEvent.date')} colors={colors} />
                 <Pressable
                   onPress={() => setShowDatePicker(true)}
                   style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
@@ -455,7 +458,7 @@ export default function CreateEventScreen({ navigation }) {
 
               {/* Hora */}
               <Field>
-                <FieldLabel label="Hora" colors={colors} />
+                <FieldLabel label={t('createEvent.time')} colors={colors} />
                 <Pressable
                   onPress={() => setShowTimePicker(true)}
                   style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
@@ -469,17 +472,17 @@ export default function CreateEventScreen({ navigation }) {
                 </Pressable>
                 {Platform.OS === 'android' && showTimePicker && (
                   <DateTimePicker value={time} mode="time" display="default"
-                    onChange={(_, t) => { setShowTimePicker(false); if (t) setTime(t); }} />
+                    onChange={(_, v) => { setShowTimePicker(false); if (v) setTime(v); }} />
                 )}
               </Field>
 
               {/* Tipo — SegmentedControl, no dos botones violetas */}
               <Field>
-                <FieldLabel label="Modalidad" colors={colors} />
+                <FieldLabel label={t('createEvent.mode')} colors={colors} />
                 <SegmentedControl
                   options={[
-                    { label: 'Presencial', value: 'presencial' },
-                    { label: 'Virtual',    value: 'virtual' },
+                    { label: t('createEvent.inPerson'), value: 'presencial' },
+                    { label: t('createEvent.virtual'), value: 'virtual' },
                   ]}
                   selected={isVirtual ? 'virtual' : 'presencial'}
                   onSelect={v => setIsVirtual(v === 'virtual')}
@@ -490,30 +493,30 @@ export default function CreateEventScreen({ navigation }) {
               {!isVirtual ? (
                 <>
                   <Field>
-                    <FieldLabel label="Nombre del lugar" optional colors={colors} />
+                    <FieldLabel label={t('createEvent.venueName')} optional colors={colors} />
                     <TextBox
                       value={locationName}
                       onChangeText={setLocationName}
-                      placeholder="Ej. Teatro Nacional"
+                      placeholder={t('createEvent.venuePlaceholder')}
                       colors={colors}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel label="Ubicación en el mapa" colors={colors} />
+                    <FieldLabel label={t('createEvent.mapLocation')} colors={colors} />
                     <Pressable
                       onPress={() => setShowMapModal(true)}
                       style={[styles.mapBtn, { backgroundColor: locationCoords ? colors['status.free.bg'] : colors['bg.surface'], borderColor: locationCoords ? colors['status.free'] : colors['border.strong'] }]}
                     >
                       <Ionicons name={locationCoords ? 'checkmark-circle' : 'map-outline'} size={20} color={locationCoords ? colors['status.free'] : colors['text.tertiary']} />
                       <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', color: locationCoords ? colors['status.free'] : colors['text.secondary'] }}>
-                        {locationCoords ? 'Ubicación seleccionada' : 'Tocar para marcar en el mapa'}
+                        {locationCoords ? t('createEvent.locationSelected') : t('createEvent.tapToMark')}
                       </Text>
                     </Pressable>
                   </Field>
                 </>
               ) : (
                 <Field>
-                  <FieldLabel label="Link de la transmisión" colors={colors} />
+                  <FieldLabel label={t('createEvent.streamLink')} colors={colors} />
                   <TextBox
                     value={virtualLink}
                     onChangeText={setVirtualLink}
@@ -531,11 +534,11 @@ export default function CreateEventScreen({ navigation }) {
             <>
               {/* Precio — SegmentedControl */}
               <Field>
-                <FieldLabel label="Entrada" colors={colors} />
+                <FieldLabel label={t('createEvent.ticket')} colors={colors} />
                 <SegmentedControl
                   options={[
-                    { label: 'Gratis', value: 'gratis' },
-                    { label: 'De pago', value: 'pago' },
+                    { label: t('common.free'), value: 'gratis' },
+                    { label: t('createEvent.paid'), value: 'pago' },
                   ]}
                   selected={isFree ? 'gratis' : 'pago'}
                   onSelect={v => setIsFree(v === 'gratis')}
@@ -544,11 +547,11 @@ export default function CreateEventScreen({ navigation }) {
 
               {!isFree && (
                 <Field>
-                  <FieldLabel label="Precio en colones" colors={colors} />
+                  <FieldLabel label={t('createEvent.priceColones')} colors={colors} />
                   <TextBox
                     value={price}
                     onChangeText={setPrice}
-                    placeholder="Ej. 5000"
+                    placeholder={t('createEvent.pricePlaceholder')}
                     keyboardType="numeric"
                     colors={colors}
                   />
@@ -558,18 +561,18 @@ export default function CreateEventScreen({ navigation }) {
               {/* Vista previa real de EventCardLarge — la card que se usa en el feed */}
               <View style={[styles.previewSection, { borderColor: colors['border.subtle'] }]}>
                 <Text variant="overline" color="text.tertiary" style={{ paddingHorizontal: space[5], paddingBottom: space[2] }}>
-                  ASÍ SE VE EN EL FEED
+                  {t('createEvent.previewFeed')}
                 </Text>
                 <EventCardLarge
                   event={{
-                    title: title || 'Nombre del evento',
+                    title: title || t('createEvent.eventName'),
                     category: category || '',
                     date: storageDate(date),
                     time: storageTime(time),
                     images,
                     isFree,
                     price: isFree ? 0 : (parseInt(price) || undefined),
-                    location: { name: locationName || (isVirtual ? 'Evento virtual' : 'Sin ubicación') },
+                    location: { name: locationName || (isVirtual ? t('createEvent.virtualEvent') : t('createEvent.noLocation')) },
                     attendees: [],
                     savedBy: [],
                   }}
@@ -586,12 +589,12 @@ export default function CreateEventScreen({ navigation }) {
           {/* Razón por la que está deshabilitado */}
           {!stepIsValid && step === 2 && !isVirtual && !locationCoords && (
             <Text variant="caption" color="text.tertiary" align="center" style={{ marginBottom: space[2] }}>
-              Falta elegir la ubicación en el mapa
+              {t('createEvent.missingLocation')}
             </Text>
           )}
           {!stepIsValid && step === 2 && isVirtual && !virtualLink && (
             <Text variant="caption" color="text.tertiary" align="center" style={{ marginBottom: space[2] }}>
-              Ingresá el link del evento virtual
+              {t('createEvent.missingLink')}
             </Text>
           )}
           <Pressable
@@ -629,7 +632,7 @@ export default function CreateEventScreen({ navigation }) {
           <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
             <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
               <Pressable onPress={() => setShowDatePicker(false)} style={{ padding: space[2] }}>
-                <Text variant="label" color="link">Listo</Text>
+                <Text variant="label" color="link">{t('createEvent.done')}</Text>
               </Pressable>
             </View>
             <DateTimePicker value={date} mode="date" display="spinner" minimumDate={new Date()}
@@ -644,7 +647,7 @@ export default function CreateEventScreen({ navigation }) {
           <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
             <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
               <Pressable onPress={() => setShowTimePicker(false)} style={{ padding: space[2] }}>
-                <Text variant="label" color="link">Listo</Text>
+                <Text variant="label" color="link">{t('createEvent.done')}</Text>
               </Pressable>
             </View>
             <DateTimePicker value={time} mode="time" display="spinner"
@@ -669,14 +672,14 @@ export default function CreateEventScreen({ navigation }) {
           </MapView>
           <View style={[styles.mapModalFooter, { backgroundColor: colors['bg.raised'], paddingBottom: insets.bottom + space[3] }]}>
             <Text variant="caption" color="text.tertiary">
-              {locationCoords ? 'Ubicación seleccionada. Tocá en el mapa para moverla.' : 'Tocá en el mapa para marcar la ubicación'}
+              {locationCoords ? t('createEvent.locationSelectedMove') : t('createEvent.tapMapToMark')}
             </Text>
             <Pressable
-              onPress={() => locationCoords ? setShowMapModal(false) : Alert.alert('', 'Seleccioná un punto en el mapa')}
+              onPress={() => locationCoords ? setShowMapModal(false) : Alert.alert('', t('createEvent.selectPoint'))}
               style={[styles.ctaBtn, { backgroundColor: locationCoords ? colors['action.primary'] : colors['bg.surface'], marginTop: space[3] }]}
             >
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', color: locationCoords ? colors['text.onAction'] : colors['text.tertiary'] }}>
-                Confirmar ubicación
+                {t('createEvent.confirmLocation')}
               </Text>
             </Pressable>
           </View>

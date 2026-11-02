@@ -7,11 +7,13 @@ import { Animated, Image, StyleSheet, View } from 'react-native';
 import Text from './ui/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const LOGO = 88;
 
 export default function LoadingScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
@@ -47,7 +49,7 @@ export default function LoadingScreen() {
         />
         <Text variant="display" align="center" style={styles.title}>Enfiestados</Text>
         <Text variant="body" color="text.secondary" align="center">
-          Descubrí eventos cerca tuyo
+          {t('loading.tagline')}
         </Text>
       </Animated.View>
 

@@ -23,9 +23,11 @@ import { auth, db, storage } from '../config/firebase';
 import { compressForUpload } from '../lib/imageUpload';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function EditProfileScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { user: paramUser } = route.params ?? {};
 
   const [name,      setName]      = useState(paramUser?.name      || '');
@@ -56,7 +58,7 @@ export default function EditProfileScreen({ route, navigation }) {
 
   const pickImage = async (type) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería'); return; }
+    if (status !== 'granted') { Alert.alert(t('editProfile.permissionDenied'), t('editProfile.galleryAccess')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -72,7 +74,7 @@ export default function EditProfileScreen({ route, navigation }) {
         if (type === 'avatar') setAvatar(uri);
         else setCover(uri);
       } catch {
-        Alert.alert('No se pudo agregar', 'La imagen no se pudo procesar.');
+        Alert.alert(t('editProfile.addError'), t('editProfile.imageProcessError'));
       }
     }
   };
@@ -101,7 +103,7 @@ export default function EditProfileScreen({ route, navigation }) {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Error', 'El nombre es obligatorio'); return; }
+    if (!name.trim()) { Alert.alert(t('common.error'), t('auth.nameRequired')); return; }
     setSaving(true);
     try {
       let avatarURL = paramUser?.avatar    || '';
@@ -122,9 +124,9 @@ export default function EditProfileScreen({ route, navigation }) {
         displayName: name.trim(),
         photoURL: avatarURL || null,
       }).catch(() => {});
-      Alert.alert('¡Listo!', 'Perfil actualizado', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      Alert.alert(t('editEvent.doneTitle'), t('editProfile.updated'), [{ text: t('common.ok'), onPress: () => navigation.goBack() }]);
     } catch {
-      Alert.alert('Error', 'No se pudo actualizar el perfil');
+      Alert.alert(t('common.error'), t('editProfile.updateError'));
     }
     setSaving(false);
   };
@@ -141,11 +143,11 @@ export default function EditProfileScreen({ route, navigation }) {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel="Cerrar">
+        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel={t('common.close')}>
           <Ionicons name="close" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="title">Editar perfil</Text>
-        <Button variant="ghost" size="sm" label="Guardar" onPress={handleSave} loading={saving} />
+        <Text variant="title">{t('profile.editProfile')}</Text>
+        <Button variant="ghost" size="sm" label={t('common.save')} onPress={handleSave} loading={saving} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
@@ -153,7 +155,7 @@ export default function EditProfileScreen({ route, navigation }) {
         <Pressable
           style={[styles.cover, { backgroundColor: colors['bg.surface'] }]}
           onPress={() => pickImage('cover')}
-          accessibilityLabel="Cambiar foto de portada"
+          accessibilityLabel={t('editProfile.changeCover')}
         >
           {cover ? <Image source={{ uri: cover }} style={styles.coverImg} contentFit="cover" /> : null}
           <View style={styles.coverOverlay}>
@@ -166,7 +168,7 @@ export default function EditProfileScreen({ route, navigation }) {
           <Pressable
             onPress={() => pickImage('avatar')}
             style={[styles.avatarBtn, { borderColor: colors['bg.base'] }]}
-            accessibilityLabel="Cambiar foto de perfil"
+            accessibilityLabel={t('editProfile.changeAvatar')}
           >
             <Avatar uri={avatar} name={name} size={88} />
             <View style={styles.avatarOverlay}>
@@ -177,18 +179,18 @@ export default function EditProfileScreen({ route, navigation }) {
 
         {/* Campos */}
         <View style={styles.form}>
-          <Input label="Nombre" placeholder="Tu nombre" value={name} onChangeText={setName} />
+          <Input label={t('editProfile.name')} placeholder={t('auth.namePlaceholder')} value={name} onChangeText={setName} />
           <TextArea
-            label="Biografía"
-            placeholder="Contá algo sobre vos…"
+            label={t('editProfile.bio')}
+            placeholder={t('editProfile.bioPlaceholder')}
             value={bio}
             onChangeText={setBio}
             maxLength={200}
             style={{ marginTop: space[4] }}
           />
           <Input
-            label="Ubicación"
-            placeholder="Ej: San José, Costa Rica"
+            label={t('editProfile.location')}
+            placeholder={t('editProfile.locationPlaceholder')}
             value={location}
             onChangeText={setLocation}
             leadingIcon={<Ionicons name="location-outline" size={18} color={colors['text.tertiary']} />}
@@ -198,20 +200,20 @@ export default function EditProfileScreen({ route, navigation }) {
           {/* Intereses */}
           <MetaRow
             icon={<Ionicons name="sparkles-outline" size={20} color={colors['action.primary']} />}
-            label="Intereses"
-            value="Actualizá qué tipo de eventos querés ver"
+            label={t('editProfile.interests')}
+            value={t('editProfile.interestsValue')}
             onPress={() => navigation.navigate('Interests', { onboarding: false })}
             style={{ marginTop: space[4] }}
           />
 
           {/* Privacidad */}
           <View style={[styles.privacySection, { backgroundColor: colors['bg.surface'], borderColor: colors['border.subtle'] }]}>
-            <Text variant="overline" color="text.tertiary" style={{ marginBottom: space[3] }}>PRIVACIDAD</Text>
+            <Text variant="overline" color="text.tertiary" style={{ marginBottom: space[3] }}>{t('editProfile.privacy')}</Text>
             <SwitchRow
-              label="Cuenta privada"
+              label={t('editProfile.privateAccount')}
               description={isPrivate
-                ? 'Solo tus seguidores aprobados pueden ver tu perfil'
-                : 'Cualquier persona puede ver tu perfil y eventos'}
+                ? t('editProfile.privateOn')
+                : t('editProfile.privateOff')}
               value={isPrivate}
               onValueChange={setIsPrivate}
             />

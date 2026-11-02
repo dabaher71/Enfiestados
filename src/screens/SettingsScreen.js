@@ -14,13 +14,15 @@ import Dialog from '../components/ui/Dialog';
 import Input from '../components/ui/Input';
 import Sheet from '../components/ui/Sheet';
 import Text from '../components/ui/Text';
+import LanguagePicker from '../components/LanguagePicker';
+import { LANGUAGES } from '../i18n';
 
 import { auth, functions } from '../config/firebase';
 import { useZonePreference } from '../lib/zonePreference';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
-import t from '../i18n/es-CR.json';
 import Constants from 'expo-constants';
+import { useTranslation } from 'react-i18next';
 
 const NOTIF_KEY = '@enfiestados/notif_prefs';
 // El sitio vive en enfiestados.net, servido por Firebase Hosting como dominio
@@ -30,6 +32,8 @@ const TERMS_URL   = 'https://enfiestados.net/terminos';
 
 export default function SettingsScreen({ navigation }) {
   const { colors, mode, setThemeMode } = useTheme();
+  const { t, i18n } = useTranslation();
+  const [showLanguage, setShowLanguage] = useState(false);
   const { zone } = useZonePreference();
   const [notifCount,  setNotifCount]  = useState(3);  // "3 de 3" por defecto
   const [showLogout, setShowLogout] = useState(false);
@@ -51,7 +55,7 @@ export default function SettingsScreen({ navigation }) {
   });
 
   const handleLogout = async () => {
-    try { await signOut(auth); } catch { Alert.alert('Error', 'No se pudo cerrar sesión'); }
+    try { await signOut(auth); } catch { Alert.alert(t('common.error'), t('settings.logoutError')); }
     setShowLogout(false);
   };
 
@@ -68,13 +72,13 @@ export default function SettingsScreen({ navigation }) {
       await httpsCallable(functions, 'requestAccountDeletion')();
       setDeleteStep('code');
     } catch (e) {
-      Alert.alert('Error', e?.message || 'No se pudo enviar el código. Intentá de nuevo.');
+      Alert.alert(t('common.error'), e?.message || t('settings.codeSendError'));
     }
     setDeleteLoading(false);
   };
 
   const handleConfirmDeletion = async () => {
-    if (deleteCode.length !== 6) { setDeleteError('Ingresá los 6 dígitos'); return; }
+    if (deleteCode.length !== 6) { setDeleteError(t('settings.enterSixDigits')); return; }
     setDeleteLoading(true);
     setDeleteError('');
     try {
@@ -83,9 +87,9 @@ export default function SettingsScreen({ navigation }) {
       await httpsCallable(functions, 'confirmAccountDeletion', { timeout: 300000 })({ code: deleteCode });
       closeDeleteFlow();
       await signOut(auth);
-      Alert.alert('Cuenta eliminada', 'Gracias por haber sido parte de Enfiestados.');
+      Alert.alert(t('settings.accountDeleted'), t('settings.accountDeletedMsg'));
     } catch (e) {
-      setDeleteError(e?.message || 'No se pudo confirmar. Intentá de nuevo.');
+      setDeleteError(e?.message || t('settings.confirmError'));
     }
     setDeleteLoading(false);
   };
@@ -145,10 +149,10 @@ export default function SettingsScreen({ navigation }) {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2">{t.settings.title}</Text>
+        <Text variant="h2">{t('settings.title')}</Text>
         <View style={{ width: 44 }} />
       </View>
 
@@ -158,27 +162,28 @@ export default function SettingsScreen({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[4] }}>
 
         {/* Cuenta */}
-        <SectionTitle label="CUENTA" />
+        <SectionTitle label={t('settings.sections.account')} />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Row icon="person-outline"    label="Editar perfil"       subtitle="Foto, nombre, biografía"        onPress={() => navigation.navigate('EditProfile', { user: null })} />
-          <Row icon="sparkles-outline"  label="Mis intereses"       subtitle="Qué tipo de eventos querés ver"  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
+          <Row icon="person-outline"    label={t('settings.editProfile')} subtitle={t('settings.editProfileSub')}        onPress={() => navigation.navigate('EditProfile', { user: null })} />
+          <Row icon="sparkles-outline"  label={t('settings.interests')} subtitle={t('settings.interestsSub')}  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
           {/* El valor sale de la zona guardada de verdad (zonePreference);
               sin zona no se muestra ninguno, para no sugerir un radio que no
               está filtrando nada. */}
-          <Row icon="location-outline"  label="Zona y distancia"    subtitle={zone ? 'Eventos cerca del pin que elegiste' : 'Todo el país'} value={zone ? `${zone.radiusKm} km` : undefined} onPress={() => navigation.navigate('ZoneSettings')} />
-          <Row icon="lock-closed-outline" label="Usuarios bloqueados" subtitle="Ver y desbloquear"              onPress={() => navigation.navigate('BlockedUsers')} />
+          <Row icon="location-outline"  label={t('settings.zone')} subtitle={zone ? t('settings.zoneSubPin') : t('settings.zoneSubAll')} value={zone ? `${zone.radiusKm} km` : undefined} onPress={() => navigation.navigate('ZoneSettings')} />
+          <Row icon="lock-closed-outline" label={t('settings.blocked')} subtitle={t('settings.blockedSub')} onPress={() => navigation.navigate('BlockedUsers')} />
+          <Row icon="language-outline" label={t('settings.language')} value={LANGUAGES.find(l => l.code === i18n.language)?.label} onPress={() => setShowLanguage(true)} />
         </View>
 
         {/* Apariencia */}
-        <SectionTitle label="APARIENCIA" />
+        <SectionTitle label={t('settings.sections.appearance')} />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           <View style={styles.themeRow}>
-            <Text variant="subtitle" style={{ flex: 1 }}>{t.settings.theme.label}</Text>
+            <Text variant="subtitle" style={{ flex: 1 }}>{t('settings.theme.label')}</Text>
             <View style={[styles.themeToggle, { backgroundColor: colors['bg.base'] }]}>
               {[
-                { value: 'system', icon: 'phone-portrait-outline', label: 'Auto' },
-                { value: 'dark',   icon: 'moon-outline',           label: 'Oscuro' },
-                { value: 'light',  icon: 'sunny-outline',          label: 'Claro' },
+                { value: 'system', icon: 'phone-portrait-outline', label: t('settings.themeAuto') },
+                { value: 'dark',   icon: 'moon-outline',           label: t('settings.theme.dark') },
+                { value: 'light',  icon: 'sunny-outline',          label: t('settings.theme.light') },
               ].map(opt => (
                 <Pressable
                   key={opt.value}
@@ -204,30 +209,30 @@ export default function SettingsScreen({ navigation }) {
         </View>
 
         {/* Notificaciones — navega a subpantalla con 3 tipos (§ 7.4) */}
-        <SectionTitle label="NOTIFICACIONES" />
+        <SectionTitle label={t('settings.sections.notifications')} />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           <Row
             icon="notifications-outline"
-            label="Notificaciones push"
-            subtitle="Alertas de actividad e interacciones"
-            value={`${notifCount} de 3`}
+            label={t('settings.push')}
+            subtitle={t('settings.pushSub')}
+            value={t('settings.pushCount', { count: notifCount })}
             onPress={() => navigation.navigate('NotificationsSettings')}
           />
         </View>
 
         {/* Información */}
-        <SectionTitle label="INFORMACIÓN" />
+        <SectionTitle label={t('settings.sections.info')} />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Row icon="document-text-outline"    label="Términos y condiciones" onPress={() => Linking.openURL(TERMS_URL)} />
-          <Row icon="shield-checkmark-outline" label="Política de privacidad" onPress={() => Linking.openURL(PRIVACY_URL)} />
-          <Row icon="help-circle-outline"      label="Ayuda y soporte"        onPress={() => Alert.alert('Soporte', 'Escribinos a soporte@enfiestados.com')} />
-          <Row icon="information-circle-outline" label="Versión"              value={`${Constants.expoConfig?.version ?? '1.0.0'} Beta`} />
+          <Row icon="document-text-outline"    label={t('settings.terms')} onPress={() => Linking.openURL(TERMS_URL)} />
+          <Row icon="shield-checkmark-outline" label={t('settings.privacyPolicy')} onPress={() => Linking.openURL(PRIVACY_URL)} />
+          <Row icon="help-circle-outline"      label={t('settings.help')} onPress={() => Alert.alert(t('settings.support'), t('settings.supportMsg'))} />
+          <Row icon="information-circle-outline" label={t('settings.version')}              value={`${Constants.expoConfig?.version ?? '1.0.0'} Beta`} />
         </View>
 
         {/* Sesión */}
-        <SectionTitle label="SESIÓN" />
+        <SectionTitle label={t('settings.sections.session')} />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
-          <Row icon="log-out-outline"  label={t.settings.logout}    destructive onPress={() => setShowLogout(true)} />
+          <Row icon="log-out-outline"  label={t('settings.logout')} destructive onPress={() => setShowLogout(true)} />
         </View>
 
         {/* Footer — eliminar cuenta va acá, discreto: no es una acción que
@@ -237,7 +242,7 @@ export default function SettingsScreen({ navigation }) {
           <Text variant="caption" color="text.tertiary" align="center">© 2026 Enfiestados</Text>
           <Pressable onPress={() => setDeleteStep('confirm')} hitSlop={8} style={{ marginTop: space[6] }}>
             <Text variant="caption" color="text.tertiary" align="center" style={styles.deleteLink}>
-              Eliminar mi cuenta
+              {t('settings.deleteMyAccount')}
             </Text>
           </Pressable>
         </View>
@@ -245,26 +250,26 @@ export default function SettingsScreen({ navigation }) {
 
       <Dialog
         visible={showLogout}
-        title="¿Cerrar sesión?"
-        message="Tendrás que volver a iniciar sesión para acceder a tu cuenta."
-        confirmLabel={t.settings.logout}
-        cancelLabel={t.common.cancel}
+        title={t('settings.logoutTitle')}
+        message={t('settings.logoutMsg')}
+        confirmLabel={t('settings.logout')}
+        cancelLabel={t('common.cancel')}
         destructive
         onConfirm={handleLogout}
         onCancel={() => setShowLogout(false)}
       />
 
-      <Sheet visible={deleteStep !== 'closed'} onClose={closeDeleteFlow} height="half" title="Eliminar cuenta">
+      <Sheet visible={deleteStep !== 'closed'} onClose={closeDeleteFlow} height="half" title={t('settings.deleteAccount')}>
         <View style={styles.deleteSheet}>
           {deleteStep === 'confirm' && (
             <>
               <Text variant="body" color="text.secondary">
-                Esta acción es irreversible: se borra tu perfil y tu cuenta deja de existir. Te vamos a mandar un código de verificación a tu correo para confirmar que sos vos.
+                {t('settings.deleteIntro')}
               </Text>
               <Button
                 variant="destructive"
                 size="md"
-                label="Enviar código de verificación"
+                label={t('settings.sendCode')}
                 loading={deleteLoading}
                 onPress={handleRequestDeletionCode}
                 style={{ marginTop: space[5] }}
@@ -274,10 +279,10 @@ export default function SettingsScreen({ navigation }) {
           {deleteStep === 'code' && (
             <>
               <Text variant="body" color="text.secondary">
-                Te enviamos un código de 6 dígitos por correo. Ingresalo para eliminar tu cuenta definitivamente.
+                {t('settings.codeSent')}
               </Text>
               <Input
-                label="Código de verificación"
+                label={t('settings.codeLabel')}
                 placeholder="000000"
                 value={deleteCode}
                 onChangeText={v => { setDeleteCode(v.replace(/\D/g, '').slice(0, 6)); setDeleteError(''); }}
@@ -289,17 +294,21 @@ export default function SettingsScreen({ navigation }) {
               <Button
                 variant="destructive"
                 size="md"
-                label="Eliminar cuenta definitivamente"
+                label={t('settings.deleteForever')}
                 loading={deleteLoading}
                 onPress={handleConfirmDeletion}
                 style={{ marginTop: space[4] }}
               />
               <Pressable onPress={handleRequestDeletionCode} disabled={deleteLoading} style={{ marginTop: space[3], alignSelf: 'center' }}>
-                <Text variant="caption" color="text.tertiary">Reenviar código</Text>
+                <Text variant="caption" color="text.tertiary">{t('settings.resendCode')}</Text>
               </Pressable>
             </>
           )}
         </View>
+      </Sheet>
+
+      <Sheet visible={showLanguage} onClose={() => setShowLanguage(false)} height="peek" title={t('settings.language')}>
+        <LanguagePicker style={styles.languageSheet} onChange={() => setShowLanguage(false)} />
       </Sheet>
     </SafeAreaView>
   );
@@ -355,5 +364,6 @@ const styles = StyleSheet.create({
 
   footer: { paddingVertical: space[8], alignItems: 'center' },
   deleteLink: { fontSize: 12, textDecorationLine: 'underline' },
+  languageSheet: { paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[8] },
   deleteSheet: { paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[8] },
 });

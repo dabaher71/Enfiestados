@@ -20,8 +20,10 @@ import { toggleSavedExternal } from '../services/externalEventService';
 import { requireAccount } from '../lib/requireAccount';
 import { safeOpenURL } from '../utils/security';
 import { formatDateLong, formatDaysUntil, formatDomain, formatTimeShort } from '../lib/format';
+import { getCategoryName } from '../constants/categories';
 import { useTheme } from '../theme/ThemeProvider';
 import { elev, radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const HERO_H = Math.min(300, SH * 0.38);
@@ -61,6 +63,7 @@ function DataMetaRow({ icon, tint, title, subtitle, actionLabel, onAction, last 
 
 export default function ExternalEventDetailScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { event } = route.params;
   const [descExpanded, setDescExpanded] = useState(false);
@@ -87,7 +90,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
   const daysLabel  = formatDaysUntil(event.dateISO);
   const dateSubtitle = [timeLabel, daysLabel].filter(Boolean).join(' · ');
   const domain     = formatDomain(event.eventUrl);
-  const source     = event.source || 'la web';
+  const source     = event.source || t('external.theWeb');
 
   const handleBuy = () => {
     safeOpenURL(event.eventUrl);
@@ -95,19 +98,19 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
 
   const handleSave = async () => {
     if (!userId) return;
-    if (!requireAccount(navigation, 'Creá una cuenta para guardar este evento en Mis planes.')) return;
+    if (!requireAccount(navigation, t('event.needAccountSave'))) return;
     const wasSaved = isSaved;
     setIsSaved(!wasSaved);
     try {
       await toggleSavedExternal(userId, event.id);
       showSnackbar(
         wasSaved
-          ? { message: 'Se quitó de Mis planes' }
-          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MainApp', { screen: 'MyPlans' }) }
+          ? { message: t('event.removedFromPlans') }
+          : { message: t('event.savedToPlans'), actionLabel: t('event.view'), action: () => navigation.navigate('MainApp', { screen: 'MyPlans' }) }
       );
     } catch {
       setIsSaved(wasSaved);
-      showSnackbar({ message: 'No se pudo guardar. Intentá de nuevo.' });
+      showSnackbar({ message: t('event.saveError') });
     }
   };
 
@@ -158,7 +161,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
         <Pressable
           style={[styles.closeBtn, { marginTop: insets.top }]}
           onPress={() => navigation.goBack()}
-          accessibilityLabel="Cerrar"
+          accessibilityLabel={t('common.close')}
           accessibilityRole="button"
         >
           <Ionicons name="close" size={20} color="#fff" />
@@ -174,10 +177,10 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
         {/* 2 · IDENTIDAD */}
         <View style={styles.badges}>
           {event.category && event.category !== 'Externo' ? (
-            <StatusBadge label={event.category.toUpperCase()} variant="neutral" />
+            <StatusBadge label={getCategoryName(event.category).toUpperCase()} variant="neutral" />
           ) : null}
           {event.soldOutSoon ? (
-            <StatusBadge label="ÚLTIMAS ENTRADAS" variant="urgent" />
+            <StatusBadge label={t('external.lastTickets')} variant="urgent" />
           ) : null}
         </View>
 
@@ -197,7 +200,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
               tint="yellow"
               title={dateLabel}
               subtitle={dateSubtitle || undefined}
-              actionLabel={event.dateISO ? 'Agendar' : undefined}
+              actionLabel={event.dateISO ? t('external.addToCalendar') : undefined}
               onAction={event.dateISO ? () => {} : undefined}
             />
           ) : null}
@@ -209,7 +212,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
               tint="violet"
               title={event.locationText}
               subtitle={undefined}
-              actionLabel="Mapa"
+              actionLabel={t('event.map')}
               onAction={() => {}}
             />
           ) : null}
@@ -218,8 +221,8 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
           <DataMetaRow
             icon="ticket-outline"
             tint="green"
-            title="Ver entradas"
-            subtitle={`Vía ${source}`}
+            title={t('external.seeTickets')}
+            subtitle={t('external.via', { source })}
             last
           />
         </View>
@@ -236,7 +239,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
             </Text>
             {!descExpanded ? (
               <Pressable onPress={() => setDescExpanded(true)} style={{ marginTop: space[2] }}>
-                <Text variant="label" color="link">Ver más</Text>
+                <Text variant="label" color="link">{t('event.seeMore')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -262,7 +265,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
           <Pressable
             style={[styles.iconAction, { backgroundColor: isSaved ? `${colors['action.primary']}22` : colors['bg.surface'] }]}
             onPress={handleSave}
-            accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar evento'}
+            accessibilityLabel={isSaved ? t('event.removeFromPlans') : t('external.saveEvent')}
           >
             <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={22} color={isSaved ? colors['action.primary'] : colors['text.primary']} />
           </Pressable>
@@ -271,7 +274,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
           <Pressable
             style={[styles.iconAction, { backgroundColor: colors['bg.surface'] }]}
             onPress={handleShare}
-            accessibilityLabel="Compartir"
+            accessibilityLabel={t('common.share')}
           >
             <Ionicons name="share-outline" size={22} color={colors['text.primary']} />
           </Pressable>
@@ -281,10 +284,10 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
             style={[styles.ctaBtn, { backgroundColor: colors['action.primary'] }]}
             onPress={handleBuy}
             accessibilityRole="button"
-            accessibilityLabel="Comprar entradas"
+            accessibilityLabel={t('event.cta.buyTickets')}
           >
             <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: colors['text.onAction'] }}>
-              Comprar entradas
+              {t('event.cta.buyTickets')}
             </Text>
             <Ionicons name="open-outline" size={18} color={colors['text.onAction']} />
           </Pressable>
@@ -293,7 +296,7 @@ export default function ExternalEventDetailScreen({ route, navigation }) {
         {/* Microcopy debajo del CTA */}
         {domain ? (
           <Text variant="caption" color="text.tertiary" align="center" style={styles.microCopy}>
-            Se abre {domain} · te guardamos el evento
+            {t('external.opensDomain', { domain })}
           </Text>
         ) : null}
       </View>

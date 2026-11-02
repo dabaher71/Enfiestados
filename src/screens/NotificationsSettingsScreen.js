@@ -10,6 +10,7 @@ import { SwitchRow } from '../components/ui/Controls';
 import Text from '../components/ui/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const STORAGE_KEY = '@enfiestados/notif_prefs';
 
@@ -17,25 +18,26 @@ const NOTIF_TYPES = [
   {
     id: 'social',
     icon: 'heart-outline',
-    label: 'Actividad social',
-    description: 'Likes, comentarios y nuevos seguidores.',
+    label: 'notifSettings.socialLabel',
+    description: 'notifSettings.socialDesc',
   },
   {
     id: 'reminders',
     icon: 'alarm-outline',
-    label: 'Recordatorios de eventos',
-    description: 'Te avisamos 24 horas antes de un evento guardado.',
+    label: 'notifSettings.remindersLabel',
+    description: 'notifSettings.remindersDesc',
   },
   {
     id: 'tickets',
     icon: 'ticket-outline',
-    label: 'Entradas y compras',
-    description: 'Confirmaciones y actualizaciones de tus entradas.',
+    label: 'notifSettings.ticketsLabel',
+    description: 'notifSettings.ticketsDesc',
   },
 ];
 
 export default function NotificationsSettingsScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [prefs, setPrefs] = useState({ social: true, reminders: true, tickets: true });
 
   useEffect(() => {
@@ -55,25 +57,25 @@ export default function NotificationsSettingsScreen({ navigation }) {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2">Notificaciones</Text>
+        <Text variant="h2">{t('settings.notifications')}</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space[16] }}>
         <Text variant="body" color="text.secondary" style={styles.intro}>
-          Elegí qué tipos de notificaciones querés recibir.
+          {t('notifSettings.intro')}
           {' '}
-          <Text variant="bodyStrong">{activeCount} de {NOTIF_TYPES.length} activas.</Text>
+          <Text variant="bodyStrong">{t('notifSettings.activeCount', { count: activeCount, total: NOTIF_TYPES.length })}</Text>
         </Text>
 
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
           {NOTIF_TYPES.map(type => (
             <SwitchRow
               key={type.id}
-              label={type.label}
-              description={type.description}
+              label={t(type.label)}
+              description={t(type.description)}
               value={prefs[type.id] ?? true}
               onValueChange={() => toggle(type.id)}
             />

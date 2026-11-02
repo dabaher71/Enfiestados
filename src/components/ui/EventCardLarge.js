@@ -11,6 +11,7 @@ import { auth } from '../../config/firebase';
 import { toggleAttendance, toggleSaved } from '../../services/eventService';
 import { toggleSavedExternal } from '../../services/externalEventService';
 import { formatCardDate, formatDateBadge, getImages } from '../../lib/format';
+import { getCategoryName } from '../../constants/categories';
 import { requireAccount } from '../../lib/requireAccount';
 import { safeOpenURL } from '../../utils/security';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -19,6 +20,7 @@ import Button from './Button';
 import MediaCarousel from './MediaCarousel';
 import StatusBadge from './StatusBadge';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
 
 const VARIANTS = {
   large:   { aspectRatio: 1.3, btnSize: 48, priceFontSize: 17,   btnGap: space[2] },
@@ -46,6 +48,7 @@ function DateBadge({ event }) {
 
 export default function EventCardLarge({ event, variant = 'large', onPress, savedExternalIds }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const v = VARIANTS[variant] ?? VARIANTS.large;
   const userId = auth.currentUser?.uid;
@@ -62,7 +65,7 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
   const isAttending = attendOverride ?? (!isExternal && !!event.attendees?.includes(userId));
 
   const handleSave = useCallback(async () => {
-    if (!requireAccount(navigation, 'Creá una cuenta para guardar este evento en Mis planes.')) return;
+    if (!requireAccount(navigation, t('event.needAccountSave'))) return;
     const next = !isSaved;
     setSavedOverride(next);
     try {
@@ -78,7 +81,7 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
       safeOpenURL(event.eventUrl);
       return;
     }
-    if (!requireAccount(navigation, 'Creá una cuenta para confirmar tu asistencia.')) return;
+    if (!requireAccount(navigation, t('event.needAccountAttend'))) return;
     const next = !isAttending;
     setAttendOverride(next);
     try {
@@ -86,13 +89,13 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
     } catch {
       setAttendOverride(!next);
     }
-  }, [navigation, isExternal, event, isAttending, userId]);
+  }, [navigation, isExternal, event, isAttending, userId, t]);
 
   const rawDate = isExternal ? event.dateISO : event.date;
   const rawTime = isExternal ? (event.time ?? event.eventTime ?? '') : event.time;
   const dateText = rawDate ? formatCardDate(rawDate, rawTime) : (event.dateText || '');
   const locationText = event.location?.name ?? event.locationText ?? '';
-  const sourceText = isExternal && event.source ? `Vía ${event.source}` : '';
+  const sourceText = isExternal && event.source ? t('external.via', { source: event.source }) : '';
 
   const hasConfidentPrice = !isExternal || (event.price !== undefined && event.price !== null);
   const isFree = event.isFree === true || event.price === 0;
@@ -103,7 +106,7 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
         images={images}
         aspectRatio={v.aspectRatio}
         onPress={onPress}
-        labelPrefix={event.title ? `del evento ${event.title}` : ''}
+        labelPrefix={event.title ? t('event.ofEvent', { title: event.title }) : ''}
         topLeftSlot={<DateBadge event={event} />}
       />
 
@@ -111,8 +114,8 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
         {/* Badges: urgencia → categoría, máximo 2 */}
         {(event.soldOutSoon || event.category) && (
           <View style={styles.badgeRow}>
-            {event.soldOutSoon && <StatusBadge label="ÚLTIMAS" variant="urgent" />}
-            {event.category && <StatusBadge label={event.category.toUpperCase()} variant="neutral" />}
+            {event.soldOutSoon && <StatusBadge label={t('card.last')} variant="urgent" />}
+            {event.category && <StatusBadge label={getCategoryName(event.category).toUpperCase()} variant="neutral" />}
           </View>
         )}
 
@@ -142,7 +145,7 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
         <View style={styles.actionRow}>
           <View style={styles.priceCluster}>
             {isFree ? (
-              <StatusBadge label="GRATIS" variant="free" />
+              <StatusBadge label={t('card.freeUpper')} variant="free" />
             ) : hasConfidentPrice && event.price > 0 ? (
               <Text style={[styles.price, { fontSize: v.priceFontSize, color: colors['text.primary'] }]}>
                 ₡{Number(event.price).toLocaleString('es-CR')}
@@ -158,13 +161,13 @@ export default function EventCardLarge({ event, variant = 'large', onPress, save
             size={v.btnSize}
             leadingIcon={<Ionicons name={isSaved ? 'heart' : 'heart-outline'} size={20} color={isSaved ? colors['status.urgent'] : colors['text.primary']} />}
             onPress={handleSave}
-            accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar en Mis planes'}
+            accessibilityLabel={isSaved ? t('event.removeFromPlans') : t('event.saveToPlans')}
             style={{ marginLeft: 'auto' }}
           />
           <Button
             variant="primary"
             size={v.btnSize}
-            label={isExternal ? 'Comprar' : (isAttending ? 'Vas a ir' : 'Voy')}
+            label={isExternal ? t('card.buy') : (isAttending ? t('event.attending') : t('card.going'))}
             onPress={handlePrimary}
             style={{ marginLeft: v.btnGap }}
           />

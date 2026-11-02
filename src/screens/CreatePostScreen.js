@@ -21,16 +21,18 @@ import Text from '../components/ui/Text';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
-const VISIBILITY_OPTS = [
-  { label: 'Público',    value: 'public' },
-  { label: 'Seguidores', value: 'followers' },
-];
 
 const MAX_TEXT = INPUT_LIMITS?.POST_TEXT ?? 1000;
 
 export default function CreatePostScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
+  const VISIBILITY_OPTS = [
+    { label: t('post.public'),    value: 'public' },
+    { label: t('post.followers'), value: 'followers' },
+  ];
   const [text,       setText]       = useState('');
   const [media,      setMedia]      = useState([]);   // hasta 3 URIs locales
   const [visibility, setVisibility] = useState('public');
@@ -41,7 +43,7 @@ export default function CreatePostScreen({ navigation }) {
   const canPost = (text.trim().length > 0 || media.length > 0) && !loading;
 
   const avisarLleno = () =>
-    Alert.alert('Máximo alcanzado', `Podés adjuntar hasta ${MAX_POST_MEDIA} archivos por publicación.`);
+    Alert.alert(t('post.maxReached'), t('post.maxMediaMsg', { count: MAX_POST_MEDIA }));
 
   const pickImage = async () => {
     if (libres <= 0) { avisarLleno(); return; }
@@ -64,9 +66,9 @@ export default function CreatePostScreen({ navigation }) {
       try { listas.push((await compressForUpload(a)).uri); } catch { fallidas++; }
     }
     if (fallidas > 0) {
-      Alert.alert('No se pudo agregar', fallidas === 1
-        ? 'Una imagen no se pudo procesar.'
-        : `${fallidas} imágenes no se pudieron procesar.`);
+      Alert.alert(t('editProfile.addError'), fallidas === 1
+        ? t('post.oneImageFailed')
+        : t('post.imagesFailed', { count: fallidas }));
     }
     if (listas.length) setMedia(prev => [...prev, ...listas].slice(0, MAX_POST_MEDIA));
   };
@@ -74,14 +76,14 @@ export default function CreatePostScreen({ navigation }) {
   const takePhoto = async () => {
     if (libres <= 0) { avisarLleno(); return; }
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permiso necesario', 'Necesitamos acceso a la cámara'); return; }
+    if (status !== 'granted') { Alert.alert(t('post.permissionNeeded'), t('post.cameraAccess')); return; }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 1 });
     if (!result.canceled) {
       try {
         const { uri } = await compressForUpload(result.assets[0]);
         setMedia(prev => [...prev, uri].slice(0, MAX_POST_MEDIA));
       } catch {
-        Alert.alert('No se pudo agregar', 'La foto no se pudo procesar.');
+        Alert.alert(t('editProfile.addError'), t('post.photoFailed'));
       }
     }
   };
@@ -108,7 +110,7 @@ export default function CreatePostScreen({ navigation }) {
         }).catch(() => {});
       }
     } catch {
-      Alert.alert('Error', 'No se pudo crear la publicación');
+      Alert.alert(t('common.error'), t('post.createError'));
     }
     setLoading(false);
   };
@@ -117,10 +119,10 @@ export default function CreatePostScreen({ navigation }) {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors['border.subtle'] }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel="Cerrar">
+        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel={t('common.close')}>
           <Ionicons name="close" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="title">Nueva publicación</Text>
+        <Text variant="title">{t('post.newPost')}</Text>
         {/* CTA — amarillo, no violeta (§ 2.2) */}
         <Pressable
           onPress={handlePost}
@@ -131,14 +133,14 @@ export default function CreatePostScreen({ navigation }) {
             { backgroundColor: canPost ? colors['action.primary'] : colors['bg.surface'] },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Publicar"
+          accessibilityLabel={t('createEvent.publish')}
         >
           <Text style={{
             fontSize: 14,
             fontFamily: 'PlusJakartaSans_700Bold',
             color: canPost ? colors['text.onAction'] : colors['text.tertiary'],
           }}>
-            {loading ? 'Publicando…' : 'Publicar'}
+            {loading ? t('createEvent.publishing') : t('createEvent.publish')}
           </Text>
         </Pressable>
       </View>
@@ -150,7 +152,7 @@ export default function CreatePostScreen({ navigation }) {
           <View style={styles.authorRow}>
             <Avatar uri={user?.photoURL} name={user?.displayName || 'U'} size={44} />
             <View style={styles.authorInfo}>
-              <Text variant="title">{user?.displayName || 'Usuario'}</Text>
+              <Text variant="title">{user?.displayName || t('profile.user')}</Text>
               {/* Selector de visibilidad */}
               <View style={styles.visibilityWrap}>
                 <SegmentedControl
@@ -165,7 +167,7 @@ export default function CreatePostScreen({ navigation }) {
           {/* Campo de texto */}
           <TextInput
             style={[styles.textInput, { color: colors['text.primary'], fontFamily: 'PlusJakartaSans_400Regular' }]}
-            placeholder="¿Qué querés compartir?"
+            placeholder={t('post.placeholder')}
             placeholderTextColor={colors['text.tertiary']}
             multiline
             value={text}
@@ -208,7 +210,7 @@ export default function CreatePostScreen({ navigation }) {
                     style={styles.removeImg}
                     onPress={() => quitarMedia(i)}
                     hitSlop={8}
-                    accessibilityLabel={`Quitar archivo ${i + 1} de ${media.length}`}
+                    accessibilityLabel={t('post.removeFile', { index: i + 1, total: media.length })}
                   >
                     <Ionicons name="close-circle" size={26} color={colors['status.urgent']} />
                   </Pressable>
@@ -226,13 +228,13 @@ export default function CreatePostScreen({ navigation }) {
 
         {/* Toolbar — botones de adjuntar, NOT violet (§ 2.2) */}
         <View style={[styles.toolbar, { borderTopColor: colors['border.subtle'], backgroundColor: colors['bg.base'] }]}>
-          <Pressable style={styles.toolBtn} onPress={pickImage} accessibilityLabel="Elegir imagen">
+          <Pressable style={styles.toolBtn} onPress={pickImage} accessibilityLabel={t('post.pickImage')}>
             <Ionicons name="image-outline" size={24} color={colors['text.secondary']} />
-            <Text variant="caption" color="text.secondary">Galería</Text>
+            <Text variant="caption" color="text.secondary">{t('post.gallery')}</Text>
           </Pressable>
-          <Pressable style={styles.toolBtn} onPress={takePhoto} accessibilityLabel="Tomar foto">
+          <Pressable style={styles.toolBtn} onPress={takePhoto} accessibilityLabel={t('post.takePhoto')}>
             <Ionicons name="camera-outline" size={24} color={colors['text.secondary']} />
-            <Text variant="caption" color="text.secondary">Cámara</Text>
+            <Text variant="caption" color="text.secondary">{t('post.camera')}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

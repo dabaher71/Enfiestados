@@ -14,6 +14,7 @@ import { compressForUpload } from '../../lib/imageUpload';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
 
 const MAX_IMAGES = 10;
 const THUMB = 80;
@@ -53,6 +54,7 @@ function uploadToStorage(uri, id, onProgress) {
 
 export default function ImageGridPicker({ initialUrls = [], onUploadedChange, onBusyChange }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [items, setItems] = useState(() =>
     initialUrls.map(url => ({ id: genId(), uri: url, url, status: 'done' }))
   );
@@ -88,7 +90,7 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
 
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería'); return; }
+    if (status !== 'granted') { Alert.alert(t('editProfile.permissionDenied'), t('editProfile.galleryAccess')); return; }
     const remaining = MAX_IMAGES - items.length;
     if (remaining <= 0) return;
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -124,7 +126,7 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
           onLongPress={drag}
           disabled={isActive}
           style={[styles.thumb, { backgroundColor: colors['bg.surface'], opacity: isActive ? 0.85 : 1 }]}
-          accessibilityLabel={isCover ? 'Portada, mantené presionado para reordenar' : 'Mantené presionado para reordenar'}
+          accessibilityLabel={isCover ? t('imagePicker.coverReorder') : t('imagePicker.reorder')}
         >
           <Image source={{ uri: item.uri }} style={styles.thumbImg} contentFit="cover" />
 
@@ -137,7 +139,7 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
           {item.status === 'error' && (
             <Pressable onPress={() => retryItem(item)} style={[StyleSheet.absoluteFill, styles.errorOverlay]}>
               <Ionicons name="refresh" size={18} color="#fff" />
-              <Text style={styles.errorLabel}>Reintentar</Text>
+              <Text style={styles.errorLabel}>{t('common.retry')}</Text>
             </Pressable>
           )}
 
@@ -150,7 +152,7 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
           <Pressable
             onPress={() => removeItem(item.id)}
             style={styles.removeBtn}
-            accessibilityLabel="Quitar imagen"
+            accessibilityLabel={t('imagePicker.remove')}
             hitSlop={4}
           >
             <Ionicons name="close" size={14} color="#fff" />
@@ -176,7 +178,7 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
               onPress={pickImages}
               style={[styles.addCell, { borderColor: colors['border.strong'] }]}
               accessibilityRole="button"
-              accessibilityLabel="Agregar imagen"
+              accessibilityLabel={t('imagePicker.add')}
             >
               <Ionicons name="add" size={22} color={colors['text.tertiary']} />
             </Pressable>
@@ -184,10 +186,10 @@ export default function ImageGridPicker({ initialUrls = [], onUploadedChange, on
         }
       />
       <Text variant="caption" color="text.secondary" style={{ marginTop: space[2] }}>
-        Fotos o afiches · la primera es la portada
+        {t('imagePicker.hint')}
       </Text>
       <Text variant="caption" color="text.tertiary" style={{ marginTop: 2 }}>
-        Cuadradas o verticales se ven mejor
+        {t('imagePicker.hint2')}
       </Text>
     </View>
   );

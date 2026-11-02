@@ -18,15 +18,12 @@ import { toggleAttendance } from '../services/eventService';
 import { fetchExternalEventsByIds } from '../services/externalEventService';
 import { recordSignal } from '../services/signalService';
 import { formatEventDate, formatDaysUntil } from '../lib/format';
+import { getCategoryName } from '../constants/categories';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
-import t from '../i18n/es-CR.json';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
-const TABS = [
-  { label: 'Voy',       value: 'voy' },
-  { label: 'Guardados', value: 'guardados' },
-  { label: 'Entradas',  value: 'entradas' },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,8 +63,10 @@ function withNativeDateFields(ev) {
   return { ...ev, date, time };
 }
 
-// Agrupa eventos por mes: "EN JULIO", "EN AGOSTO"...
-const MONTHS_UPPER = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+// Agrupa eventos por mes: "EN JULIO", "EN AGOSTO"... La etiqueta se arma
+// al renderizar (monthLabel) para que siga el idioma de la app.
+const monthLabel = (month) =>
+  i18n.t('myPlans.inMonth', { month: i18n.t('format.monthsFull', { returnObjects: true })[month] }).toUpperCase();
 function groupByMonth(events) {
   const map = new Map();
   const order = [];
@@ -75,8 +74,8 @@ function groupByMonth(events) {
     const parts = ev.date?.split('/');
     if (!parts || parts.length < 3) return;
     const key = `${parts[2]}-${parts[1]}`;
-    const label = `EN ${MONTHS_UPPER[parseInt(parts[1]) - 1]}`;
-    if (!map.has(key)) { map.set(key, { key, label, events: [] }); order.push(key); }
+    const month = parseInt(parts[1]) - 1;
+    if (!map.has(key)) { map.set(key, { key, month, events: [] }); order.push(key); }
     map.get(key).events.push(ev);
   });
   return order.map(k => map.get(k));
@@ -98,11 +97,11 @@ function openDirections(ev) {
     const q = encodeURIComponent(name);
     url = Platform.OS === 'ios' ? `http://maps.apple.com/?q=${q}` : `geo:0,0?q=${q}`;
   } else {
-    Alert.alert('Sin ubicación', 'Este evento no tiene una dirección cargada.');
+    Alert.alert(i18n.t('myPlans.noLocation'), i18n.t('myPlans.noLocationMsg'));
     return;
   }
   Linking.openURL(url).catch(() =>
-    Alert.alert('No se pudo abrir', 'No encontramos una app de mapas en tu teléfono.')
+    Alert.alert(i18n.t('myPlans.cantOpen'), i18n.t('myPlans.noMapsApp'))
   );
 }
 
@@ -110,11 +109,12 @@ function shareEvent(ev) {
   const where = ev?.location?.name ? `\n${ev.location.name}` : '';
   Share.share({
     title: ev.title,
-    message: `${ev.title}\n${ev.date}${ev.time ? ` · ${ev.time}` : ''}${where}\n\nVia Enfiestados`,
+    message: `${ev.title}\n${ev.date}${ev.time ? ` · ${ev.time}` : ''}${where}\n\n${i18n.t('myPlans.viaEnfiestados')}`,
   }).catch(() => {});
 }
 
 function TicketCard({ event, onPress, onMore, colors }) {
+  const { t } = useTranslation();
   const dateStr  = formatEventDate(event.date, event.time);
   const daysStr  = formatDaysUntil(event.date) ?? '';
   const isSoon   = hoursUntil(event) <= 3 && hoursUntil(event) >= 0;
@@ -126,7 +126,7 @@ function TicketCard({ event, onPress, onMore, colors }) {
         <View style={[styles.urgentBanner, { backgroundColor: colors['status.urgent.bg'] }]}>
           <View style={[styles.urgentDot, { backgroundColor: colors['status.urgent'] }]} />
           <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_800ExtraBold', letterSpacing: 1.2, color: colors['status.urgent'] }}>
-            EMPIEZA EN {Math.ceil(hoursUntil(event))} HORA{Math.ceil(hoursUntil(event)) > 1 ? 'S' : ''}
+            {t(Math.ceil(hoursUntil(event)) > 1 ? 'myPlans.startsInMany' : 'myPlans.startsInOne', { count: Math.ceil(hoursUntil(event)) })}
           </Text>
         </View>
       )}
@@ -147,7 +147,7 @@ function TicketCard({ event, onPress, onMore, colors }) {
           )}
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_800ExtraBold', letterSpacing: 1, color: colors['text.onAction'] }}>
-              {event.category?.toUpperCase() ?? ''}
+              {event.category ? getCategoryName(event.category).toUpperCase() : ''}
             </Text>
             <Text style={{ fontSize: 19, fontFamily: 'BricolageGrotesque_700Bold', color: colors['text.onAction'], lineHeight: 24 }} numberOfLines={2}>
               {event.title}
@@ -168,7 +168,7 @@ function TicketCard({ event, onPress, onMore, colors }) {
         {/* Pie del ticket */}
         <View style={styles.ticketFoot}>
           <View style={styles.ticketFootDate}>
-            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>FECHA</Text>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>{t('myPlans.date')}</Text>
             <Text
               numberOfLines={1}
               ellipsizeMode="tail"
@@ -186,17 +186,17 @@ function TicketCard({ event, onPress, onMore, colors }) {
 
         {/* Acciones del ticket */}
         <View style={styles.ticketActions}>
-          <Pressable style={styles.ticketAction} onPress={() => openDirections(event)} accessibilityLabel="Cómo llegar">
+          <Pressable style={styles.ticketAction} onPress={() => openDirections(event)} accessibilityLabel={t('event.directions')}>
             <Ionicons name="navigate-outline" size={16} color={colors['text.onAction']} />
-            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Cómo llegar</Text>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>{t('event.directions')}</Text>
           </Pressable>
-          <Pressable style={styles.ticketAction} onPress={() => shareEvent(event)} accessibilityLabel="Compartir">
+          <Pressable style={styles.ticketAction} onPress={() => shareEvent(event)} accessibilityLabel={t('common.share')}>
             <Ionicons name="share-outline" size={16} color={colors['text.onAction']} />
-            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Compartir</Text>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>{t('common.share')}</Text>
           </Pressable>
-          <Pressable style={[styles.ticketAction, styles.ticketActionMore]} onPress={onMore} accessibilityLabel="Más opciones">
+          <Pressable style={[styles.ticketAction, styles.ticketActionMore]} onPress={onMore} accessibilityLabel={t('myPlans.moreOptions')}>
             <Ionicons name="ellipsis-horizontal" size={16} color={colors['text.onAction']} />
-            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>Más</Text>
+            <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_600SemiBold', color: colors['text.onAction'] }}>{t('myPlans.more')}</Text>
           </Pressable>
         </View>
       </View>
@@ -208,6 +208,12 @@ function TicketCard({ event, onPress, onMore, colors }) {
 
 export default function MyPlansScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
+  const TABS = [
+    { label: t('myPlans.tabs.going'),   value: 'voy' },
+    { label: t('myPlans.tabs.saved'),   value: 'guardados' },
+    { label: t('myPlans.tabs.tickets'), value: 'entradas' },
+  ];
   const [tab,         setTab]         = useState('voy');
   const [attending,   setAttending]   = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -274,7 +280,7 @@ export default function MyPlansScreen({ navigation }) {
   const handleMore = (ev) => {
     Alert.alert(ev.title, undefined, [
       {
-        text: 'Cancelar asistencia',
+        text: t('event.cancelAttendance'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -283,8 +289,8 @@ export default function MyPlansScreen({ navigation }) {
           } catch {}
         },
       },
-      { text: 'Ver evento', onPress: () => navigation.navigate('EventDetail', { event: ev }) },
-      { text: 'Cerrar', style: 'cancel' },
+      { text: t('createEvent.viewEvent'), onPress: () => navigation.navigate('EventDetail', { event: ev }) },
+      { text: t('common.close'), style: 'cancel' },
     ]);
   };
 
@@ -294,9 +300,9 @@ export default function MyPlansScreen({ navigation }) {
       return (
         <EmptyState
           icon={<Ionicons name="calendar-outline" size={28} color={colors['text.tertiary']} />}
-          title={t.myPlans.empty.going.title}
-          description={t.myPlans.empty.going.desc}
-          actionLabel={t.myPlans.empty.going.action}
+          title={t('myPlans.empty.going.title')}
+          description={t('myPlans.empty.going.desc')}
+          actionLabel={t('myPlans.empty.going.action')}
           onAction={() => navigation.navigate('Explore')}
         />
       );
@@ -319,7 +325,7 @@ export default function MyPlansScreen({ navigation }) {
           group.events.length > 1 || group.events[0]?.id !== attending[0]?.id ? (
             <View key={group.key}>
               <View style={[styles.monthHeader, { borderBottomColor: colors['border.subtle'] }]}>
-                <Text variant="overline" color="text.tertiary">{group.label}</Text>
+                <Text variant="overline" color="text.tertiary">{monthLabel(group.month)}</Text>
               </View>
               {group.events
                 .filter(e => e.id !== attending[0]?.id)
@@ -344,9 +350,9 @@ export default function MyPlansScreen({ navigation }) {
       return (
         <EmptyState
           icon={<Ionicons name="bookmark-outline" size={28} color={colors['text.tertiary']} />}
-          title={t.myPlans.empty.saved.title}
-          description={t.myPlans.empty.saved.desc}
-          actionLabel={t.myPlans.empty.saved.action}
+          title={t('myPlans.empty.saved.title')}
+          description={t('myPlans.empty.saved.desc')}
+          actionLabel={t('myPlans.empty.saved.action')}
           onAction={() => navigation.navigate('Explore')}
         />
       );
@@ -357,7 +363,7 @@ export default function MyPlansScreen({ navigation }) {
         {savedGroups.map(group => (
           <View key={group.key}>
             <View style={[styles.monthHeader, { borderBottomColor: colors['border.subtle'] }]}>
-              <Text variant="overline" color="text.tertiary">{group.label}</Text>
+              <Text variant="overline" color="text.tertiary">{monthLabel(group.month)}</Text>
             </View>
             {group.events.map(ev => (
               <EventRow
@@ -379,9 +385,9 @@ export default function MyPlansScreen({ navigation }) {
   const renderEmpty = (key) => (
     <EmptyState
       icon={<Ionicons name="ticket-outline" size={28} color={colors['text.tertiary']} />}
-      title={t.myPlans.empty[key]?.title ?? 'Sin contenido'}
-      description={t.myPlans.empty[key]?.desc}
-      actionLabel={t.myPlans.empty[key]?.action}
+      title={t(`myPlans.empty.${key}.title`, { defaultValue: t('myPlans.noContent') })}
+      description={t(`myPlans.empty.${key}.desc`)}
+      actionLabel={t(`myPlans.empty.${key}.action`)}
       onAction={() => navigation.navigate('Explore')}
     />
   );
@@ -390,7 +396,7 @@ export default function MyPlansScreen({ navigation }) {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text variant="h2">{t.myPlans.title}</Text>
+        <Text variant="h2">{t('myPlans.title')}</Text>
         {tab === 'voy' && attending.length > 0 && (
           <View style={[styles.countBadge, { backgroundColor: colors['action.primary'] }]}>
             <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>

@@ -1,5 +1,11 @@
 // Utilidades de formato — fuente única de verdad para fechas y precios.
 // Ninguna pantalla debe formatear fechas por su cuenta (§ 3 del design system).
+//
+// Los nombres de días/meses y las frases ("hoy", "faltan 3 días") salen del
+// idioma de la app (src/i18n, sección "format"). Estas funciones no
+// re-renderizan nada: el componente que las usa tiene que llamar a
+// useTranslation() para actualizarse al cambiar de idioma.
+import i18n from '../i18n';
 
 // Normaliza createdAt: llega como Firestore Timestamp real (escrito por
 // Cloud Functions, ej. serverTimestamp()) o como string ISO (escrito por
@@ -8,10 +14,11 @@
 // createdAt/lastMessageTime de Firestore.
 export const toDate = (v) => (v?.toDate ? v.toDate() : new Date(v));
 
-const DAYS_ES      = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const DAYS_FULL_ES = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const MONTHS_ES    = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const MONTHS_FULL  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const list = (key) => i18n.t(key, { returnObjects: true });
+const dayShort  = (d) => list('format.daysShort')[d.getDay()];
+const dayFull   = (d) => list('format.daysFull')[d.getDay()];
+const monthShort = (d) => list('format.monthsShort')[d.getMonth()];
+const monthFull  = (d) => list('format.monthsFull')[d.getMonth()];
 
 // Parsea 'DD/MM/YYYY' o ISO string a Date
 function parseEventDate(raw) {
@@ -29,11 +36,8 @@ function parseEventDate(raw) {
 export function formatEventDate(rawDate, rawTime) {
   const d = parseEventDate(rawDate);
   if (!d) return rawDate ?? '';
-  const dayName = DAYS_ES[d.getDay()];
-  const day     = d.getDate();
-  const month   = MONTHS_ES[d.getMonth()];
-  const time    = rawTime ? ` · ${formatTime12(rawTime)}` : '';
-  return `${dayName} ${day} ${month}${time}`;
+  const time = rawTime ? ` · ${formatTime12(rawTime)}` : '';
+  return i18n.t('format.eventDate', { day: dayShort(d), date: d.getDate(), month: monthShort(d) }) + time;
 }
 
 // "hace 2 h" | "ayer" | "hoy" | "mañana" | "Sáb 8 ago"
@@ -45,12 +49,12 @@ export function formatRelative(rawDate) {
   const diffH  = diffMs / 3_600_000;
   const diffD  = Math.round(diffMs / 86_400_000);
 
-  if (Math.abs(diffH) < 1)  return 'ahora';
-  if (diffH > 0 && diffH < 24) return `en ${Math.round(diffH)} h`;
-  if (diffH < 0 && diffH > -24) return `hace ${Math.round(-diffH)} h`;
-  if (diffD === 0)  return 'hoy';
-  if (diffD === 1)  return 'mañana';
-  if (diffD === -1) return 'ayer';
+  if (Math.abs(diffH) < 1)  return i18n.t('format.now');
+  if (diffH > 0 && diffH < 24) return i18n.t('format.inHours', { count: Math.round(diffH) });
+  if (diffH < 0 && diffH > -24) return i18n.t('format.hoursAgo', { count: Math.round(-diffH) });
+  if (diffD === 0)  return i18n.t('format.todayLower');
+  if (diffD === 1)  return i18n.t('format.tomorrowLower');
+  if (diffD === -1) return i18n.t('format.yesterdayLower');
   return formatEventDate(rawDate);
 }
 
@@ -58,14 +62,14 @@ export function formatRelative(rawDate) {
 export function formatDateBadge(rawDate) {
   const d = parseEventDate(rawDate);
   if (!d) return null;
-  return { day: d.getDate(), month: MONTHS_ES[d.getMonth()].toUpperCase() };
+  return { day: d.getDate(), month: monthShort(d).toUpperCase() };
 }
 
 // "₡8.000" | "Gratis" | "Desde ₡12.000"
 export function formatPrice(price, isFree, prefix) {
-  if (isFree || price === 0) return 'Gratis';
+  if (isFree || price === 0) return i18n.t('common.free');
   const formatted = `₡${Number(price).toLocaleString('es-CR')}`;
-  return prefix ? `Desde ${formatted}` : formatted;
+  return prefix ? i18n.t('format.fromPrice', { price: formatted }) : formatted;
 }
 
 // "Hoy · 8:00 pm" si es hoy; si no, "Sáb 8 ago · 8:00 pm" (formatEventDate).
@@ -76,7 +80,7 @@ export function formatCardDate(rawDate, rawTime) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   if (d.toDateString() === today.toDateString()) {
     const time = rawTime ? ` · ${formatTime12(rawTime)}` : '';
-    return `Hoy${time}`;
+    return i18n.t('common.today') + time;
   }
   return formatEventDate(rawDate, rawTime);
 }
@@ -101,9 +105,10 @@ export function formatDaysUntil(rawDate) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const diff = Math.ceil((d - today) / 86400000);
   if (diff < 0)  return null;
-  if (diff === 0) return 'Hoy';
-  if (diff === 1) return 'Mañana';
-  return `faltan ${diff} días`;
+  if (diff === 0) return i18n.t('common.today');
+  if (diff === 1) return i18n.t('common.tomorrow');
+  // Plurales a mano: no dependemos de Intl.PluralRules en Hermes.
+  return i18n.t(diff === 1 ? 'format.daysLeftOne' : 'format.daysLeft', { count: diff });
 }
 
 // getImages — FIX_ROUND_5 § 6. Lectura retrocompatible del carrusel de un
@@ -126,11 +131,7 @@ export function formatDomain(url) {
 export function formatDateLong(rawDate) {
   const d = parseEventDate(rawDate);
   if (!d) return rawDate ?? '';
-  const DAYS_FULL = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-  const day  = d.getDate();
-  const month = MONTHS_FULL[d.getMonth()];
-  const year  = d.getFullYear();
-  return `${DAYS_FULL[d.getDay()].charAt(0).toUpperCase() + DAYS_FULL[d.getDay()].slice(1)} ${day} de ${month} del ${year}`;
+  return i18n.t('format.dateLong', { day: dayFull(d), date: d.getDate(), month: monthFull(d), year: d.getFullYear() });
 }
 
 // Etiqueta del separador de día en el feed (FIX_ROUND_1 § 2.1)
@@ -144,17 +145,15 @@ export function formatDaySeparator(rawDate) {
 
   const today    = new Date(); today.setHours(0,0,0,0);
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  const dayName  = DAYS_FULL_ES[d.getDay()].toUpperCase();
-  const day      = d.getDate();
-  const month    = MONTHS_FULL[d.getMonth()].toUpperCase();
+  const vars = { day: dayFull(d), date: d.getDate(), month: monthFull(d) };
 
   if (d.toDateString() === today.toDateString()) {
-    return { label: `HOY · ${dayName} ${day}`, isToday: true };
+    return { label: i18n.t('format.separatorToday', vars).toUpperCase(), isToday: true };
   }
   if (d.toDateString() === tomorrow.toDateString()) {
-    return { label: `MAÑANA · ${dayName} ${day}`, isToday: false };
+    return { label: i18n.t('format.separatorTomorrow', vars).toUpperCase(), isToday: false };
   }
-  return { label: `${dayName} ${day} DE ${month}`, isToday: false };
+  return { label: i18n.t('format.separator', vars).toUpperCase(), isToday: false };
 }
 
 // Formatea hora en "8:00 pm" para el overline del EventRow

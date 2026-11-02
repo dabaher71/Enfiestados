@@ -20,9 +20,11 @@ import useBlockedUsers from '../hooks/useBlockedUsers';
 import { createGroupChat, MAX_GROUP_PARTICIPANTS } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function CreateGroupScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const userId = auth.currentUser?.uid;
   const { allBlocked } = useBlockedUsers();
 
@@ -75,7 +77,7 @@ export default function CreateGroupScreen({ navigation }) {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else if (next.size + 1 >= MAX_GROUP_PARTICIPANTS) {
-        Alert.alert('Límite alcanzado', `Un grupo admite hasta ${MAX_GROUP_PARTICIPANTS} personas.`);
+        Alert.alert(t('group.limitTitle'), t('group.limitMsg', { count: MAX_GROUP_PARTICIPANTS }));
         return prev;
       } else next.add(id);
       return next;
@@ -83,8 +85,8 @@ export default function CreateGroupScreen({ navigation }) {
   };
 
   const handleCreate = async () => {
-    if (!name.trim()) { setNameError('Poné un nombre al grupo'); return; }
-    if (selected.size === 0) { Alert.alert('Sin miembros', 'Elegí al menos una persona.'); return; }
+    if (!name.trim()) { setNameError(t('group.nameRequired')); return; }
+    if (selected.size === 0) { Alert.alert(t('group.noMembers'), t('group.pickOne')); return; }
 
     setCreating(true);
     try {
@@ -93,7 +95,7 @@ export default function CreateGroupScreen({ navigation }) {
       // creado, tiene que volver a Mensajes y no al formulario.
       navigation.replace('ChatDetail', { chatId, isGroup: true });
     } catch (e) {
-      Alert.alert('No se pudo crear', e?.message ?? 'Intentá de nuevo.');
+      Alert.alert(t('group.createError'), e?.message ?? t('chat.tryAgain'));
       setCreating(false);
     }
   };
@@ -108,7 +110,7 @@ export default function CreateGroupScreen({ navigation }) {
         accessibilityState={{ checked: on }}
       >
         <Avatar uri={item.avatar} name={item.name} size={44} />
-        <Text variant="title" numberOfLines={1} style={styles.rowName}>{item.name ?? 'Usuario'}</Text>
+        <Text variant="title" numberOfLines={1} style={styles.rowName}>{item.name ?? t('profile.user')}</Text>
         <View style={[
           styles.check,
           on
@@ -124,16 +126,16 @@ export default function CreateGroupScreen({ navigation }) {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2" style={{ flex: 1 }}>Nuevo grupo</Text>
+        <Text variant="h2" style={{ flex: 1 }}>{t('group.newGroup')}</Text>
       </View>
 
       <View style={styles.form}>
         <Input
-          label="Nombre del grupo"
-          placeholder="Ej. Viernes de amigos"
+          label={t('group.name')}
+          placeholder={t('group.namePlaceholder')}
           value={name}
           onChangeText={v => { setName(v); setNameError(''); }}
           maxLength={60}
@@ -141,24 +143,24 @@ export default function CreateGroupScreen({ navigation }) {
         />
 
         <Text variant="overline" color="text.tertiary" style={{ marginTop: space[5], marginBottom: space[2] }}>
-          QUIÉN PUEDE ESCRIBIR
+          {t('group.whoCanWrite')}
         </Text>
         <SegmentedControl
           options={[
-            { label: 'Todos',   value: 'all' },
-            { label: 'Solo yo', value: 'owner' },
+            { label: t('group.everyone'), value: 'all' },
+            { label: t('group.onlyMe'),   value: 'owner' },
           ]}
           selected={writePolicy}
           onSelect={setWritePolicy}
         />
         <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>
           {writePolicy === 'all'
-            ? 'Cualquier miembro puede mandar mensajes.'
-            : 'Solo vos podés escribir — el resto solo lee. Útil para avisos de un evento.'}
+            ? t('group.everyoneDesc')
+            : t('group.onlyMeDescLong')}
         </Text>
 
         <Text variant="overline" color="text.tertiary" style={{ marginTop: space[5] }}>
-          MIEMBROS {selected.size > 0 ? `· ${selected.size}` : ''}
+          {t('group.members')} {selected.size > 0 ? `· ${selected.size}` : ''}
         </Text>
       </View>
 
@@ -167,8 +169,8 @@ export default function CreateGroupScreen({ navigation }) {
       ) : visible.length === 0 ? (
         <EmptyState
           icon={<Ionicons name="people-outline" size={28} color={colors['text.tertiary']} />}
-          title="Todavía no seguís a nadie"
-          description="Seguí a otras personas para poder armar un grupo con ellas."
+          title={t('group.noFollowingTitle')}
+          description={t('group.noFollowingDesc')}
         />
       ) : (
         <FlatList
@@ -185,7 +187,7 @@ export default function CreateGroupScreen({ navigation }) {
           <Button
             variant="primary"
             size="lg"
-            label={selected.size > 0 ? `Crear grupo · ${selected.size}` : 'Crear grupo'}
+            label={selected.size > 0 ? t('group.createCount', { count: selected.size }) : t('group.create')}
             loading={creating}
             disabled={selected.size === 0}
             onPress={handleCreate}

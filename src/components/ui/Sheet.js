@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Dimensions, Keyboard, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const SCREEN_H = Dimensions.get('window').height;
 const HEIGHTS  = { peek: 0.45, half: 0.60, full: 1.0 };
@@ -17,6 +18,7 @@ export default function Sheet({
   destructive = false,
 }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
   // Desplazamiento extra cuando aparece el teclado. Va aparte de translateY
   // (que es el show/hide) y se suman: así una animación no pisa a la otra.
@@ -114,7 +116,7 @@ export default function Sheet({
                 </Animated.Text>
               </View>
             )}
-            <Pressable onPress={onClose} style={styles.closeBtn} accessibilityLabel="Cerrar">
+            <Pressable onPress={onClose} style={styles.closeBtn} accessibilityLabel={t('common.close')}>
               <Animated.Text style={{ fontSize: 20, color: colors['text.secondary'] }}>✕</Animated.Text>
             </Pressable>
           </View>

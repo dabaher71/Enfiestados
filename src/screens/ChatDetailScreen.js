@@ -22,12 +22,14 @@ import { compressForUpload } from '../lib/imageUpload';
 import { canSendPhotoInChat, canWriteInChat, isGroupChat, markMessagesAsRead, sendMessage, subscribeToMessages, uploadChatPhoto } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import i18n, { intlLocale, LANGUAGES } from '../i18n';
+import { useTranslation } from 'react-i18next';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTime(ts) {
   if (!ts) return '';
-  return new Date(ts).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 function getDateKey(ts) {
@@ -41,18 +43,27 @@ function formatDateSep(ts) {
   const d = new Date(ts);
   const today = new Date();
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString())     return 'Hoy';
-  if (d.toDateString() === yesterday.toDateString()) return 'Ayer';
-  return d.toLocaleDateString('es-CR', { day: 'numeric', month: 'long' });
+  if (d.toDateString() === today.toDateString())     return i18n.t('common.today');
+  if (d.toDateString() === yesterday.toDateString()) return i18n.t('common.yesterday');
+  return d.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long' });
 }
 
 function isEventMessage(text) {
   return text?.includes('enfiestados.app/evento/');
 }
 
+// El mensaje lo arma EventDetailScreen con event.shareMessage en el idioma
+// de quien lo mandó, que puede no ser el de quien lo lee: se reconoce el
+// encabezado ("Te comparto este evento:") en cualquiera de los idiomas.
+const SHARE_PREFIXES = LANGUAGES
+  .map(l => i18n.getFixedT(l.code)('event.shareMessage', { title: '\u0000' }).split('\u0000')[0].trim())
+  .filter(Boolean);
+
 function parseEventMessage(text) {
   const lines = text.split('\n');
-  const title   = (lines.find(l => l.includes('Te comparto este evento:')) || '').replace('Te comparto este evento:', '').trim() || 'Evento';
+  const head  = lines.find(l => SHARE_PREFIXES.some(p => l.startsWith(p))) || '';
+  const prefix = SHARE_PREFIXES.find(p => head.startsWith(p)) || '';
+  const title   = head.slice(prefix.length).trim() || i18n.t('chat.event');
   const dateTime = (lines.find(l => l.match(/\d{2}\/\d{2}\/\d{4}/)) || '').trim();
   const linkLine = lines.find(l => l.includes('enfiestados.app/evento/')) || '';
   const match    = linkLine.match(/evento\/([a-zA-Z0-9]+)/);
@@ -63,6 +74,7 @@ function parseEventMessage(text) {
 
 export default function ChatDetailScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { chatId, otherUserId, otherUserName, otherUserAvatar } = route.params;
 
   const [messages,   setMessages]   = useState([]);
@@ -143,7 +155,7 @@ export default function ChatDetailScreen({ route, navigation }) {
         setNewMessage('');
       } catch (e) {
         // Se deja la foto y el texto como estaban, para reintentar.
-        Alert.alert('No se pudo enviar', e?.message ?? 'Intentá de nuevo.');
+        Alert.alert(t('chat.sendError'), e?.message ?? t('chat.tryAgain'));
       } finally {
         setSendingPhoto(false);
       }
@@ -171,7 +183,7 @@ export default function ChatDetailScreen({ route, navigation }) {
       const compressed = await compressForUpload(result.assets[0]);
       setPendingPhoto(compressed);
     } catch (e) {
-      Alert.alert('No se pudo cargar la foto', e?.message ?? 'Intentá de nuevo.');
+      Alert.alert(t('chat.photoLoadError'), e?.message ?? t('chat.tryAgain'));
     }
   };
 
@@ -271,7 +283,7 @@ export default function ChatDetailScreen({ route, navigation }) {
             >
               <View style={styles.eventCardHeader}>
                 <Ionicons name="calendar-outline" size={14} color={colors['action.primary']} />
-                <Text variant="caption" style={{ color: colors['action.primary'], marginLeft: space[1] }}>Evento compartido</Text>
+                <Text variant="caption" style={{ color: colors['action.primary'], marginLeft: space[1] }}>{t('chat.sharedEvent')}</Text>
               </View>
               <Text variant="title" numberOfLines={2} style={{ marginVertical: space[1] }}>{ev.title}</Text>
               {ev.dateTime && (
@@ -281,7 +293,7 @@ export default function ChatDetailScreen({ route, navigation }) {
                 </View>
               )}
               <View style={[styles.eventCardBtn, { backgroundColor: `${colors['action.primary']}20` }]}>
-                <Text variant="label" style={{ color: colors['action.primary'] }}>Ver evento</Text>
+                <Text variant="label" style={{ color: colors['action.primary'] }}>{t('createEvent.viewEvent')}</Text>
                 <Ionicons name="chevron-forward" size={14} color={colors['action.primary']} />
               </View>
               <Text variant="caption" color="text.tertiary" style={{ alignSelf: 'flex-end', marginTop: space[1] }}>{formatTime(item.timestamp)}</Text>
@@ -299,7 +311,7 @@ export default function ChatDetailScreen({ route, navigation }) {
                 primera de una tanda — repetirlo en cada burbuja es ruido. */}
             {group && !isMine && !groupedWithPrev && (
               <Text variant="caption" style={{ color: colors['link'], marginBottom: 2 }}>
-                {sender.name ?? 'Usuario'}
+                {sender.name ?? t('profile.user')}
               </Text>
             )}
             {/* Foto, si el mensaje trae una. El texto queda como pie y puede
@@ -308,7 +320,7 @@ export default function ChatDetailScreen({ route, navigation }) {
               <Pressable
                 onPress={() => setViewerUri(item.imageUrl)}
                 accessibilityRole="imagebutton"
-                accessibilityLabel="Ver foto en grande"
+                accessibilityLabel={t('chat.viewPhoto')}
               >
                 <Image
                   source={{ uri: item.imageUrl }}
@@ -330,7 +342,7 @@ export default function ChatDetailScreen({ route, navigation }) {
         )}
       </View>
     );
-  }, [userId, otherUser, handleEventPress, colors, group, members, allBlocked]);
+  }, [userId, otherUser, handleEventPress, colors, group, members, allBlocked, t]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
@@ -341,7 +353,7 @@ export default function ChatDetailScreen({ route, navigation }) {
       />
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors['border.subtle'] }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
         <Pressable
@@ -352,17 +364,17 @@ export default function ChatDetailScreen({ route, navigation }) {
         >
           <Avatar
             uri={group ? null : otherUser.avatar}
-            name={group ? (chat?.name ?? 'Grupo') : otherUser.name}
+            name={group ? (chat?.name ?? t('chat.group')) : otherUser.name}
             size={36}
           />
           <View style={{ marginLeft: space[2], flex: 1 }}>
             <Text variant="title" numberOfLines={1}>
-              {group ? (chat?.name ?? 'Grupo') : (otherUser.name || otherUserName)}
+              {group ? (chat?.name ?? t('chat.group')) : (otherUser.name || otherUserName)}
             </Text>
             {group && (
               <Text variant="caption" color="text.tertiary" numberOfLines={1}>
-                {chat?.participants?.length ?? 0} miembros
-                {chat?.writePolicy === 'owner' ? ' · solo lectura' : ''}
+                {t('chat.membersCount', { count: chat?.participants?.length ?? 0 })}
+                {chat?.writePolicy === 'owner' ? t('chat.readOnly') : ''}
               </Text>
             )}
           </View>
@@ -386,7 +398,7 @@ export default function ChatDetailScreen({ route, navigation }) {
         {isBlocked ? (
           <View style={[styles.blockedBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
             <Text variant="caption" color="text.tertiary" align="center">
-              No podés enviar mensajes a este usuario.
+              {t('chat.blockedUser')}
             </Text>
           </View>
         ) : !canWrite ? (
@@ -394,7 +406,7 @@ export default function ChatDetailScreen({ route, navigation }) {
           // UI — el corte real está en firestore.rules.
           <View style={[styles.blockedBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
             <Text variant="caption" color="text.tertiary" align="center">
-              Solo quien creó el grupo puede escribir acá.
+              {t('chat.ownerOnly')}
             </Text>
           </View>
         ) : (
@@ -416,21 +428,21 @@ export default function ChatDetailScreen({ route, navigation }) {
                     onPress={() => setPendingPhoto(null)}
                     style={[styles.pendingRemove, { backgroundColor: colors['bg.raised'], borderColor: colors['border.strong'] }]}
                     hitSlop={8}
-                    accessibilityLabel="Quitar foto"
+                    accessibilityLabel={t('chat.removePhoto')}
                   >
                     <Ionicons name="close" size={16} color={colors['text.primary']} />
                   </Pressable>
                 )}
               </View>
               <Text variant="caption" color="text.tertiary" style={{ flex: 1 }}>
-                {sendingPhoto ? 'Enviando foto…' : 'Escribí un pie de foto si querés y tocá enviar.'}
+                {sendingPhoto ? t('chat.sendingPhoto') : t('chat.captionHint')}
               </Text>
             </View>
           )}
           <View style={[styles.inputBar, { backgroundColor: colors['bg.base'], borderTopColor: colors['border.subtle'] }]}>
             <TextInput
               style={[styles.input, { backgroundColor: colors['bg.surface'], color: colors['text.primary'] }]}
-              placeholder={pendingPhoto ? 'Agregá un pie de foto…' : 'Escribí un mensaje…'}
+              placeholder={pendingPhoto ? t('chat.captionPlaceholder') : t('chat.messagePlaceholder')}
               placeholderTextColor={colors['text.tertiary']}
               value={newMessage}
               onChangeText={setNewMessage}
@@ -446,7 +458,7 @@ export default function ChatDetailScreen({ route, navigation }) {
                 onPress={handlePickPhoto}
                 disabled={sendingPhoto}
                 hitSlop={6}
-                accessibilityLabel="Enviar una foto"
+                accessibilityLabel={t('chat.sendAPhoto')}
               >
                 <Ionicons
                   name={pendingPhoto ? 'swap-horizontal-outline' : 'image-outline'}
@@ -459,7 +471,7 @@ export default function ChatDetailScreen({ route, navigation }) {
               style={[styles.sendBtn, { backgroundColor: colors['action.primary'] }]}
               onPress={handleSend}
               disabled={sendingPhoto}
-              accessibilityLabel={pendingPhoto ? 'Enviar foto' : 'Enviar mensaje'}
+              accessibilityLabel={pendingPhoto ? t('chat.sendPhoto') : t('chat.sendMessage')}
             >
               {sendingPhoto
                 ? <ActivityIndicator size="small" color={colors['text.onAction']} />

@@ -1,6 +1,7 @@
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '../config/firebase';
+import i18n from '../i18n';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -20,7 +21,7 @@ const uploadOne = async (uri, uid) => {
   const blob = await new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.onload = () => resolve(xhr.response);
-    xhr.onerror = () => reject(new Error('Error al leer el archivo'));
+    xhr.onerror = () => reject(new Error(i18n.t('errors.readFile')));
     xhr.responseType = 'blob';
     xhr.open('GET', uri, true);
     xhr.send(null);
@@ -28,10 +29,10 @@ const uploadOne = async (uri, uid) => {
 
   try {
     if (!ALLOWED_MIME_TYPES.includes(blob.type)) {
-      throw new Error('Tipo de archivo no permitido. Solo se aceptan imágenes JPG, PNG, WebP o GIF.');
+      throw new Error(i18n.t('errors.imageTypes'));
     }
     if (blob.size > MAX_IMAGE_BYTES) {
-      throw new Error('La imagen supera el límite de 5 MB.');
+      throw new Error(i18n.t('errors.imageTooBig'));
     }
     // ID criptográfico usando Firestore auto-ref
     const mediaId = doc(collection(db, '_')).id;
@@ -53,7 +54,7 @@ export const createPost = async ({ text, image, media }) => {
 
   const uris = (media?.length ? media : image ? [image] : []).slice(0, MAX_POST_MEDIA);
   if ((media?.length ?? 0) > MAX_POST_MEDIA) {
-    throw new Error(`Podés subir hasta ${MAX_POST_MEDIA} archivos por publicación.`);
+    throw new Error(i18n.t('errors.maxPostMedia', { count: MAX_POST_MEDIA }));
   }
 
   // En serie y no en paralelo: subir tres archivos a la vez en una conexión

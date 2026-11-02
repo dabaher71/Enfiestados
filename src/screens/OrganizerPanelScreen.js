@@ -13,7 +13,7 @@ import { SkeletonList } from '../components/ui/Skeleton';
 import Text from '../components/ui/Text';
 
 import { auth } from '../config/firebase';
-import { subscribeToEvents } from '../services/eventService';
+import { subscribeToOrganizerEvents } from '../services/eventService';
 import { useTheme } from '../theme/ThemeProvider';
 import { elev, radius, space } from '../theme/tokens';
 
@@ -25,8 +25,8 @@ export default function OrganizerPanelScreen({ navigation }) {
   const userId = auth.currentUser?.uid;
 
   useEffect(() => {
-    const unsub = subscribeToEvents(all => {
-      setEvents(all.filter(e => e.organizerId === userId));
+    const unsub = subscribeToOrganizerEvents(userId, userId, {}, mine => {
+      setEvents(mine);
       setLoading(false);
     });
     return () => unsub?.();

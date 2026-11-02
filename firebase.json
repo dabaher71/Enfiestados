@@ -25,6 +25,22 @@
   "hosting": {
     "public": "public",
     "cleanUrls": true,
+    "rewrites": [
+      {
+        "source": "/api/acceso-anticipado",
+        "function": {
+          "functionId": "earlyAccessRequest",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/eliminar-cuenta/**",
+        "function": {
+          "functionId": "webAccountDeletion",
+          "region": "us-central1"
+        }
+      }
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -57,7 +73,7 @@
           },
           {
             "key": "Content-Security-Policy",
-            "value": "default-src \u0027self\u0027; img-src \u0027self\u0027 data:; style-src \u0027self\u0027 \u0027unsafe-inline\u0027 https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src \u0027none\u0027; frame-ancestors \u0027none\u0027; base-uri \u0027self\u0027; form-action \u0027self\u0027"
+            "value": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
           }
         ]
       },

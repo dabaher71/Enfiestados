@@ -5,8 +5,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import { formatTimeShort } from '../../lib/format';
+import { getCategoryName } from '../../constants/categories';
 import StatusBadge from './StatusBadge';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 // Trailing badge: orden exacto del FIX_ROUND_1 § 2.4
 // 1. soldOutSoon  → "ÚLTIMAS"  (urgent)
@@ -14,11 +17,12 @@ import Text from './Text';
 // 3. price > 0    → precio     (neutral con texto ₡)
 // 4. sin dato     → nada
 function TrailingBadge({ event }) {
+  const { t } = useTranslation();
   if (event.soldOutSoon) {
-    return <StatusBadge label="ÚLTIMAS" variant="urgent" />;
+    return <StatusBadge label={t('card.last')} variant="urgent" />;
   }
   if (event.isFree === true || event.price === 0) {
-    return <StatusBadge label="Gratis" variant="free" />;
+    return <StatusBadge label={t('common.free')} variant="free" />;
   }
   if (event.price > 0) {
     return <StatusBadge label={`₡${Number(event.price).toLocaleString('es-CR')}`} variant="neutral" />;
@@ -30,20 +34,21 @@ function TrailingBadge({ event }) {
 // Overline: "8:00 PM · SHOW" (hora + categoría). La fuente va abajo como subtítulo.
 function buildOverline(event) {
   const time = formatTimeShort(event.time ?? event.eventTime ?? '');
-  const cat  = event.category ?? '';
+  const cat  = event.category ? getCategoryName(event.category) : '';
   return [time, cat.toUpperCase()].filter(Boolean).join(' · ');
 }
 
 // Subtítulo de ubicación. Si es importado, añade "Vía [fuente]"
 function buildSubtitle(event) {
   const place  = event.location?.name ?? event.locationText ?? '';
-  const source = event._isExternal && event.source ? `Vía ${event.source}` : '';
+  const source = event._isExternal && event.source ? i18n.t('external.via', { source: event.source }) : '';
   return place || source || '';
 }
 
 // trailing: 'auto' | 'icon' | 'none'
 export default function EventRow({ event, trailing = 'auto', onPress, trailingIcon }) {
   const { colors } = useTheme();
+  useTranslation(); // re-render al cambiar de idioma (fechas de lib/format)
   const overline = buildOverline(event);
   const subtitle = buildSubtitle(event);
 
@@ -96,10 +101,11 @@ export default function EventRow({ event, trailing = 'auto', onPress, trailingIc
 // SponsoredCard — idéntica a EventRow + etiqueta PATROCINADO
 export function SponsoredCard({ event, onPress }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   return (
     <View>
       <View style={[styles.sponsoredLabel, { backgroundColor: colors['bg.surface'] }]}>
-        <Text variant="overline" color="text.tertiary">PATROCINADO</Text>
+        <Text variant="overline" color="text.tertiary">{t('card.sponsored')}</Text>
       </View>
       <EventRow event={event} onPress={onPress} trailing="none" />
     </View>

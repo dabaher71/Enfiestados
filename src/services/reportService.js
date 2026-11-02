@@ -1,5 +1,6 @@
 import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import i18n from '../i18n';
 
 export const REPORT_REASONS = [
   { id: 'spam', label: 'Spam o publicidad no deseada' },
@@ -21,7 +22,7 @@ export const createReport = async ({ reporterId, targetType, targetId, reason })
   );
   const alreadyReported = existing.docs.some(d => d.data().targetId === targetId);
   if (alreadyReported) {
-    throw new Error('Ya reportaste este contenido anteriormente');
+    throw new Error(i18n.t('errors.alreadyReported'));
   }
   return addDoc(collection(db, 'reports'), {
     reporterId,

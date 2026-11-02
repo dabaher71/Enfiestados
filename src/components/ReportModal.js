@@ -7,14 +7,16 @@ import { createReport, REPORT_REASONS } from '../services/reportService';
 import Text from './ui/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function ReportModal({ visible, onClose, targetType, targetId, targetName }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [selected,      setSelected]      = useState(null);
   const [blockAlso,     setBlockAlso]     = useState(false);
   const [loading,       setLoading]       = useState(false);
 
-  const targetLabel = targetType === 'user' ? 'usuario' : targetType === 'event' ? 'evento' : 'publicación';
+  const targetLabel = targetType === 'user' ? t('report.targetUser') : targetType === 'event' ? t('report.targetEvent') : t('report.targetPost');
   const canSubmit   = !!selected && !loading;
 
   const handleSubmit = async () => {
@@ -27,12 +29,12 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
         targetId,
         reason: selected,
       });
-      Alert.alert('Reporte enviado', 'Gracias por avisar. Revisaremos el contenido a la brevedad.');
+      Alert.alert(t('report.sent'), t('report.sentMsg'));
       setSelected(null);
       setBlockAlso(false);
       onClose();
     } catch (e) {
-      Alert.alert('Error', e.message || 'No se pudo enviar el reporte.');
+      Alert.alert(t('common.error'), e.message || t('report.sendError'));
     }
     setLoading(false);
   };
@@ -54,10 +56,10 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
           <View style={{ flex: 1 }}>
             {/* § 6.4: nombre en text.primary */}
             <Text variant="title">
-              Reportar {targetLabel}
+              {t('report.title', { target: targetLabel })}
               {targetName ? `: ${targetName}` : ''}
             </Text>
-            <Text variant="caption" color="text.tertiary">¿Cuál es el problema?</Text>
+            <Text variant="caption" color="text.tertiary">{t('report.whatProblem')}</Text>
           </View>
         </View>
 
@@ -91,7 +93,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
                 variant="body"
                 style={{ flex: 1, color: isSelected ? colors['text.onAction'] : colors['text.primary'] }}
               >
-                {reason.label}
+                {t(`report.reasons.${reason.id}`, { defaultValue: reason.label })}
               </Text>
             </Pressable>
           );
@@ -101,7 +103,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
         {targetType === 'user' && (
           <View style={[styles.blockRow, { borderTopColor: colors['border.subtle'] }]}>
             <Ionicons name="ban-outline" size={18} color={colors['text.secondary']} />
-            <Text variant="body" style={{ flex: 1 }}>Bloquear también</Text>
+            <Text variant="body" style={{ flex: 1 }}>{t('report.blockToo')}</Text>
             <Switch
               value={blockAlso}
               onValueChange={setBlockAlso}
@@ -129,7 +131,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
               fontFamily: 'PlusJakartaSans_700Bold',
               color: canSubmit ? '#fff' : colors['text.secondary'],
             }}>
-              Enviar reporte
+              {t('report.send')}
             </Text>
           )}
         </Pressable>

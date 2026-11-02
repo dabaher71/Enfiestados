@@ -12,6 +12,7 @@ import MyPlansScreen from '../screens/MyPlansScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SearchScreen from '../screens/SearchScreen';
+import { useTranslation } from 'react-i18next';
 
 const Tab = createBottomTabNavigator();
 
@@ -31,6 +32,7 @@ function UnreadBadge({ count, bgColor, borderColor }) {
 export default function MainTabNavigator() {
   const insets   = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [unreadChats,  setUnreadChats]  = useState(0);
   const userId = auth.currentUser?.uid;
@@ -105,11 +107,11 @@ export default function MainTabNavigator() {
         },
       })}
     >
-      <Tab.Screen name="Home"          component={HomeScreen}          options={{ tabBarLabel: 'Inicio' }} />
-      <Tab.Screen name="Explore"       component={SearchScreen}        options={{ tabBarLabel: 'Explorar' }} />
-      <Tab.Screen name="MyPlans"       component={MyPlansScreen}       options={{ tabBarLabel: 'Mis planes' }} />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarLabel: 'Alertas' }} />
-      <Tab.Screen name="Profile"       component={ProfileScreen}       options={{ tabBarLabel: 'Perfil' }} />
+      <Tab.Screen name="Home"          component={HomeScreen}          options={{ tabBarLabel: t('tabs.home') }} />
+      <Tab.Screen name="Explore"       component={SearchScreen}        options={{ tabBarLabel: t('tabs.explore') }} />
+      <Tab.Screen name="MyPlans"       component={MyPlansScreen}       options={{ tabBarLabel: t('tabs.myPlans') }} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarLabel: t('tabs.alerts') }} />
+      <Tab.Screen name="Profile"       component={ProfileScreen}       options={{ tabBarLabel: t('tabs.profile') }} />
     </Tab.Navigator>
   );
 }

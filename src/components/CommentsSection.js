@@ -22,12 +22,15 @@ import { recordSignal } from '../services/signalService';
 import { toDate } from '../lib/format';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
+import { useTranslation } from 'react-i18next';
+import { intlLocale } from '../i18n';
 
 const MAX_COMMENT_LENGTH = 500;
 const COMMENT_COOLDOWN_MS = 5000;
 
-export default function CommentsSection({ eventId, comments: initialComments, organizerId, event, onUserPress }) {
+export default function CommentsSection({ eventId, comments: initialComments, organizerId, event, onUserPress, onInputFocus }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const [comments, setComments] = useState(initialComments || []);
   const [newComment, setNewComment] = useState('');
@@ -83,13 +86,13 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         return {
           ...c,
           userAvatar: userMap[cid].avatar || avatarFromComment || '',
-          userName: userMap[cid].name || userMap[cid].displayName || nameFromComment || 'Usuario',
+          userName: userMap[cid].name || userMap[cid].displayName || nameFromComment || t('comments.user'),
         };
       }
       return {
         ...c,
         userAvatar: avatarFromComment || '',
-        userName: nameFromComment || 'Usuario',
+        userName: nameFromComment || t('comments.user'),
       };
     });
 
@@ -102,11 +105,11 @@ export default function CommentsSection({ eventId, comments: initialComments, or
 
   const handleSubmit = async () => {
     if (!newComment.trim()) return;
-    if (!requireAccount(navigation, 'Creá una cuenta para comentar.')) return;
+    if (!requireAccount(navigation, t('comments.needAccount'))) return;
 
     const now = Date.now();
     if (now - lastCommentTime.current < COMMENT_COOLDOWN_MS) {
-      Alert.alert('Espera un momento', 'Puedes comentar cada 5 segundos.');
+      Alert.alert(t('comments.waitTitle'), t('comments.waitMsg'));
       return;
     }
 
@@ -153,12 +156,12 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     if (!isMyComment && !isOrganizer) return;
 
     Alert.alert(
-      'Eliminar comentario',
-      '¿Estás seguro de que quieres eliminar este comentario?',
+      t('comments.deleteTitle'),
+      t('comments.deleteMsg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -166,7 +169,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
               setComments(prev => prev.filter(c => c.id !== comment.id));
             } catch (error) {
               console.error('Error eliminando comentario:', error);
-              Alert.alert('Error', 'No se pudo eliminar el comentario');
+              Alert.alert(t('common.error'), t('comments.deleteError'));
             }
           },
         },
@@ -186,11 +189,11 @@ export default function CommentsSection({ eventId, comments: initialComments, or
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return 'Ahora';
+    if (minutes < 1) return t('alerts.now');
     if (minutes < 60) return `${minutes}m`;
     if (hours < 24) return `${hours}h`;
     if (days < 7) return `${days}d`;
-    return date.toLocaleDateString('es-CR');
+    return date.toLocaleDateString(intlLocale());
   };
 
   const renderComment = useCallback(({ item }) => {
@@ -217,7 +220,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         </TouchableOpacity>
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
-            <Text style={[styles.commentUser, { color: colors['text.primary'] }]}>{item.userName || item.name || 'Usuario'}</Text>
+            <Text style={[styles.commentUser, { color: colors['text.primary'] }]}>{item.userName || item.name || t('comments.user')}</Text>
             <View style={styles.commentHeaderRight}>
               <Text style={[styles.commentTime, { color: colors['text.tertiary'] }]}>{formatDate(item.createdAt)}</Text>
               {canDelete && (
@@ -235,19 +238,19 @@ export default function CommentsSection({ eventId, comments: initialComments, or
         </View>
       </TouchableOpacity>
     );
-  }, [userId, organizerId, handleDelete]);
+  }, [userId, organizerId, handleDelete, t]);
 
   const visibleComments = comments.filter(c => !allBlocked.has(getCommentUserId(c)));
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Comentarios ({visibleComments.length})</Text>
+      <Text style={styles.title}>{t('comments.title', { count: visibleComments.length })}</Text>
 
       {visibleComments.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="chatbubble-outline" size={40} color="#888" />
-          <Text style={styles.emptyText}>No hay comentarios aún</Text>
-          <Text style={styles.emptySubtext}>Sé el primero en comentar</Text>
+          <Text style={styles.emptyText}>{t('comments.empty')}</Text>
+          <Text style={styles.emptySubtext}>{t('post.beFirst')}</Text>
         </View>
       ) : (
         <FlatList
@@ -262,12 +265,13 @@ export default function CommentsSection({ eventId, comments: initialComments, or
       <View style={[styles.inputContainer, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}>
         <TextInput
           style={[styles.input, { color: colors['text.primary'], fontFamily: 'PlusJakartaSans_400Regular' }]}
-          placeholder="Comentá…"
+          placeholder={t('post.commentPlaceholder')}
           placeholderTextColor={colors['text.tertiary']}
           value={newComment}
-          onChangeText={(t) => setNewComment(t.slice(0, MAX_COMMENT_LENGTH))}
+          onChangeText={(v) => setNewComment(v.slice(0, MAX_COMMENT_LENGTH))}
           multiline
           maxLength={MAX_COMMENT_LENGTH}
+          onFocus={onInputFocus}
         />
         <TouchableOpacity
           style={[
@@ -276,7 +280,7 @@ export default function CommentsSection({ eventId, comments: initialComments, or
           ]}
           onPress={handleSubmit}
           disabled={!newComment.trim() || loading}
-          accessibilityLabel="Enviar comentario"
+          accessibilityLabel={t('post.sendComment')}
         >
           <Ionicons
             name="send"
@@ -292,7 +296,9 @@ export default function CommentsSection({ eventId, comments: initialComments, or
 const styles = StyleSheet.create({
   container: {
     marginTop: 10,
-    marginBottom: Platform.OS === 'android' ? 65 : 20,
+    // El espacio para la barra fija de abajo lo pone EventDetailScreen (mide
+    // la barra). Un margen fijo acá dejaba un hueco vacío en Android.
+    marginBottom: 0,
   },
   title: {
     color: '#fff',

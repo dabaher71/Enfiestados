@@ -15,22 +15,26 @@ import { getPostMedia } from '../services/postService';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 // "hace 2 h" · "hace 5 meses" · "hace 3 años" — nunca "157d"
 function timeAgo(date) {
   if (!date) return '';
   const postDate = toDate(date);
   const diff = Math.floor((Date.now() - postDate) / 1000);
-  if (diff < 60)       return 'Ahora';
-  if (diff < 3600)     return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400)    return `hace ${Math.floor(diff / 3600)} h`;
-  if (diff < 2592000)  return `hace ${Math.floor(diff / 86400)} días`;
-  if (diff < 31536000) return `hace ${Math.floor(diff / 2592000)} meses`;
-  return `hace ${Math.floor(diff / 31536000)} años`;
+  const n = (k, count) => i18n.t(count === 1 ? `post.ago.${k}One` : `post.ago.${k}`, { count });
+  if (diff < 60)       return i18n.t('alerts.now');
+  if (diff < 3600)     return i18n.t('post.ago.minutes', { count: Math.floor(diff / 60) });
+  if (diff < 86400)    return i18n.t('post.ago.hours', { count: Math.floor(diff / 3600) });
+  if (diff < 2592000)  return n('days', Math.floor(diff / 86400));
+  if (diff < 31536000) return n('months', Math.floor(diff / 2592000));
+  return n('years', Math.floor(diff / 31536000));
 }
 
 function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPress }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const [showComments, setShowComments] = useState(false);
   const [commentText,  setCommentText]  = useState('');
@@ -50,20 +54,20 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
 
   const handleDelete = useCallback(() => {
     setShowMenu(false);
-    Alert.alert('¿Eliminar publicación?', 'Esta acción no se puede deshacer.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: () => onDelete?.(post.id) },
+    Alert.alert(t('post.deleteTitle'), t('post.deleteMsg'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => onDelete?.(post.id) },
     ]);
   }, [post.id, onDelete]);
 
   const handleLike = useCallback(() => {
-    if (!requireAccount(navigation, 'Creá una cuenta para dar like.')) return;
+    if (!requireAccount(navigation, t('post.needAccountLike'))) return;
     onLike?.(post.id);
   }, [navigation, post.id, onLike]);
 
   const handleComment = useCallback(() => {
     if (!commentText.trim()) return;
-    if (!requireAccount(navigation, 'Creá una cuenta para comentar.')) return;
+    if (!requireAccount(navigation, t('comments.needAccount'))) return;
     onComment?.(post.id, commentText.trim());
     setCommentText('');
   }, [navigation, commentText, post.id, onComment]);
@@ -95,7 +99,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
         <MediaCarousel
           images={mediaUrls}
           aspectRatio={4 / 3}
-          labelPrefix={post.text ? 'de la publicación' : ''}
+          labelPrefix={post.text ? t('post.ofPost') : ''}
         />
       )}
 
@@ -120,7 +124,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
             onPress={() => setShowMenu(v => !v)}
             style={styles.menuBtn}
             hitSlop={4}
-            accessibilityLabel="Más opciones"
+            accessibilityLabel={t('myPlans.moreOptions')}
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={colors['text.tertiary']} />
           </Pressable>
@@ -130,12 +134,12 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
               {isOwner ? (
                 <Pressable style={styles.menuItem} onPress={handleDelete}>
                   <Ionicons name="trash-outline" size={16} color={colors['status.urgent']} />
-                  <Text variant="body" style={{ color: colors['status.urgent'] }}>Eliminar</Text>
+                  <Text variant="body" style={{ color: colors['status.urgent'] }}>{t('common.delete')}</Text>
                 </Pressable>
               ) : (
                 <Pressable style={styles.menuItem} onPress={() => { setShowMenu(false); setShowReport(true); }}>
                   <Ionicons name="flag-outline" size={16} color={colors['text.secondary']} />
-                  <Text variant="body">Reportar</Text>
+                  <Text variant="body">{t('common.report')}</Text>
                 </Pressable>
               )}
             </View>
@@ -149,11 +153,11 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
 
         {/* Acciones — stats solo si > 0 */}
         <View style={[styles.actions, { borderTopColor: colors['border.subtle'] }]}>
-          <Pressable style={styles.actionBtn} onPress={handleLike} accessibilityRole="button" accessibilityLabel={isLiked ? 'Quitar like' : 'Dar like'}>
+          <Pressable style={styles.actionBtn} onPress={handleLike} accessibilityRole="button" accessibilityLabel={isLiked ? t('event.removeLike') : t('event.giveLike')}>
             <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={20} color={isLiked ? colors['status.urgent'] : colors['text.tertiary']} />
             {likeCount > 0 && (
               <Text variant="caption" style={{ color: isLiked ? colors['status.urgent'] : colors['text.tertiary'], marginLeft: 4 }}>
-                {likeCount} {likeCount === 1 ? 'like' : 'likes'}
+                {t(likeCount === 1 ? 'post.likeOne' : 'post.likeMany', { count: likeCount })}
               </Text>
             )}
           </Pressable>
@@ -162,7 +166,7 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
             <Ionicons name="chatbubble-outline" size={18} color={colors['text.tertiary']} />
             {commentCount > 0 && (
               <Text variant="caption" color="text.tertiary" style={{ marginLeft: 4 }}>
-                {commentCount} {commentCount === 1 ? 'comentario' : 'comentarios'}
+                {t(commentCount === 1 ? 'post.commentOne' : 'post.commentMany', { count: commentCount })}
               </Text>
             )}
           </Pressable>
@@ -180,13 +184,13 @@ function PostCard({ post, currentUserId, onLike, onComment, onDelete, onUserPres
             <View style={[styles.commentInput, { backgroundColor: colors['bg.base'] }]}>
               <TextInput
                 style={{ flex: 1, color: colors['text.primary'], fontSize: 14, fontFamily: 'PlusJakartaSans_400Regular' }}
-                placeholder="Comentá…"
+                placeholder={t('post.commentPlaceholder')}
                 placeholderTextColor={colors['text.tertiary']}
                 value={commentText}
                 onChangeText={setCommentText}
                 onSubmitEditing={handleComment}
               />
-              <Pressable onPress={handleComment} accessibilityLabel="Enviar comentario">
+              <Pressable onPress={handleComment} accessibilityLabel={t('post.sendComment')}>
                 <Ionicons name="send" size={18} color={colors['action.primary']} />
               </Pressable>
             </View>

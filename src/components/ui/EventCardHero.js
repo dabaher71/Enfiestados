@@ -8,11 +8,14 @@ import useReducedMotion from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import { formatEventDate, formatPrice } from '../../lib/format';
+import { getCategoryName } from '../../constants/categories';
 import StatusBadge from './StatusBadge';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
 
 export default function EventCardHero({ event, onPress, onSave, saved = false }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const reduced  = useReducedMotion();
   const saveAnim = useRef(new Animated.Value(1)).current;
 
@@ -60,7 +63,7 @@ export default function EventCardHero({ event, onPress, onSave, saved = false })
         <Pressable
           onPress={handleSave}
           style={styles.saveBtn}
-          accessibilityLabel={saved ? 'Quitar de guardados' : 'Guardar evento'}
+          accessibilityLabel={saved ? t('card.removeSaved') : t('external.saveEvent')}
           hitSlop={8}
         >
           <Animated.View style={{ transform: [{ scale: saveAnim }] }}>
@@ -76,7 +79,7 @@ export default function EventCardHero({ event, onPress, onSave, saved = false })
       {/* Contenido */}
       <View style={styles.content}>
         {event.category && (
-          <Text variant="overline" color="text.tertiary">{event.category.toUpperCase()}</Text>
+          <Text variant="overline" color="text.tertiary">{getCategoryName(event.category).toUpperCase()}</Text>
         )}
         <Text variant="h3" numberOfLines={2} style={styles.title}>{event.title}</Text>
 

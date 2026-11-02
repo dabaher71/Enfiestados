@@ -10,9 +10,11 @@ import Button from '../components/ui/Button';
 import Text from '../components/ui/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [email,   setEmail]   = useState('');
   const [loading, setLoading] = useState(false);
   const [sent,    setSent]    = useState(false);
@@ -20,7 +22,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   const handleReset = async () => {
     const trimmed = email.trim().toLowerCase();
-    if (!trimmed) { setError('Ingresá tu correo electrónico'); return; }
+    if (!trimmed) { setError(t('auth.enterEmail')); return; }
     setError('');
     setLoading(true);
     try {
@@ -39,7 +41,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         <View style={styles.content}>
 
           {/* Botón atrás */}
-          <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+          <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
             <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
           </Pressable>
 
@@ -49,24 +51,24 @@ export default function ForgotPasswordScreen({ navigation }) {
           </View>
 
           <Text style={[styles.title, { color: colors['text.primary'], fontFamily: 'BricolageGrotesque_700Bold' }]}>
-            Recuperar contraseña
+            {t('forgot.title')}
           </Text>
           <Text variant="body" color="text.secondary" align="center" style={styles.subtitle}>
-            Ingresá tu correo y te enviamos un enlace para restablecer tu contraseña.
+            {t('forgot.subtitle')}
           </Text>
 
           {sent ? (
             /* Estado de éxito */
             <View style={styles.sentBox}>
               <Ionicons name="checkmark-circle" size={56} color={colors['status.free']} />
-              <Text variant="h2" style={{ marginTop: space[4], marginBottom: space[2] }}>¡Correo enviado!</Text>
+              <Text variant="h2" style={{ marginTop: space[4], marginBottom: space[2] }}>{t('forgot.sent')}</Text>
               <Text variant="body" color="text.secondary" align="center" style={{ marginBottom: space[8] }}>
-                Revisá tu bandeja de entrada y seguí las instrucciones.
+                {t('forgot.sentDesc')}
               </Text>
               <Button
                 variant="primary"
                 size="lg"
-                label="Volver al inicio de sesión"
+                label={t('forgot.backToLogin')}
                 onPress={() => navigation.goBack()}
                 fullWidth
               />
@@ -78,7 +80,7 @@ export default function ForgotPasswordScreen({ navigation }) {
                 <Ionicons name="mail-outline" size={18} color={colors['text.tertiary']} />
                 <TextInput
                   style={[styles.input, { color: colors['text.primary'], fontFamily: 'PlusJakartaSans_400Regular' }]}
-                  placeholder="Correo electrónico"
+                  placeholder={t('auth.email')}
                   placeholderTextColor={colors['text.tertiary']}
                   value={email}
                   onChangeText={v => { setEmail(v); setError(''); }}
@@ -92,7 +94,7 @@ export default function ForgotPasswordScreen({ navigation }) {
               <Button
                 variant="primary"
                 size="lg"
-                label={loading ? 'Enviando…' : 'Enviar enlace'}
+                label={loading ? t('forgot.sending') : t('forgot.sendLink')}
                 onPress={handleReset}
                 loading={loading}
                 fullWidth
@@ -101,8 +103,8 @@ export default function ForgotPasswordScreen({ navigation }) {
 
               <Pressable onPress={() => navigation.goBack()} style={styles.linkBtn} accessibilityRole="link">
                 <Text variant="body" color="text.secondary" align="center">
-                  ¿Recordás tu contraseña?{' '}
-                  <Text variant="bodyStrong" style={{ color: colors['link'] }}>Iniciá sesión</Text>
+                  {t('forgot.remember')}{' '}
+                  <Text variant="bodyStrong" style={{ color: colors['link'] }}>{t('auth.signIn')}</Text>
                 </Text>
               </Pressable>
             </>

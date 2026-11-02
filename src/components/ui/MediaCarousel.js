@@ -13,13 +13,14 @@
 //   segura para cualquier forma).
 // - Nada de autoplay ni zonas de toque invisibles a los lados.
 import { Image } from 'expo-image';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import useReducedMotion from '../../hooks/useReducedMotion';
 import Skeleton from './Skeleton';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
 
 const HORIZONTAL_RATIO_THRESHOLD = 1.15;
 const MAX_IMAGES = 10;
@@ -28,15 +29,31 @@ const DOTS_MAX = 8;
 // Una imagen del carrusel: reserva su alto (aspectRatio de la caja), muestra
 // skeleton hasta cargar, decide cover vs. marco desenfocado según su forma,
 // y se salta en silencio si falla.
+// Reintentos ante un error de carga antes de dar la imagen por rota. En el
+// feed, con scroll rápido y señal mala, una descarga cortada no significa que
+// la URL esté mal; antes un solo error la sacaba del carrusel para siempre.
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
 function CarouselImage({ uri, width, aspectRatio, reduced, onPress, accessibilityLabel, onFail }) {
   const { colors } = useTheme();
   const [ratio, setRatio] = useState(null); // null = todavía no sabemos la forma
   const [loaded, setLoaded] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retryTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(retryTimer.current), []);
 
   const handleLoad = (e) => {
     const { width: w, height: h } = e?.source ?? {};
     if (w && h) setRatio(w / h);
     setLoaded(true);
+  };
+
+  const handleError = () => {
+    if (attempt >= MAX_RETRIES) { onFail?.(); return; }
+    clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(() => setAttempt(a => a + 1), RETRY_DELAY_MS);
   };
 
   // null → arranca enmarcado, que es seguro para cualquier forma (nunca
@@ -55,34 +72,47 @@ function CarouselImage({ uri, width, aspectRatio, reduced, onPress, accessibilit
       accessibilityLabel={accessibilityLabel}
       style={{ width, aspectRatio, overflow: 'hidden' }}
     >
-      {!loaded && (
-        <Skeleton width="100%" height="100%" style={StyleSheet.absoluteFill} />
-      )}
       <View style={{ flex: 1, backgroundColor: colors['bg.surface'] }}>
-        {/* Fondo desenfocado — solo existe cuando enmarcado; no lleva
-            onLoad/onError, así que agregarlo/quitarlo no afecta a la
-            imagen principal. */}
-        {!isHorizontal && (
+        {/* Fondo desenfocado — solo enmarcado y solo DESPUÉS de que cargó la
+            principal. Antes se montaba a la vez: pedía la misma URL en
+            paralelo (dos descargas por foto, se ve en el log de Glide) y, si
+            ganaba la carrera, la card mostraba solo la versión borrosa hasta
+            que llegaba la nítida. Montado después, sale de la caché. No lleva
+            onLoad/onError, así que no afecta a la imagen principal. */}
+        {loaded && !isHorizontal && (
           <Image
             source={{ uri }}
             style={StyleSheet.absoluteFill}
             blurRadius={22}
             contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={uri}
             transition={reduced ? 0 : 200}
           />
         )}
         <View style={[styles.framedInner, isHorizontal && styles.framedInnerFull]}>
           <Image
+            // key: cada reintento remonta la Image para que vuelva a pedir la URL.
+            key={attempt}
             source={{ uri }}
             style={isHorizontal ? StyleSheet.absoluteFill : [styles.framedImg, { aspectRatio: ratio ?? 1 }]}
             contentFit={isHorizontal ? 'cover' : 'contain'}
             contentPosition={isHorizontal ? 'top' : 'center'}
+            cachePolicy="memory-disk"
+            recyclingKey={uri}
+            priority="high"
             transition={reduced ? 0 : 200}
             onLoad={handleLoad}
-            onError={onFail}
+            onError={handleError}
           />
         </View>
       </View>
+      {/* El skeleton va ENCIMA del contenido: antes estaba debajo de la View
+          con fondo bg.surface, que lo tapaba entero, así que mientras cargaba
+          la card se veía vacía (o borrosa) en vez de "cargando". */}
+      {!loaded && (
+        <Skeleton width="100%" height="100%" style={StyleSheet.absoluteFill} />
+      )}
     </Pressable>
   );
 }
@@ -97,6 +127,7 @@ export default function MediaCarousel({
   onIndexChange,
 }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const reduced = useReducedMotion();
   const [boxWidth, setBoxWidth] = useState(0);
   const [index, setIndex] = useState(0);
@@ -134,7 +165,7 @@ export default function MediaCarousel({
       aspectRatio={aspectRatio}
       reduced={reduced}
       onPress={onPress}
-      accessibilityLabel={`Imagen ${i + 1} de ${effective.length}${labelPrefix ? ` ${labelPrefix}` : ''}`}
+      accessibilityLabel={`${t('carousel.imageOf', { index: i + 1, total: effective.length })}${labelPrefix ? ` ${labelPrefix}` : ''}`}
       onFail={() => handleFail(item)}
     />
   ), [boxWidth, aspectRatio, reduced, onPress, effective.length, labelPrefix, handleFail]);
@@ -146,7 +177,7 @@ export default function MediaCarousel({
     // Sin imágenes válidas — placeholder de marca, nunca caja gris rota.
     return (
       <View style={[{ aspectRatio, overflow: 'hidden' }, styles.brandPlaceholder, { backgroundColor: colors['bg.surface'] }, style]}>
-        <Pressable onPress={onPress} style={StyleSheet.absoluteFill} accessibilityRole="imagebutton" accessibilityLabel="Sin imagen" />
+        <Pressable onPress={onPress} style={StyleSheet.absoluteFill} accessibilityRole="imagebutton" accessibilityLabel={t('carousel.noImage')} />
       </View>
     );
   }
@@ -162,7 +193,7 @@ export default function MediaCarousel({
             aspectRatio={aspectRatio}
             reduced={reduced}
             onPress={onPress}
-            accessibilityLabel={`Imagen${labelPrefix ? ` ${labelPrefix}` : ''}`}
+            accessibilityLabel={`${t('carousel.image')}${labelPrefix ? ` ${labelPrefix}` : ''}`}
             onFail={() => handleFail(effective[0])}
           />
         )}

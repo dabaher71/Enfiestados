@@ -22,14 +22,15 @@ import { isValidWebURL, INPUT_LIMITS } from '../utils/security';
 import { CATEGORIES } from '../constants/categories';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 // ─── Formateo de fecha/hora humano (igual que CreateEventScreen) ────────────
 
-const DAYS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-
 function humanDate(d) {
-  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const days = i18n.t('format.daysShort', { returnObjects: true });
+  const months = i18n.t('format.monthsShort', { returnObjects: true });
+  return i18n.t('format.eventDate', { day: days[d.getDay()], date: d.getDate(), month: months[d.getMonth()] });
 }
 function humanTime(t) {
   let h = t.getHours(), m = t.getMinutes();
@@ -66,6 +67,7 @@ function parseTime(timeStr) {
 // ─── Componentes inline ──────────────────────────────────────────────────────
 
 function FieldLabel({ label, optional = false, colors }) {
+  const { t } = useTranslation();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 }}>
       <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.secondary'] }}>
@@ -73,7 +75,7 @@ function FieldLabel({ label, optional = false, colors }) {
       </Text>
       {optional && (
         <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_400Regular', color: colors['text.tertiary'] }}>
-          · opcional
+          {t('createEvent.optional')}
         </Text>
       )}
     </View>
@@ -89,6 +91,7 @@ function Field({ children }) {
 export default function EditEventScreen({ route, navigation }) {
   const { event } = route.params;
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const [title,           setTitle]          = useState(event.title || '');
@@ -115,23 +118,23 @@ export default function EditEventScreen({ route, navigation }) {
 
   const handleSave = async () => {
     if (imagesUploading) {
-      Alert.alert('Esperá un momento', 'Todavía se están subiendo las imágenes.');
+      Alert.alert(t('editEvent.waitMoment'), t('editEvent.imagesUploading'));
       return;
     }
     if (!title || !category) {
-      Alert.alert('Error', 'Completá los campos obligatorios');
+      Alert.alert(t('common.error'), t('editEvent.requiredFields'));
       return;
     }
     if (!isVirtual && !locationCoords) {
-      Alert.alert('Error', 'Seleccioná la ubicación en el mapa');
+      Alert.alert(t('common.error'), t('editEvent.selectLocation'));
       return;
     }
     if (isVirtual && !virtualLink) {
-      Alert.alert('Error', 'Ingresá el link del evento virtual');
+      Alert.alert(t('common.error'), t('createEvent.missingLink'));
       return;
     }
     if (isVirtual && virtualLink && !isValidWebURL(virtualLink)) {
-      Alert.alert('Link inválido', 'El link debe comenzar con https://');
+      Alert.alert(t('editEvent.invalidLink'), t('editEvent.linkHttps'));
       return;
     }
 
@@ -157,11 +160,11 @@ export default function EditEventScreen({ route, navigation }) {
         updatedAt: new Date().toISOString(),
       });
 
-      Alert.alert('¡Listo!', 'Evento actualizado', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      Alert.alert(t('editEvent.doneTitle'), t('editEvent.updated'), [
+        { text: t('common.ok'), onPress: () => navigation.goBack() },
       ]);
     } catch {
-      Alert.alert('Error', 'No se pudo actualizar el evento');
+      Alert.alert(t('common.error'), t('editEvent.updateError'));
     }
     setLoading(false);
   };
@@ -172,11 +175,11 @@ export default function EditEventScreen({ route, navigation }) {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel="Cerrar">
+        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn} accessibilityLabel={t('common.close')}>
           <Ionicons name="close" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="title">Editar evento</Text>
-        <Button variant="ghost" size="sm" label="Guardar" onPress={handleSave} loading={loading} disabled={imagesUploading} />
+        <Text variant="title">{t('editEvent.title')}</Text>
+        <Button variant="ghost" size="sm" label={t('common.save')} onPress={handleSave} loading={loading} disabled={imagesUploading} />
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -187,34 +190,34 @@ export default function EditEventScreen({ route, navigation }) {
         >
           {/* Imágenes — opcional, hasta 10, reordenables (FIX_ROUND_5 § 5) */}
           <Field>
-            <FieldLabel label="Foto o afiche" optional colors={colors} />
+            <FieldLabel label={t('createEvent.photo')} optional colors={colors} />
             <ImageGridPicker initialUrls={getImages(event)} onUploadedChange={setImages} onBusyChange={setImagesUploading} />
           </Field>
 
           {/* Título */}
           <Field>
             <Input
-              label="Nombre del evento"
+              label={t('createEvent.eventName')}
               value={title}
-              onChangeText={t => setTitle(t.slice(0, INPUT_LIMITS.EVENT_TITLE))}
-              placeholder="Ej. Festival de la Luz 2026"
+              onChangeText={v => setTitle(v.slice(0, INPUT_LIMITS.EVENT_TITLE))}
+              placeholder={t('createEvent.eventNamePlaceholder')}
             />
           </Field>
 
           {/* Descripción */}
           <Field>
             <TextArea
-              label="Descripción"
+              label={t('createEvent.description')}
               value={description}
               onChangeText={setDescription}
-              placeholder="Contá de qué se trata el evento…"
+              placeholder={t('createEvent.descriptionPlaceholder')}
               maxLength={INPUT_LIMITS.EVENT_DESCRIPTION}
             />
           </Field>
 
           {/* Categoría — chips horizontales */}
           <Field>
-            <FieldLabel label="Categoría" colors={colors} />
+            <FieldLabel label={t('createEvent.category')} colors={colors} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: space[2], alignItems: 'center' }}>
               {CATEGORIES.map(cat => {
                 const active = category === cat.id;
@@ -248,7 +251,7 @@ export default function EditEventScreen({ route, navigation }) {
 
           {/* Fecha — un solo control, picker en Modal */}
           <Field>
-            <FieldLabel label="Fecha" colors={colors} />
+            <FieldLabel label={t('createEvent.date')} colors={colors} />
             <Pressable
               onPress={() => setShowDatePicker(true)}
               style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
@@ -268,7 +271,7 @@ export default function EditEventScreen({ route, navigation }) {
 
           {/* Hora */}
           <Field>
-            <FieldLabel label="Hora" colors={colors} />
+            <FieldLabel label={t('createEvent.time')} colors={colors} />
             <Pressable
               onPress={() => setShowTimePicker(true)}
               style={[styles.pickerRow, { backgroundColor: colors['bg.surface'], borderColor: colors['border.strong'] }]}
@@ -282,17 +285,17 @@ export default function EditEventScreen({ route, navigation }) {
             </Pressable>
             {Platform.OS === 'android' && showTimePicker && (
               <DateTimePicker value={time} mode="time" display="default"
-                onChange={(_, t) => { setShowTimePicker(false); if (t) setTime(t); }} />
+                onChange={(_, v) => { setShowTimePicker(false); if (v) setTime(v); }} />
             )}
           </Field>
 
           {/* Modalidad — SegmentedControl */}
           <Field>
-            <FieldLabel label="Modalidad" colors={colors} />
+            <FieldLabel label={t('createEvent.mode')} colors={colors} />
             <SegmentedControl
               options={[
-                { label: 'Presencial', value: 'presencial' },
-                { label: 'Virtual',    value: 'virtual' },
+                { label: t('createEvent.inPerson'), value: 'presencial' },
+                { label: t('createEvent.virtual'), value: 'virtual' },
               ]}
               selected={isVirtual ? 'virtual' : 'presencial'}
               onSelect={v => setIsVirtual(v === 'virtual')}
@@ -304,21 +307,21 @@ export default function EditEventScreen({ route, navigation }) {
             <>
               <Field>
                 <Input
-                  label="Nombre del lugar"
+                  label={t('createEvent.venueName')}
                   value={locationName}
                   onChangeText={setLocationName}
-                  placeholder="Ej. Teatro Nacional"
+                  placeholder={t('createEvent.venuePlaceholder')}
                 />
               </Field>
               <Field>
-                <FieldLabel label="Ubicación en el mapa" colors={colors} />
+                <FieldLabel label={t('createEvent.mapLocation')} colors={colors} />
                 <Pressable
                   onPress={() => setShowMapModal(true)}
                   style={[styles.mapBtn, { backgroundColor: locationCoords ? colors['status.free.bg'] : colors['bg.surface'], borderColor: locationCoords ? colors['status.free'] : colors['border.strong'] }]}
                 >
                   <Ionicons name={locationCoords ? 'checkmark-circle' : 'map-outline'} size={20} color={locationCoords ? colors['status.free'] : colors['text.tertiary']} />
                   <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', color: locationCoords ? colors['status.free'] : colors['text.secondary'] }}>
-                    {locationCoords ? 'Ubicación seleccionada' : 'Tocar para marcar en el mapa'}
+                    {locationCoords ? t('createEvent.locationSelected') : t('createEvent.tapToMark')}
                   </Text>
                 </Pressable>
               </Field>
@@ -326,7 +329,7 @@ export default function EditEventScreen({ route, navigation }) {
           ) : (
             <Field>
               <Input
-                label="Link de la transmisión"
+                label={t('createEvent.streamLink')}
                 value={virtualLink}
                 onChangeText={setVirtualLink}
                 placeholder="https://meet.google.com/..."
@@ -338,11 +341,11 @@ export default function EditEventScreen({ route, navigation }) {
 
           {/* Precio — SegmentedControl */}
           <Field>
-            <FieldLabel label="Entrada" colors={colors} />
+            <FieldLabel label={t('createEvent.ticket')} colors={colors} />
             <SegmentedControl
               options={[
-                { label: 'Gratis', value: 'gratis' },
-                { label: 'De pago', value: 'pago' },
+                { label: t('common.free'), value: 'gratis' },
+                { label: t('createEvent.paid'), value: 'pago' },
               ]}
               selected={isFree ? 'gratis' : 'pago'}
               onSelect={v => setIsFree(v === 'gratis')}
@@ -352,10 +355,10 @@ export default function EditEventScreen({ route, navigation }) {
           {!isFree && (
             <Field>
               <Input
-                label="Precio en colones"
+                label={t('createEvent.priceColones')}
                 value={price}
                 onChangeText={setPrice}
-                placeholder="Ej. 5000"
+                placeholder={t('createEvent.pricePlaceholder')}
                 keyboardType="numeric"
               />
             </Field>
@@ -363,7 +366,7 @@ export default function EditEventScreen({ route, navigation }) {
 
           {!step2Valid && (
             <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[1] }}>
-              {isVirtual ? 'Falta el link del evento virtual' : 'Falta elegir la ubicación en el mapa'}
+              {isVirtual ? t('editEvent.missingLink') : t('createEvent.missingLocation')}
             </Text>
           )}
         </ScrollView>
@@ -376,7 +379,7 @@ export default function EditEventScreen({ route, navigation }) {
           <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
             <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
               <Pressable onPress={() => setShowDatePicker(false)} style={{ padding: space[2] }}>
-                <Text variant="label" color="link">Listo</Text>
+                <Text variant="label" color="link">{t('createEvent.done')}</Text>
               </Pressable>
             </View>
             <DateTimePicker value={date} mode="date" display="spinner"
@@ -391,11 +394,11 @@ export default function EditEventScreen({ route, navigation }) {
           <View style={[styles.pickerSheet, { backgroundColor: colors['bg.raised'] }]}>
             <View style={[styles.pickerSheetHeader, { borderBottomColor: colors['border.subtle'] }]}>
               <Pressable onPress={() => setShowTimePicker(false)} style={{ padding: space[2] }}>
-                <Text variant="label" color="link">Listo</Text>
+                <Text variant="label" color="link">{t('createEvent.done')}</Text>
               </Pressable>
             </View>
             <DateTimePicker value={time} mode="time" display="spinner"
-              onChange={(_, t) => { if (t) setTime(t); }}
+              onChange={(_, v) => { if (v) setTime(v); }}
               themeVariant={isDark ? 'dark' : 'light'} />
           </View>
         </Modal>
@@ -419,14 +422,14 @@ export default function EditEventScreen({ route, navigation }) {
           </MapView>
           <View style={[styles.mapModalFooter, { backgroundColor: colors['bg.raised'], paddingBottom: insets.bottom + space[3] }]}>
             <Text variant="caption" color="text.tertiary">
-              {locationCoords ? 'Ubicación seleccionada. Tocá en el mapa para moverla.' : 'Tocá en el mapa para marcar la ubicación'}
+              {locationCoords ? t('createEvent.locationSelectedMove') : t('createEvent.tapMapToMark')}
             </Text>
             <Pressable
-              onPress={() => locationCoords ? setShowMapModal(false) : Alert.alert('', 'Seleccioná un punto en el mapa')}
+              onPress={() => locationCoords ? setShowMapModal(false) : Alert.alert('', t('createEvent.selectPoint'))}
               style={[styles.ctaBtn, { backgroundColor: locationCoords ? colors['action.primary'] : colors['bg.surface'], marginTop: space[3] }]}
             >
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', color: locationCoords ? colors['text.onAction'] : colors['text.tertiary'] }}>
-                Confirmar ubicación
+                {t('createEvent.confirmLocation')}
               </Text>
             </Pressable>
           </View>

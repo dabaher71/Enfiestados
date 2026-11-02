@@ -17,9 +17,11 @@ import { auth, db } from '../config/firebase';
 import { subscribeToMyBlocks, unblockUser } from '../services/blockService';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function BlockedUsersScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const userId = auth.currentUser?.uid;
 
   const [blockedIds, setBlockedIds] = useState(null); // null = todavía no cargó
@@ -46,16 +48,16 @@ export default function BlockedUsersScreen({ navigation }) {
   }, [blockedIds]);
 
   const handleUnblock = (targetId, name) => {
-    Alert.alert('Desbloquear', `¿Desbloquear a ${name}? Podrá volver a seguirte y ver tu contenido.`, [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('userProfile.unblock'), t('blocked.unblockMsg', { name }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Desbloquear',
+        text: t('userProfile.unblock'),
         onPress: async () => {
           setUnblocking(targetId);
           try {
             await unblockUser(userId, targetId);
           } catch {
-            Alert.alert('Error', 'No se pudo desbloquear. Intentá de nuevo.');
+            Alert.alert(t('common.error'), t('blocked.unblockError'));
           }
           setUnblocking(null);
         },
@@ -69,14 +71,14 @@ export default function BlockedUsersScreen({ navigation }) {
       <View style={[styles.row, { borderBottomColor: colors['border.subtle'] }]}>
         <Avatar uri={profile?.avatar} name={profile?.name} size={44} />
         <Text variant="title" numberOfLines={1} style={styles.name}>
-          {profile?.name || 'Usuario'}
+          {profile?.name || t('profile.user')}
         </Text>
         <Button
           variant="secondary"
           size="sm"
-          label="Desbloquear"
+          label={t('userProfile.unblock')}
           loading={unblocking === id}
-          onPress={() => handleUnblock(id, profile?.name || 'este usuario')}
+          onPress={() => handleUnblock(id, profile?.name || t('blocked.thisUser'))}
         />
       </View>
     );
@@ -85,10 +87,10 @@ export default function BlockedUsersScreen({ navigation }) {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2">Usuarios bloqueados</Text>
+        <Text variant="h2">{t('blocked.title')}</Text>
       </View>
 
       {blockedIds === null ? (
@@ -96,8 +98,8 @@ export default function BlockedUsersScreen({ navigation }) {
       ) : blockedIds.length === 0 ? (
         <EmptyState
           icon={<Ionicons name="ban-outline" size={28} color={colors['text.tertiary']} />}
-          title="No bloqueaste a nadie"
-          description="Los usuarios que bloqueés van a aparecer acá."
+          title={t('blocked.emptyTitle')}
+          description={t('blocked.emptyDesc')}
         />
       ) : (
         <FlatList

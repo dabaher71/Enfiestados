@@ -21,19 +21,67 @@ export const eventsCollection = collection(db, 'events');
 
 const PAGE_SIZE = 20;
 
-// Suscripción en tiempo real para la primera página
-export const subscribeToEvents = (onUpdate) => {
-  const q = query(eventsCollection, orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
+// ── Eventos de perfiles privados ──────────────────────────────────────────
+// Un evento cuyo organizador tiene el perfil privado solo lo ven el
+// organizador y sus seguidores aprobados. Cada evento lleva:
+//   organizerPrivate: bool      — el organizador es privado
+//   viewers: [uid]              — organizador + seguidores (vacío si es público)
+// Los mantiene al día una Cloud Function (syncEventPrivacy*) cuando el
+// organizador cambia de privacidad o gana/pierde seguidores; acá se ponen al
+// crear para que el evento nazca bien.
+//
+// firestore.rules solo deja LISTAR eventos con una consulta que garantice que
+// todos los resultados son visibles: el feed general filtra
+// organizerPrivate == false, y los privados se piden aparte con
+// viewers array-contains <uid>. Una consulta sin esos filtros falla.
+
+// Campos de privacidad para un evento nuevo de este organizador.
+export const privacyFieldsFor = (organizerId, userData) => {
+  const isPrivate = userData?.perfilPublico === false;
+  return {
+    organizerPrivate: isPrivate,
+    viewers: isPrivate ? [organizerId, ...(userData?.followers || [])] : [],
+  };
+};
+
+// Suscripción en tiempo real para la primera página (solo eventos públicos)
+export const subscribeToEvents = (onUpdate, onError) => {
+  const q = query(eventsCollection, where('organizerPrivate', '==', false), orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
   return onSnapshot(q, (snapshot) => {
     const events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     const lastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
     onUpdate(events, lastDoc);
-  });
+  }, onError);
 };
 
-// Carga de páginas adicionales (sin tiempo real)
+// Eventos privados que este usuario puede ver: los de perfiles privados que
+// sigue, y los suyos si su perfil es privado.
+export const subscribeToVisiblePrivateEvents = (uid, onUpdate) => {
+  if (!uid) { onUpdate([]); return () => {}; }
+  const q = query(eventsCollection, where('viewers', 'array-contains', uid), limit(100));
+  return onSnapshot(q, (snapshot) => {
+    onUpdate(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  }, () => onUpdate([]));
+};
+
+// Eventos de un organizador concreto, respetando su privacidad:
+//  - los propios: todos
+//  - de un perfil privado que sigo: los que me incluyen en viewers
+//  - de cualquier otro: solo los públicos
+export const subscribeToOrganizerEvents = (organizerId, viewerUid, { followsPrivate = false } = {}, onUpdate) => {
+  const filters = organizerId === viewerUid
+    ? [where('organizerId', '==', organizerId)]
+    : followsPrivate
+      ? [where('organizerId', '==', organizerId), where('viewers', 'array-contains', viewerUid)]
+      : [where('organizerId', '==', organizerId), where('organizerPrivate', '==', false)];
+  return onSnapshot(query(eventsCollection, ...filters), (snapshot) => {
+    onUpdate(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  }, () => onUpdate([]));
+};
+
+// Carga de páginas adicionales (sin tiempo real, solo eventos públicos)
 export const fetchMoreEvents = async (lastDoc) => {
-  const q = query(eventsCollection, orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
+  const q = query(eventsCollection, where('organizerPrivate', '==', false), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
   const snapshot = await getDocs(q);
   const events = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
   const newLastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
@@ -41,8 +89,16 @@ export const fetchMoreEvents = async (lastDoc) => {
 };
 
 export const createEvent = async (eventData) => {
+  // Privacidad según el perfil actual del organizador. Si esto falla, el
+  // evento igual se crea y la Cloud Function onEventCreatedPrivacy lo corrige.
+  let privacy = { organizerPrivate: false, viewers: [] };
+  try {
+    const userSnap = await getDoc(doc(db, 'users', eventData.organizerId));
+    privacy = privacyFieldsFor(eventData.organizerId, userSnap.data());
+  } catch {}
   const docRef = await addDoc(eventsCollection, {
     ...eventData,
+    ...privacy,
     likes: [],
     attendees: [],
     savedBy: [],
@@ -130,20 +186,6 @@ export const updateEvent = async (eventId, eventData) => {
   await updateDoc(eventRef, { ...eventData, updatedAt: new Date().toISOString() });
 };
 
-// Obtiene eventos por lista de IDs (lotes de 10 por límite de Firestore 'in')
-export const fetchEventsByIds = async (ids) => {
-  if (!ids?.length) return [];
-  const batches = [];
-  for (let i = 0; i < ids.length; i += 10) {
-    batches.push(ids.slice(i, i + 10));
-  }
-  const results = await Promise.all(
-    batches.map(batch =>
-      getDocs(query(eventsCollection, where('__name__', 'in', batch)))
-    )
-  );
-  return results.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
-};
 
 export const deleteComment = async (eventId, commentId, userId) => {
   const eventRef = doc(db, 'events', eventId);

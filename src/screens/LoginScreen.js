@@ -16,10 +16,11 @@ import { auth } from '../config/firebase';
 import { signInWithGoogle } from '../services/googleAuthService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
-import t from '../i18n/es-CR.json';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [email,         setEmail]         = useState('');
   const [password,      setPassword]      = useState('');
   const [loading,       setLoading]       = useState(false);
@@ -30,19 +31,19 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     setEmailError(''); setPassError('');
-    if (!email)    { setEmailError('Ingresá tu correo electrónico'); return; }
-    if (!password) { setPassError('Ingresá tu contraseña'); return; }
+    if (!email)    { setEmailError(t('auth.enterEmail')); return; }
+    if (!password) { setPassError(t('auth.enterPassword')); return; }
 
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (error) {
       if (error.code === 'auth/invalid-email') {
-        setEmailError('El formato del correo no es válido');
+        setEmailError(t('auth.invalidEmail'));
       } else if (error.code === 'auth/too-many-requests') {
-        setEmailError('Demasiados intentos. Esperá unos minutos');
+        setEmailError(t('auth.tooManyAttempts'));
       } else {
-        setEmailError('Correo o contraseña incorrectos');
+        setEmailError(t('auth.wrongCredentials'));
       }
     }
     setLoading(false);
@@ -51,7 +52,7 @@ export default function LoginScreen({ navigation }) {
   // "Ver eventos" — acceso anónimo sin registro (§ 8a UX_DESIGN_SYSTEM)
   const handleBrowse = async () => {
     try { await signInAnonymously(auth); }
-    catch { Alert.alert('Error', 'No se pudo conectar. Verificá tu conexión.'); }
+    catch { Alert.alert(t('common.error'), t('auth.connectError')); }
   };
 
   const handleGoogle = async () => {
@@ -59,11 +60,11 @@ export default function LoginScreen({ navigation }) {
     try {
       const { mergedWithExisting } = await signInWithGoogle();
       if (mergedWithExisting) {
-        Alert.alert('Ya tenés una cuenta', 'Ya existía una cuenta con esa cuenta de Google. Entramos con esa.');
+        Alert.alert(t('auth.alreadyHaveAccount'), t('auth.googleMerged'));
       }
     } catch (error) {
       if (error.code !== 'SIGN_IN_CANCELLED') {
-        Alert.alert('Error', 'No se pudo iniciar sesión con Google. Intentá de nuevo.');
+        Alert.alert(t('common.error'), t('auth.googleError'));
       }
     }
     setGoogleLoading(false);
@@ -92,15 +93,15 @@ export default function LoginScreen({ navigation }) {
           />
           <Text variant="display" align="center" style={styles.brand}>Enfiestados</Text>
           <Text variant="body" color="text.secondary" align="center">
-            {t.onboarding.welcome.subtitle}
+            {t('onboarding.welcome.subtitle')}
           </Text>
         </View>
 
         {/* Formulario */}
         <View style={styles.form}>
           <Input
-            label="Correo electrónico"
-            placeholder="tuCorreo@ejemplo.com"
+            label={t('auth.email')}
+            placeholder={t('auth.emailPlaceholder')}
             value={email}
             onChangeText={v => { setEmail(v); setEmailError(''); }}
             keyboardType="email-address"
@@ -110,15 +111,15 @@ export default function LoginScreen({ navigation }) {
           />
 
           <Input
-            label="Contraseña"
-            placeholder="Tu contraseña"
+            label={t('auth.password')}
+            placeholder={t('auth.passwordPlaceholder')}
             value={password}
             onChangeText={v => { setPassword(v); setPassError(''); }}
             secureTextEntry={!showPass}
             errorText={passError}
             leadingIcon={<Ionicons name="lock-closed-outline" size={18} color={colors['text.tertiary']} />}
             trailingIcon={
-              <Pressable onPress={() => setShowPass(v => !v)} accessibilityLabel={showPass ? 'Ocultar contraseña' : 'Ver contraseña'}>
+              <Pressable onPress={() => setShowPass(v => !v)} accessibilityLabel={showPass ? t('auth.hidePassword') : t('auth.showPassword')}>
                 <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors['text.tertiary']} />
               </Pressable>
             }
@@ -130,13 +131,13 @@ export default function LoginScreen({ navigation }) {
             style={styles.forgot}
             accessibilityRole="link"
           >
-            <Text variant="label" color="link">¿Olvidaste tu contraseña?</Text>
+            <Text variant="label" color="link">{t('auth.forgot')}</Text>
           </Pressable>
 
           <Button
             variant="primary"
             size="lg"
-            label="Iniciar sesión"
+            label={t('auth.login')}
             onPress={handleLogin}
             loading={loading}
             fullWidth
@@ -146,7 +147,7 @@ export default function LoginScreen({ navigation }) {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: colors['border.subtle'] }]} />
-            <Text variant="caption" color="text.tertiary" style={styles.dividerText}>o continuá con</Text>
+            <Text variant="caption" color="text.tertiary" style={styles.dividerText}>{t('auth.orContinueWith')}</Text>
             <View style={[styles.dividerLine, { backgroundColor: colors['border.subtle'] }]} />
           </View>
 
@@ -156,11 +157,11 @@ export default function LoginScreen({ navigation }) {
             disabled={googleLoading}
             style={[styles.googleBtn, { backgroundColor: colors['bg.raised'], borderColor: colors['border.strong'] }]}
             accessibilityRole="button"
-            accessibilityLabel="Continuar con Google"
+            accessibilityLabel={t('auth.continueGoogle')}
           >
             <Ionicons name="logo-google" size={20} color="#EA4335" />
             <Text variant="label" style={styles.googleLabel}>
-              {googleLoading ? 'Conectando…' : 'Continuar con Google'}
+              {googleLoading ? t('auth.connecting') : t('auth.continueGoogle')}
             </Text>
           </Pressable>
 
@@ -171,8 +172,8 @@ export default function LoginScreen({ navigation }) {
             accessibilityRole="link"
           >
             <Text variant="body" color="text.secondary" align="center">
-              ¿No tenés cuenta?{' '}
-              <Text variant="bodyStrong" style={{ color: colors['link'] }}>Registrate</Text>
+              {t('auth.noAccount')}{' '}
+              <Text variant="bodyStrong" style={{ color: colors['link'] }}>{t('auth.signUp')}</Text>
             </Text>
           </Pressable>
 
@@ -181,10 +182,10 @@ export default function LoginScreen({ navigation }) {
             onPress={handleBrowse}
             style={styles.browseLink}
             accessibilityRole="link"
-            accessibilityLabel="Ver eventos sin registrarte"
+            accessibilityLabel={t('auth.browseA11y')}
           >
             <Text variant="caption" color="text.tertiary" align="center">
-              {t.onboarding.welcome.skip}
+              {t('onboarding.welcome.skip')}
             </Text>
           </Pressable>
         </View>

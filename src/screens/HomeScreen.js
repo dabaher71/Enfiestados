@@ -30,12 +30,13 @@ import { requireAccount } from '../lib/requireAccount';
 import { isInZone, useZonePreference } from '../lib/zonePreference';
 import { fetchActiveAds } from '../services/adService';
 import { fetchMoreEvents, subscribeToEvents } from '../services/eventService';
+import useVisiblePrivateEvents, { mergeEvents } from '../hooks/useVisiblePrivateEvents';
 import { registerForPushNotifications } from '../services/pushNotificationService';
 import { getHiddenEventIds, recordSignal } from '../services/signalService';
 import { scoreAndRankEvents } from '../services/feedService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
-import t from '../i18n/es-CR.json';
+import { useTranslation } from 'react-i18next';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -115,14 +116,14 @@ function applyTimeFilter(events, filter) {
 }
 
 const TABS = [
-  { label: t.home.tabs.forYou,    value: 'parati' },
-  { label: t.home.tabs.following, value: 'siguiendo' },
+  { labelKey: 'home.tabs.forYou',    value: 'parati' },
+  { labelKey: 'home.tabs.following', value: 'siguiendo' },
 ];
 
 const FILTERS = [
-  { label: t.home.filters.today,   value: 'today' },
-  { label: t.home.filters.weekend, value: 'weekend' },
-  { label: t.home.filters.free,    value: 'free' },
+  { labelKey: 'home.filters.today',   value: 'today' },
+  { labelKey: 'home.filters.weekend', value: 'weekend' },
+  { labelKey: 'home.filters.free',    value: 'free' },
 ];
 
 // Alto natural de la fila de chips (paddingVertical space[3]*2 + Chip 44px) —
@@ -136,6 +137,7 @@ const STATIC_ZERO = new Animated.Value(0);
 
 function DaySeparator({ section }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const count = section.data.filter(i => !i._isAd && !i._isInternalAd).length;
   return (
     <View style={[styles.daySep, { backgroundColor: colors['bg.base'] }]}>
@@ -148,7 +150,7 @@ function DaySeparator({ section }) {
       <View style={[styles.daySepLine, { backgroundColor: colors['border.subtle'] }]} />
       {count > 0 && (
         <Text variant="caption" color="text.tertiary">
-          {count} {count === 1 ? 'plan' : 'planes'}
+          {t(count === 1 ? 'home.planOne' : 'home.planMany', { count })}
         </Text>
       )}
     </View>
@@ -159,6 +161,8 @@ function DaySeparator({ section }) {
 
 export default function HomeScreen({ navigation }) {
   const { colors } = useTheme();
+  const { t, i18n } = useTranslation();
+  const privateEvents = useVisiblePrivateEvents();
   const [events,         setEvents]         = useState([]);
   const [activeTab,      setActiveTab]      = useState('parati');
   const [timeFilter,     setTimeFilter]     = useState(null);
@@ -265,7 +269,8 @@ export default function HomeScreen({ navigation }) {
 
   const displayedEvents = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const native = events.filter(ev => !isExpired(ev) && !allBlocked.has(ev.organizerId) && isInZone(ev, zone));
+    // events = feed público; privateEvents = de perfiles privados que sigo.
+    const native = mergeEvents(events, privateEvents).filter(ev => !isExpired(ev) && !allBlocked.has(ev.organizerId) && isInZone(ev, zone));
     let base;
     if (activeTab === 'siguiendo') {
       base = sortAsc(native.filter(ev => following?.includes(ev.organizerId)));
@@ -274,11 +279,12 @@ export default function HomeScreen({ navigation }) {
       base = scoreAndRankEvents([...native, ...validExternal], interestVector, hiddenIds, userInterests);
     }
     return applyTimeFilter(base, timeFilter);
-  }, [activeTab, events, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired, allBlocked, zone]);
+  }, [activeTab, events, privateEvents, following, externalEvents, interestVector, hiddenIds, userInterests, timeFilter, isExpired, allBlocked, zone]);
 
   const sections = useMemo(
     () => groupByDay(displayedEvents, internalAds),
-    [displayedEvents, internalAds]
+    // i18n.language: las etiquetas de día ("HOY · VIERNES 25") salen del idioma.
+    [displayedEvents, internalAds, i18n.language]
   );
 
   const onRefresh = async () => {
@@ -352,9 +358,9 @@ export default function HomeScreen({ navigation }) {
       return (
         <View style={[styles.endOfFeed, { borderTopColor: colors['border.subtle'] }]}>
           <Text variant="caption" color="text.tertiary" align="center">
-            No hay más eventos esta semana
+            {t('home.endOfFeed')}
           </Text>
-          <Button variant="ghost" size="sm" label="Ver la próxima semana" onPress={() => {}} />
+          <Button variant="ghost" size="sm" label={t('home.nextWeek')} onPress={() => {}} />
         </View>
       );
     }
@@ -382,8 +388,8 @@ export default function HomeScreen({ navigation }) {
         <HomeHeader colors={colors} navigation={navigation} location={userLocation} />
         <EmptyState
           icon={<Ionicons name="cloud-offline-outline" size={28} color={colors['text.tertiary']} />}
-          title="No pudimos cargar el feed"
-          actionLabel="Reintentar"
+          title={t('home.error.title')}
+          actionLabel={t('common.retry')}
           onAction={() => { setError(false); setLoading(true); loadUserProfile(); }}
         />
       </SafeAreaView>
@@ -414,9 +420,9 @@ export default function HomeScreen({ navigation }) {
       {displayedEvents.length === 0 ? (
         <EmptyState
           icon={<Ionicons name={activeTab === 'siguiendo' ? 'people-outline' : 'sparkles-outline'} size={28} color={colors['text.tertiary']} />}
-          title={activeTab === 'siguiendo' ? t.home.empty.following.title : t.home.empty.forYou.title}
-          description={activeTab === 'siguiendo' ? t.home.empty.following.desc : t.home.empty.forYou.desc}
-          actionLabel={activeTab === 'siguiendo' ? t.home.empty.following.action : t.home.empty.forYou.action}
+          title={activeTab === 'siguiendo' ? t('home.empty.following.title') : t('home.empty.forYou.title')}
+          description={activeTab === 'siguiendo' ? t('home.empty.following.desc') : t('home.empty.forYou.desc')}
+          actionLabel={activeTab === 'siguiendo' ? t('home.empty.following.action') : t('home.empty.forYou.action')}
           onAction={() => activeTab === 'siguiendo' ? navigation.navigate('Explore') : navigation.navigate('Interests')}
         />
       ) : (
@@ -463,10 +469,11 @@ export default function HomeScreen({ navigation }) {
 function HomeHeader({ colors, navigation, location, collapseAnim }) {
   const anim = collapseAnim ?? STATIC_ZERO;
   const { zone } = useZonePreference();
+  const { t } = useTranslation();
   // Con zona activa se muestra el radio, para que quede claro por qué el
   // feed tiene menos eventos que el de todo el país.
   const locationLabel = zone
-    ? `${location || 'Mi zona'} · ${zone.radiusKm} km`
+    ? `${location || t('home.myZone')} · ${zone.radiusKm} km`
     : (location || 'Costa Rica');
   return (
     <Animated.View style={[
@@ -494,7 +501,7 @@ function HomeHeader({ colors, navigation, location, collapseAnim }) {
           <Pressable
             onPress={() => navigation.navigate('ZoneSettings')}
             accessibilityRole="button"
-            accessibilityLabel="Cambiar zona y distancia"
+            accessibilityLabel={t('home.changeZone')}
           >
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={13} color={colors['text.tertiary']} />
@@ -514,16 +521,16 @@ function HomeHeader({ colors, navigation, location, collapseAnim }) {
       {/* Botón "Crear" — amarillo con texto */}
       <Pressable
         onPress={() => {
-          if (!requireAccount(navigation, 'Creá una cuenta para organizar un evento.')) return;
+          if (!requireAccount(navigation, t('home.needAccountCreate'))) return;
           navigation.navigate('CreateEvent');
         }}
         style={[styles.createChip, { backgroundColor: colors['action.primary'] }]}
         hitSlop={4}
-        accessibilityLabel="Crear evento"
+        accessibilityLabel={t('home.createEvent')}
       >
         <Ionicons name="add" size={15} color={colors['text.onAction']} />
         <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans_700Bold', color: colors['text.onAction'] }}>
-          Crear
+          {t('home.create')}
         </Text>
       </Pressable>
     </Animated.View>
@@ -532,9 +539,10 @@ function HomeHeader({ colors, navigation, location, collapseAnim }) {
 
 function HomeTabs({ activeTab, onSelect }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   return (
     <View style={[styles.tabsRow, { flexShrink: 0, borderBottomColor: colors['border.subtle'] }]}>
-      <SegmentedControl options={TABS} selected={activeTab} onSelect={onSelect} />
+      <SegmentedControl options={TABS.map(o => ({ ...o, label: t(o.labelKey) }))} selected={activeTab} onSelect={onSelect} />
     </View>
   );
 }
@@ -544,6 +552,7 @@ function HomeChips({ active, onSelect }) {
   // ScrollView: style.flexGrow=0 y style.flexShrink=0 → la fila NO crece
   // contentContainerStyle.alignItems='center' → los chips NO se estiran
   // FIX_ROUND_4 § 2: Chip (tokens) en vez de colores de un solo tema a mano
+  const { t } = useTranslation();
   return (
     <ScrollView
       horizontal
@@ -554,7 +563,7 @@ function HomeChips({ active, onSelect }) {
       {FILTERS.map(f => (
         <Chip
           key={f.value}
-          label={f.label}
+          label={t(f.labelKey)}
           selected={f.value === active}
           onPress={() => onSelect(f.value)}
         />

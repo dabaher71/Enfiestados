@@ -56,7 +56,7 @@ eas update                                        # OTA update push
 ## App Details
 
 - **Theme**: design system en `src/theme/` — tokens en `tokens.js` (`darkColors`/`lightColors`, `space`, `radius`, `font`, `elev`, `motion`), consumidos vía `useTheme()` de `ThemeProvider`. Dark: `bg.base` `#17131F`, `nav.selected` `#8B6BFF`. **No hardcodear hex ni `fontSize`** — usar los tokens y el componente `src/components/ui/Text.js` (variantes: display/h1/h2/h3/title/subtitle/body/bodyStrong/label/caption/overline/tabLabel). La paleta vieja (`#1a1a2e`, `#6c5ce7`) está deprecada.
-- **Language**: Spanish UI (permissions, labels, etc.)
+- **Idiomas**: español (original, voseo tico), inglés, francés y portugués (Brasil), con i18next. Textos en `src/i18n/{es,en,fr,pt}.json`; config en `src/i18n/index.js` (`setLanguage`, `LANGUAGES`, `intlLocale()`). Se elige en Configuración → Idioma y en el registro (`components/LanguagePicker.js`); se guarda en AsyncStorage (`appLanguage`), y la primera vez se toma el idioma del teléfono. **Ningún texto visible va escrito en el código**: en componentes `const { t } = useTranslation()`, fuera de React `i18n.t(...)` (y el componente que lo muestra tiene que llamar a `useTranslation()` para re-renderizar al cambiar de idioma). Al agregar una clave, agregarla en los cuatro archivos. Sin plurales de i18next (`_one`/`_other`): Hermes no garantiza `Intl.PluralRules`; usar dos claves (`xOne`/`xMany`). Las notificaciones se muestran según su `type` (`alerts.types.*`) en el idioma de quien las lee; el campo `message` guardado queda solo como respaldo. Lo que escriben los usuarios no se traduce. Siguen solo en español: AdminScreen, DevCatalogScreen y las pantallas de anuncios (AdCenter, CreateAd, AdvertiserRequest, OrganizerPanel), que hoy solo se ven en desarrollo.
 - **Ads**: AdMob `ca-app-pub-5363568499936245~8795174061` — NativeAdCard component
 - **Notifications**: In-app (notificationService) + push (pushNotificationService + expo-notifications)
 - **Firebase project**: `enfiestados-alpha`
@@ -88,6 +88,14 @@ veces y deja una banda muerta sobre la barra que recorta botones y texto.
 ## firebase.json: nada de comillas simples literales
 
 `@react-native-firebase/app` (`ios_config.sh`) mete el contenido de `firebase.json` dentro de un string de Ruby con comillas simples durante el build de iOS. Una `'` literal rompe el build ("Failed to parse firebase.json"). Por eso la Content-Security-Policy de hosting escribe `'self'`, `'none'`, etc. como `'self'`: es el mismo JSON para Firebase CLI. Cualquier valor nuevo con comillas simples tiene que ir escapado igual.
+
+## Eventos de perfiles privados
+
+Los eventos de un organizador con `perfilPublico: false` solo los ven él y sus seguidores aprobados, y `firestore.rules` lo hace cumplir. Cada evento lleva `organizerPrivate` (bool) y `viewers` (organizador + seguidores; `[]` si es público), mantenidos por las Cloud Functions `syncEventPrivacyOnUserUpdate` / `syncEventPrivacyOnEventCreate`. Las reglas solo dejan **listar** eventos con consultas que garanticen el acceso: el feed general filtra `organizerPrivate == false` (`subscribeToEvents`), los privados visibles se piden con `viewers array-contains uid` (`useVisiblePrivateEvents`), los de un perfil con `subscribeToOrganizerEvents`, y Mis planes por `attendees`/`savedBy`. **Una consulta nueva sobre `events` sin uno de esos filtros falla con permission-denied.** Las pruebas están en `tests/rules` (`npm test`; el emulador necesita Java 21+, sirve el de Android Studio: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`).
+
+## iOS: ciclo de vida UIScene (iOS 27)
+
+iOS 27 cierra al arrancar las apps compiladas con el SDK de Xcode 27 que no usan UIScene. `plugins/withUIScene.js` agrega `UIApplicationSceneManifest` al Info.plist y un `SceneDelegate` (al final de `AppDelegate.swift`) que crea la ventana y arranca React Native; los deep links de la escena se reenvían al AppDelegate. Sacarlo cuando Expo traiga soporte propio de escenas.
 
 ## iOS: parches del Podfile (Xcode 27)
 

@@ -3,18 +3,20 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { elev, radius, space } from '../../theme/tokens';
 import Button from './Button';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
 
 export default function Dialog({
   visible,
   title,
   message,
-  confirmLabel   = 'Confirmar',
-  cancelLabel    = 'Cancelar',
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
   destructive    = false,
 }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable
@@ -37,14 +39,14 @@ export default function Dialog({
             <Button
               variant="secondary"
               size="sm"
-              label={cancelLabel}
+              label={cancelLabel ?? t('common.cancel')}
               onPress={onCancel}
               style={styles.btn}
             />
             <Button
               variant={destructive ? 'destructive' : 'primary'}
               size="sm"
-              label={confirmLabel}
+              label={confirmLabel ?? t('common.confirm')}
               onPress={onConfirm}
               style={[styles.btn, styles.btnPrimary]}
             />

@@ -1,7 +1,7 @@
 const { setGlobalOptions } = require("firebase-functions");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const axios = require("axios");
@@ -49,9 +49,11 @@ function recencyScore(event) {
   }
 }
 
-function scoreEvents(events, interestVector, hiddenIds, followingIds, attendeesMap) {
+function scoreEvents(events, interestVector, hiddenIds, followingIds, userId) {
   return events
     .filter((ev) => !hiddenIds.has(ev.id))
+    // Eventos de perfiles privados: solo para el organizador y sus seguidores.
+    .filter((ev) => !ev.organizerPrivate || (ev.viewers || []).includes(userId))
     .map((ev) => {
       // Señal social: qué porcentaje de tus seguidos asiste a este evento
       const attendees = ev.attendees || [];
@@ -116,7 +118,7 @@ exports.computePersonalizedFeeds = onSchedule(
             .get();
           const hiddenIds = new Set(hiddenSnap.docs.map((d) => d.id));
 
-          const rankedIds = scoreEvents(allEvents, interestVector, hiddenIds, followingIds);
+          const rankedIds = scoreEvents(allEvents, interestVector, hiddenIds, followingIds, userId);
 
           const feedRef = db.collection("feeds").doc(userId);
           batch.set(feedRef, {
@@ -168,7 +170,7 @@ exports.refreshMyFeed = onCall(
     const hiddenIds = new Set(hiddenSnap.docs.map((d) => d.id));
     const allEvents = eventsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    const rankedIds = scoreEvents(allEvents, interestVector, hiddenIds, followingIds);
+    const rankedIds = scoreEvents(allEvents, interestVector, hiddenIds, followingIds, userId);
 
     await feedRef.set({
       eventIds: rankedIds,
@@ -1087,3 +1089,344 @@ exports.confirmAccountDeletion = onCall(
     return { deleted: true };
   }
 );
+
+// ─── Acceso anticipado (formulario de la landing) ─────────────────────────────
+// public/index.html no puede correr JavaScript (CSP script-src 'none'), así que
+// el formulario es un <form method="post"> clásico. Hosting reescribe
+// /api/acceso-anticipado a esta función (ver firebase.json), con lo que el POST
+// queda en el mismo origen y alcanza con form-action 'self'.
+//
+// Las solicitudes van a earlyAccessRequests, que no tiene regla en
+// firestore.rules: ningún cliente la lee ni la escribe, solo el Admin SDK.
+const { onRequest } = require("firebase-functions/v2/https");
+
+const EARLY_ACCESS_MAX_PER_HOUR = 5;
+const EARLY_ACCESS_LIMITS = { name: 120, email: 160, phone: 30, description: 2000 };
+
+function cleanField(v, max) {
+  return String(Array.isArray(v) ? v[0] : v ?? "").trim().slice(0, max);
+}
+
+exports.earlyAccessRequest = onRequest({ cors: false, secrets: [EMAIL_SMTP_PASSWORD] }, async (req, res) => {
+  if (req.method !== "POST") {
+    res.redirect(303, "/#acceso");
+    return;
+  }
+
+  const body = req.body || {};
+  // Honeypot: campo oculto que una persona nunca ve. Si viene lleno es un
+  // bot; se le responde como si todo hubiera salido bien.
+  if (cleanField(body.website, 200)) {
+    res.redirect(303, "/acceso-enviado");
+    return;
+  }
+
+  const name = cleanField(body.name, EARLY_ACCESS_LIMITS.name);
+  const email = cleanField(body.email, EARLY_ACCESS_LIMITS.email).toLowerCase();
+  const phone = cleanField(body.phone, EARLY_ACCESS_LIMITS.phone);
+  const description = cleanField(body.description, EARLY_ACCESS_LIMITS.description);
+
+  const valid =
+    name.length >= 2 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) &&
+    phone.replace(/\D/g, "").length >= 8 &&
+    /^[\d\s+()-]+$/.test(phone) &&
+    description.length >= 10;
+  if (!valid) {
+    res.redirect(303, "/acceso-error");
+    return;
+  }
+
+  // Límite por IP, guardada solo como hash: alcanza para frenar a alguien que
+  // manda el formulario en bucle sin guardar la IP de nadie.
+  const ip = (req.headers["x-forwarded-for"] || req.ip || "").toString().split(",")[0].trim();
+  const ipHash = crypto.createHash("sha256").update(ip).digest("hex").slice(0, 32);
+  const db = admin.firestore();
+  const since = admin.firestore.Timestamp.fromMillis(Date.now() - 60 * 60 * 1000);
+  // Si el conteo falla (p. ej. el índice ipHash+createdAt todavía se está
+  // construyendo) se guarda igual: perder una solicitud real es peor que
+  // dejar pasar una de más.
+  try {
+    const recent = await db.collection("earlyAccessRequests")
+      .where("ipHash", "==", ipHash)
+      .where("createdAt", ">=", since)
+      .count().get();
+    if (recent.data().count >= EARLY_ACCESS_MAX_PER_HOUR) {
+      res.redirect(303, "/acceso-enviado");
+      return;
+    }
+  } catch (e) {
+    console.warn("earlyAccessRequest: sin límite por IP", e.message);
+  }
+
+  let docRef;
+  try {
+    docRef = await db.collection("earlyAccessRequests").add({
+      name, email, phone, description, ipHash,
+      status: "nueva",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("earlyAccessRequest", e);
+    res.redirect(303, "/acceso-error");
+    return;
+  }
+
+  // Aviso a info@ con los datos. Si el correo falla la solicitud ya quedó
+  // guardada en Firestore, así que a la persona se le muestra "enviado" igual.
+  // replyTo = el correo de quien la mandó, para contestarle directo.
+  try {
+    const transporter = nodemailer.createTransport({
+      host: "smtp.hostinger.com",
+      port: 465,
+      secure: true,
+      auth: { user: DELETION_SENDER_EMAIL, pass: EMAIL_SMTP_PASSWORD.value() },
+    });
+    await transporter.sendMail({
+      from: `Enfiestados <${DELETION_SENDER_EMAIL}>`,
+      to: DELETION_SENDER_EMAIL,
+      replyTo: email,
+      subject: `Nueva solicitud de acceso anticipado: ${name.replace(/[\r\n]+/g, " ")}`,
+      text:
+        "Llegó una nueva solicitud de acceso anticipado desde la página web.\n\n" +
+        `Empresa o persona: ${name}\n` +
+        `Correo: ${email}\n` +
+        `Teléfono: ${phone}\n\n` +
+        `Descripción de la solicitud:\n${description}\n\n` +
+        `Fecha: ${new Date().toLocaleString("es-CR", { timeZone: "America/Costa_Rica" })}\n` +
+        `ID en Firestore: earlyAccessRequests/${docRef.id}\n\n` +
+        "Podés responder este correo para contestarle directamente.",
+    });
+  } catch (e) {
+    console.error("earlyAccessRequest: no se pudo enviar el correo", e.message);
+  }
+  res.redirect(303, "/acceso-enviado");
+});
+
+// ─── Eliminar cuenta desde la web (public/cuenta.html) ───────────────────────
+// Google Play exige un enlace web para pedir el borrado de la cuenta sin tener
+// la app instalada. Como la landing no corre JavaScript (CSP script-src
+// 'none'), todo son formularios clásicos que Hosting reescribe a esta función
+// (/api/eliminar-cuenta/** en firebase.json):
+//   POST /solicitar  { email }  → manda un enlace de confirmación al correo
+//   GET  /confirmar?t=TOKEN     → página "¿Seguro?" con un botón
+//   POST /confirmar  { t }      → borra todo (deleteAllUserData) y la cuenta
+// El GET no borra nada a propósito: los filtros de correo abren los enlaces
+// para revisarlos, y eso no puede eliminar una cuenta.
+//
+// El token se guarda hasheado (el id del doc es el sha256) en
+// webDeletionRequests, sin regla en firestore.rules: solo el Admin SDK.
+const WEB_DELETION_TTL_MS = 60 * 60 * 1000;
+const WEB_DELETION_MAX_PER_HOUR = 5;
+const SITE_URL = "https://enfiestados.net";
+
+const hashToken = (t) => crypto.createHash("sha256").update(t).digest("hex");
+const validToken = (t) => /^[A-Za-z0-9_-]{43}$/.test(t);
+
+async function findWebDeletion(token) {
+  if (!validToken(token)) return null;
+  const ref = db.collection("webDeletionRequests").doc(hashToken(token));
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  if (snap.data().expiresAt.toMillis() < Date.now()) {
+    await ref.delete();
+    return null;
+  }
+  return { ref, uid: snap.data().uid };
+}
+
+function deletionConfirmPage(token) {
+  // El token ya pasó validToken: solo tiene [A-Za-z0-9_-], no hay que escaparlo.
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Confirmar eliminación — Enfiestados</title>
+<link rel="icon" href="/assets/logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--tinta:#1F1C2C;--tinta-2:#5E5A70;--crema:#FBFAF7;--borde:#EDE8E1;--amarillo:#FDC74A;}
+*{box-sizing:border-box;}
+html,body{margin:0;min-height:100%;background:var(--crema);}
+body{font-family:'DM Sans',sans-serif;color:var(--tinta);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.card{background:#fff;border:1px solid var(--borde);border-radius:32px;padding:48px 40px;max-width:560px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:18px;}
+.card img{width:84px;height:84px;border-radius:20px;}
+h1{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(26px,5vw,34px);letter-spacing:-0.025em;line-height:1.1;margin:0;}
+p{margin:0;font-size:17px;line-height:1.6;color:var(--tinta-2);}
+form{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:8px;}
+button{font:inherit;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:16px;border:0;cursor:pointer;background:#B42318;color:#fff;border-radius:999px;padding:14px 28px;}
+button:hover{background:#912018;}
+a{color:var(--tinta-2);}
+:focus-visible{outline:2px solid var(--tinta);outline-offset:3px;}
+</style></head><body>
+<main class="card">
+  <img src="/assets/logo.png" alt="Enfiestados">
+  <h1>¿Eliminar tu cuenta?</h1>
+  <p>Se van a borrar tu perfil, tus eventos, publicaciones, mensajes, fotos y todo lo demás asociado a tu cuenta. Esto no se puede deshacer.</p>
+  <form method="post" action="/api/eliminar-cuenta/confirmar">
+    <input type="hidden" name="t" value="${token}">
+    <button type="submit">Sí, eliminar mi cuenta</button>
+    <a href="/">No, volver al inicio</a>
+  </form>
+</main>
+</body></html>`;
+}
+
+exports.webAccountDeletion = onRequest(
+  { cors: false, secrets: [EMAIL_SMTP_PASSWORD], timeoutSeconds: 300, memory: "512MiB" },
+  async (req, res) => {
+    const action = req.path.replace(/\/+$/, "").split("/").pop();
+    const body = req.body || {};
+
+    if (action === "solicitar" && req.method === "POST") {
+      // Siempre la misma respuesta, exista o no la cuenta: la página no
+      // puede servir para averiguar quién está registrado.
+      const done = () => res.redirect(303, "/cuenta-enviado");
+      if (cleanField(body.website, 200)) return done(); // honeypot
+      const email = cleanField(body.email, 160).toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return done();
+
+      try {
+        const ip = (req.headers["x-forwarded-for"] || req.ip || "").toString().split(",")[0].trim();
+        const ipHash = crypto.createHash("sha256").update(ip).digest("hex").slice(0, 32);
+        const since = admin.firestore.Timestamp.fromMillis(Date.now() - 60 * 60 * 1000);
+        // Si el conteo falla (índice todavía construyéndose) se sigue igual.
+        try {
+          const recent = await db.collection("webDeletionRequests")
+            .where("ipHash", "==", ipHash)
+            .where("createdAt", ">=", since)
+            .count().get();
+          if (recent.data().count >= WEB_DELETION_MAX_PER_HOUR) return done();
+        } catch (e) {
+          console.warn("webAccountDeletion: sin límite por IP", e.message);
+        }
+
+        let user;
+        try {
+          user = await admin.auth().getUserByEmail(email);
+        } catch (e) {
+          if (e.code === "auth/user-not-found") return done();
+          throw e;
+        }
+
+        const token = crypto.randomBytes(32).toString("base64url");
+        await db.collection("webDeletionRequests").doc(hashToken(token)).set({
+          uid: user.uid,
+          ipHash,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + WEB_DELETION_TTL_MS),
+        });
+
+        const link = `${SITE_URL}/api/eliminar-cuenta/confirmar?t=${token}`;
+        const transporter = nodemailer.createTransport({
+          host: "smtp.hostinger.com",
+          port: 465,
+          secure: true,
+          auth: { user: DELETION_SENDER_EMAIL, pass: EMAIL_SMTP_PASSWORD.value() },
+        });
+        await transporter.sendMail({
+          from: `Enfiestados <${DELETION_SENDER_EMAIL}>`,
+          to: email,
+          subject: "Confirmá la eliminación de tu cuenta de Enfiestados",
+          text:
+            "Recibimos una solicitud para eliminar tu cuenta de Enfiestados.\n\n" +
+            `Para confirmarla, abrí este enlace:\n${link}\n\n` +
+            "El enlace vence en una hora. Al abrirlo te vamos a pedir que confirmes una vez más.\n\n" +
+            "Si no pediste esto, ignorá este correo: tu cuenta sigue segura y no se elimina nada.\n\n" +
+            "— Enfiestados",
+        });
+      } catch (e) {
+        console.error("webAccountDeletion/solicitar", e);
+      }
+      return done();
+    }
+
+    if (action === "confirmar" && req.method === "GET") {
+      const token = cleanField(req.query.t, 64);
+      const found = await findWebDeletion(token);
+      if (!found) return res.redirect(303, "/cuenta-error");
+      res.set("Cache-Control", "no-store");
+      res.status(200).type("html").send(deletionConfirmPage(token));
+      return;
+    }
+
+    if (action === "confirmar" && req.method === "POST") {
+      const found = await findWebDeletion(cleanField(body.t, 64));
+      if (!found) return res.redirect(303, "/cuenta-error");
+      // Igual que confirmAccountDeletion: el pedido se borra al final, así un
+      // fallo a la mitad se puede reintentar con el mismo enlace.
+      try {
+        await deleteAllUserData(found.uid);
+        await admin.auth().deleteUser(found.uid).catch((e) => {
+          if (e.code !== "auth/user-not-found") throw e;
+        });
+      } catch (e) {
+        console.error(`webAccountDeletion(${found.uid}) falló:`, e);
+        res.status(500).type("text").send("No se pudo terminar de eliminar tu cuenta. Volvé a abrir el enlace del correo e intentá de nuevo.");
+        return;
+      }
+      // Cualquier otro enlace pendiente de la misma cuenta ya no sirve.
+      const others = await db.collection("webDeletionRequests").where("uid", "==", found.uid).get();
+      await Promise.all(others.docs.map((d) => d.ref.delete()));
+      return res.redirect(303, "/cuenta-eliminada");
+    }
+
+    res.redirect(303, "/cuenta");
+  }
+);
+
+// ─── Privacidad de eventos (perfiles privados) ───────────────────────────────
+// Un evento de un perfil privado solo lo ven el organizador y sus seguidores
+// aprobados. firestore.rules lo hace cumplir con dos campos del evento:
+//   organizerPrivate: bool  — el organizador es privado
+//   viewers: [uid]          — organizador + seguidores (vacío si es público)
+// Estas funciones los mantienen al día. La app los pone al crear el evento
+// (eventService.createEvent), pero la fuente de verdad es esto: también
+// corrige eventos creados por versiones viejas de la app sin esos campos.
+
+function eventPrivacyFor(organizerId, userData) {
+  const isPrivate = userData?.perfilPublico === false;
+  return {
+    organizerPrivate: isPrivate,
+    viewers: isPrivate ? [organizerId, ...new Set(userData?.followers || [])] : [],
+  };
+}
+
+function samePrivacy(a, b) {
+  return a.organizerPrivate === b.organizerPrivate &&
+    JSON.stringify([...(a.viewers || [])].sort()) === JSON.stringify([...(b.viewers || [])].sort());
+}
+
+async function syncOrganizerEvents(organizerId, userData) {
+  const target = eventPrivacyFor(organizerId, userData);
+  const snap = await db.collection("events").where("organizerId", "==", organizerId).get();
+  const writer = db.bulkWriter();
+  let n = 0;
+  snap.docs.forEach((d) => {
+    if (!samePrivacy(d.data(), target)) { writer.update(d.ref, target); n++; }
+  });
+  await writer.close();
+  return n;
+}
+
+// El usuario cambió de público a privado (o al revés), o ganó/perdió
+// seguidores: se actualizan todos sus eventos.
+exports.syncEventPrivacyOnUserUpdate = onDocumentUpdated("users/{uid}", async (event) => {
+  const before = event.data?.before?.data() || {};
+  const after = event.data?.after?.data() || {};
+  const privacyChanged = (before.perfilPublico === false) !== (after.perfilPublico === false);
+  const followersChanged = after.perfilPublico === false &&
+    JSON.stringify([...(before.followers || [])].sort()) !== JSON.stringify([...(after.followers || [])].sort());
+  if (!privacyChanged && !followersChanged) return;
+  const n = await syncOrganizerEvents(event.params.uid, after);
+  console.log(`syncEventPrivacy: ${event.params.uid} → ${n} evento(s) actualizados`);
+});
+
+// Evento nuevo: se asegura de que nazca con la privacidad de su organizador.
+exports.syncEventPrivacyOnEventCreate = onDocumentCreated("events/{eventId}", async (event) => {
+  const data = event.data?.data();
+  if (!data?.organizerId) return;
+  const userSnap = await db.collection("users").doc(data.organizerId).get();
+  const target = eventPrivacyFor(data.organizerId, userSnap.data());
+  if (!samePrivacy(data, target)) await event.data.ref.update(target);
+});

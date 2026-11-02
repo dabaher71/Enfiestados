@@ -103,8 +103,40 @@ service cloud.firestore {
     }
 
     // ── events ────────────────────────────────────────────────────────────────
+    // Eventos de perfiles privados: solo los ven el organizador y sus
+    // seguidores aprobados. Cada evento lleva organizerPrivate (bool) y
+    // viewers (organizador + seguidores; vacío si es público), que mantienen
+    // al día las Cloud Functions syncEventPrivacy* (functions/index.js).
+    //
+    // Quien ya asiste o guardó un evento lo sigue viendo aunque deje de seguir
+    // al organizador: para anotarse tuvo que poder verlo (ver update).
+    function canSeeEvent(d) {
+      return d.get('organizerPrivate', false) != true ||
+        d.organizerId == request.auth.uid ||
+        request.auth.uid in d.get('viewers', []) ||
+        request.auth.uid in d.get('attendees', []) ||
+        request.auth.uid in d.get('savedBy', []);
+    }
+
     match /events/{eventId} {
-      allow read: if isAuth();
+      allow get: if isAuth() && canSeeEvent(resource.data);
+      // Para LISTAR, Firestore exige que los filtros de la consulta garanticen
+      // la regla para todos los resultados posibles. Cada rama corresponde a
+      // una consulta de la app:
+      //   organizerPrivate == false        → feed general (eventService)
+      //   organizerId == uid               → mis eventos
+      //   viewers array-contains uid       → privados que puedo ver
+      //   attendees / savedBy contains uid → Mis planes
+      // OJO: no usar get() ni .get(campo, default) acá. Probado en el
+      // emulador: con eso una consulta SIN filtros pasaba y devolvía eventos
+      // privados a cualquiera.
+      allow list: if isAuth() && (
+        resource.data.organizerPrivate == false ||
+        resource.data.organizerId == request.auth.uid ||
+        request.auth.uid in resource.data.viewers ||
+        request.auth.uid in resource.data.attendees ||
+        request.auth.uid in resource.data.savedBy
+      );
       allow create: if isVerified() &&
         request.resource.data.organizerId == request.auth.uid &&
         request.resource.data.keys().hasAll(['title', 'category', 'organizerId', 'createdAt']) &&
@@ -115,7 +147,10 @@ service cloud.firestore {
         // El organizador puede editar todo
         resource.data.organizerId == request.auth.uid ||
         // Otros solo pueden tocar UN campo social por escritura, y solo
-        // agregar/quitar su propio uid (o su propio comentario)
+        // agregar/quitar su propio uid (o su propio comentario). Y solo si
+        // pueden ver el evento: si no, alguien que no sigue a un perfil
+        // privado se anotaba en attendees y con eso ganaba acceso.
+        canSeeEvent(resource.data) && (
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
           isUidToggle(resource.data.get('likes', []), request.resource.data.likes, request.auth.uid)
@@ -135,7 +170,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) &&
           isCommentAppendOrSingleDelete(
             resource.data.get('comments', []), request.resource.data.comments)
-        )
+        ))
       );
       allow delete: if isAuth() && resource.data.organizerId == request.auth.uid;
     }

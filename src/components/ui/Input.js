@@ -5,6 +5,7 @@ import useReducedMotion from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { radius, space } from '../../theme/tokens';
 import Text from './Text';
+import { useTranslation } from 'react-i18next';
 
 export default function Input({
   label,
@@ -136,8 +137,9 @@ export function TextArea({ label, placeholder, value, onChangeText, maxLength, e
   );
 }
 
-export function SearchField({ value, onChangeText, placeholder = 'Buscar eventos…', style }) {
+export function SearchField({ value, onChangeText, placeholder, style }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [focused, setFocused] = useState(false);
 
   return (
@@ -155,7 +157,7 @@ export function SearchField({ value, onChangeText, placeholder = 'Buscar eventos
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('explore.searchPlaceholder')}
         placeholderTextColor={colors['text.tertiary']}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}

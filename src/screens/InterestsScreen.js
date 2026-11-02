@@ -13,6 +13,7 @@ import { CATEGORIES } from '../constants/categories';
 import Text from '../components/ui/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const MIN_INTERESTS = 3;
 
@@ -23,6 +24,7 @@ const RADII = [5, 10, 15, 20, 30, 50];
 
 export default function InterestsScreen({ navigation, route }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const isOnboarding = route?.params?.onboarding !== false;
 
   const [step,     setStep]     = useState(1);
@@ -74,7 +76,7 @@ export default function InterestsScreen({ navigation, route }) {
       if (isOnboarding) navigation.replace('MainApp');
       else navigation.goBack();
     } catch {
-      Alert.alert('Error', 'No se pudo guardar. Intentá de nuevo.');
+      Alert.alert(t('common.error'), t('onboarding.saveError'));
       setSaving(false);
     }
   };
@@ -88,18 +90,18 @@ export default function InterestsScreen({ navigation, route }) {
   };
 
   const stepTitles = [
-    '¿Qué te gusta?',
-    '¿Dónde estás?',
-    'Un último paso',
+    t('onboarding.tastes.title'),
+    t('onboarding.location.title'),
+    t('onboarding.permissions.title'),
   ];
   const stepSubtitles = [
-    'Elegí al menos 3 categorías para personalizar tu feed.',
-    'Elegí tu zona para ver eventos cerca de vos.',
-    'Estos permisos mejoran tu experiencia, pero son opcionales.',
+    t('onboarding.tastes.subtitle'),
+    t('onboarding.whereZone'),
+    t('onboarding.permsOptional'),
   ];
   const continueLabel = step === totalSteps
-    ? (saving ? 'Guardando…' : isOnboarding ? 'Listo, mostrá los eventos' : 'Guardar')
-    : 'Continuar';
+    ? (saving ? t('onboarding.saving') : isOnboarding ? t('onboarding.permissions.cta') : t('common.save'))
+    : t('onboarding.tastes.cta');
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]} edges={['top', 'bottom']}>
@@ -110,7 +112,7 @@ export default function InterestsScreen({ navigation, route }) {
           <Pressable
             onPress={() => step > 1 ? setStep(s => s - 1) : navigation.goBack()}
             style={styles.iconBtn}
-            accessibilityLabel="Volver"
+            accessibilityLabel={t('common.back')}
           >
             <Ionicons name="arrow-back" size={22} color={colors['text.primary']} />
           </Pressable>
@@ -120,7 +122,7 @@ export default function InterestsScreen({ navigation, route }) {
           {totalSteps > 1 && (
             <>
               <Text variant="caption" color="text.tertiary" align="center">
-                Paso {step} de {totalSteps}
+                {t('onboarding.stepOf', { step, total: totalSteps })}
               </Text>
               <View style={[styles.progTrack, { backgroundColor: colors['bg.surface'] }]}>
                 <View style={[styles.progFill, { width: `${(step / totalSteps) * 100}%`, backgroundColor: colors['action.primary'] }]} />
@@ -135,7 +137,7 @@ export default function InterestsScreen({ navigation, route }) {
             style={styles.iconBtn}
             accessibilityRole="link"
           >
-            <Text variant="caption" color="text.tertiary">Omitir</Text>
+            <Text variant="caption" color="text.tertiary">{t('onboarding.skip')}</Text>
           </Pressable>
         )}
       </View>
@@ -157,7 +159,7 @@ export default function InterestsScreen({ navigation, route }) {
         {step === 1 && (
           <>
             <Text variant="caption" color={step1Valid ? 'status.free' : 'nav.selected'} style={{ marginBottom: space[3] }}>
-              {selected.size} elegidas · mínimo {MIN_INTERESTS}
+              {t('onboarding.selectedCount', { count: selected.size, min: MIN_INTERESTS })}
             </Text>
             <View style={styles.grid}>
               {CATEGORIES.map(cat => {
@@ -194,7 +196,7 @@ export default function InterestsScreen({ navigation, route }) {
         {/* ── PASO 2: Zona + radio ─────────────────────────────── */}
         {step === 2 && (
           <>
-            <Text variant="overline" color="text.tertiary" style={{ marginBottom: space[3] }}>PROVINCIA</Text>
+            <Text variant="overline" color="text.tertiary" style={{ marginBottom: space[3] }}>{t('onboarding.province')}</Text>
             <View style={styles.chipGrid}>
               {PROVINCES.map(p => {
                 const active = province === p;
@@ -219,7 +221,7 @@ export default function InterestsScreen({ navigation, route }) {
             </View>
 
             <Text variant="overline" color="text.tertiary" style={{ marginTop: space[5], marginBottom: space[3] }}>
-              RADIO DE BÚSQUEDA · {radius_} km
+              {t('onboarding.radius', { km: radius_ })}
             </Text>
             <View style={styles.chipGrid}>
               {RADII.map(r => {
@@ -259,9 +261,9 @@ export default function InterestsScreen({ navigation, route }) {
                 <Ionicons name="notifications-outline" size={26} color={colors['action.primary']} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text variant="title">Notificaciones</Text>
+                <Text variant="title">{t('onboarding.permissions.notifications.label')}</Text>
                 <Text variant="caption" color="text.tertiary" style={{ marginTop: 3 }}>
-                  Para avisarte cuando hay algo nuevo que te puede interesar.
+                  {t('onboarding.permissions.notifications.desc')}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors['text.tertiary']} />
@@ -277,16 +279,16 @@ export default function InterestsScreen({ navigation, route }) {
                 <Ionicons name="location-outline" size={26} color={colors['nav.selected']} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text variant="title">Ubicación</Text>
+                <Text variant="title">{t('onboarding.permissions.location.label')}</Text>
                 <Text variant="caption" color="text.tertiary" style={{ marginTop: 3 }}>
-                  Para mostrarte eventos cerca de donde estás.
+                  {t('onboarding.permissions.location.desc')}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors['text.tertiary']} />
             </Pressable>
 
             <Text variant="caption" color="text.tertiary" align="center" style={{ marginTop: space[4] }}>
-              Podés cambiar estos permisos en cualquier momento desde Configuración.
+              {t('onboarding.changePermsLater')}
             </Text>
           </View>
         )}

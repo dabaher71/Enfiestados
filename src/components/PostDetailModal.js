@@ -15,22 +15,26 @@ import { getImages, toDate } from '../lib/format';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 // "hace 2 h" / "hace 5 meses" — nunca "157d"
 function timeAgo(date) {
   if (!date) return '';
   const d    = toDate(date);
   const diff = Math.floor((Date.now() - d) / 1000);
-  if (diff < 60)       return 'Ahora';
-  if (diff < 3600)     return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400)    return `hace ${Math.floor(diff / 3600)} h`;
-  if (diff < 2592000)  return `hace ${Math.floor(diff / 86400)} días`;
-  if (diff < 31536000) return `hace ${Math.floor(diff / 2592000)} meses`;
-  return `hace ${Math.floor(diff / 31536000)} años`;
+  const n = (k, count) => i18n.t(count === 1 ? `post.ago.${k}One` : `post.ago.${k}`, { count });
+  if (diff < 60)       return i18n.t('alerts.now');
+  if (diff < 3600)     return i18n.t('post.ago.minutes', { count: Math.floor(diff / 60) });
+  if (diff < 86400)    return i18n.t('post.ago.hours', { count: Math.floor(diff / 3600) });
+  if (diff < 2592000)  return n('days', Math.floor(diff / 86400));
+  if (diff < 31536000) return n('months', Math.floor(diff / 2592000));
+  return n('years', Math.floor(diff / 31536000));
 }
 
 function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComment, onDelete, onUserPress }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const [commentText,    setCommentText]    = useState('');
   const [showReport,     setShowReport]     = useState(false);
@@ -45,21 +49,21 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
 
   const handleDelete = useCallback(() => {
     setShowMenu(false);
-    Alert.alert('¿Eliminar publicación?', 'Esta acción no se puede deshacer.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: () => { onDelete?.(post.id); onClose(); } },
+    Alert.alert(t('post.deleteTitle'), t('post.deleteMsg'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => { onDelete?.(post.id); onClose(); } },
     ]);
   }, [post?.id, onDelete, onClose]);
 
   const handleComment = useCallback(() => {
     if (!commentText.trim()) return;
-    if (!requireAccount(navigation, 'Creá una cuenta para comentar.')) return;
+    if (!requireAccount(navigation, t('comments.needAccount'))) return;
     onComment?.(post.id, commentText.trim());
     setCommentText('');
   }, [navigation, commentText, post?.id, onComment]);
 
   const handleLike = useCallback(() => {
-    if (!requireAccount(navigation, 'Creá una cuenta para dar like.')) return;
+    if (!requireAccount(navigation, t('post.needAccountLike'))) return;
     onLike?.(post.id);
   }, [navigation, post?.id, onLike]);
   const handleUserPress = useCallback(() => { onClose(); onUserPress?.(post.userId); }, [post?.userId, onUserPress, onClose]);
@@ -85,7 +89,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
               aspectRatio={4 / 3}
               onPress={() => setShowImageViewer(true)}
               onIndexChange={setImgIndex}
-              labelPrefix="de la publicación"
+              labelPrefix={t('post.ofPost')}
             />
           )}
 
@@ -103,10 +107,10 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
 
               <View style={styles.headerActions}>
                 {/* Menú ··· — eliminar/reportar detrás del menú */}
-                <Pressable onPress={() => setShowMenu(v => !v)} style={styles.iconBtn} hitSlop={4} accessibilityLabel="Opciones">
+                <Pressable onPress={() => setShowMenu(v => !v)} style={styles.iconBtn} hitSlop={4} accessibilityLabel={t('event.options')}>
                   <Ionicons name="ellipsis-horizontal" size={20} color={colors['text.tertiary']} />
                 </Pressable>
-                <Pressable onPress={onClose} style={styles.iconBtn} hitSlop={4} accessibilityLabel="Cerrar">
+                <Pressable onPress={onClose} style={styles.iconBtn} hitSlop={4} accessibilityLabel={t('common.close')}>
                   <Ionicons name="close" size={22} color={colors['text.secondary']} />
                 </Pressable>
               </View>
@@ -116,12 +120,12 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
                   {isOwner ? (
                     <Pressable style={styles.menuItem} onPress={handleDelete}>
                       <Ionicons name="trash-outline" size={16} color={colors['status.urgent']} />
-                      <Text variant="body" style={{ color: colors['status.urgent'] }}>Eliminar</Text>
+                      <Text variant="body" style={{ color: colors['status.urgent'] }}>{t('common.delete')}</Text>
                     </Pressable>
                   ) : (
                     <Pressable style={styles.menuItem} onPress={() => { setShowMenu(false); setShowReport(true); }}>
                       <Ionicons name="flag-outline" size={16} color={colors['text.secondary']} />
-                      <Text variant="body">Reportar</Text>
+                      <Text variant="body">{t('common.report')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -133,11 +137,11 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
 
             {/* Stats — "me gusta", solo si > 0 */}
             <View style={[styles.actions, { borderTopColor: colors['border.subtle'], borderBottomColor: colors['border.subtle'] }]}>
-              <Pressable style={styles.actionBtn} onPress={handleLike} accessibilityRole="button" accessibilityLabel={isLiked ? 'Quitar like' : 'Dar like'}>
+              <Pressable style={styles.actionBtn} onPress={handleLike} accessibilityRole="button" accessibilityLabel={isLiked ? t('event.removeLike') : t('event.giveLike')}>
                 <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={22} color={isLiked ? colors['status.urgent'] : colors['text.secondary']} />
                 {likeCount > 0 && (
                   <Text variant="caption" style={{ color: isLiked ? colors['status.urgent'] : colors['text.secondary'], marginLeft: space[1] }}>
-                    {likeCount} {likeCount === 1 ? 'me gusta' : 'me gusta'}
+                    {t('event.likesCount', { count: likeCount })}
                   </Text>
                 )}
               </Pressable>
@@ -145,7 +149,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
                 <Ionicons name="chatbubble-outline" size={20} color={colors['text.secondary']} />
                 {commentCount > 0 && (
                   <Text variant="caption" color="text.secondary" style={{ marginLeft: space[1] }}>
-                    {commentCount} {commentCount === 1 ? 'comentario' : 'comentarios'}
+                    {t(commentCount === 1 ? 'post.commentOne' : 'post.commentMany', { count: commentCount })}
                   </Text>
                 )}
               </View>
@@ -155,7 +159,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
             <View style={styles.commentsSection}>
               {(post.comments ?? []).length === 0 ? (
                 <Text variant="caption" color="text.tertiary" align="center" style={{ paddingVertical: space[4] }}>
-                  Sé el primero en comentar
+                  {t('post.beFirst')}
                 </Text>
               ) : (
                 (post.comments ?? []).map((c, i) => (
@@ -179,7 +183,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
         <View style={[styles.inputRow, { backgroundColor: colors['bg.raised'], borderTopColor: colors['border.subtle'] }]}>
           <TextInput
             style={[styles.input, { backgroundColor: colors['bg.surface'], color: colors['text.primary'], borderColor: colors['border.strong'], fontFamily: 'PlusJakartaSans_400Regular' }]}
-            placeholder="Comentá…"
+            placeholder={t('post.commentPlaceholder')}
             placeholderTextColor={colors['text.tertiary']}
             value={commentText}
             onChangeText={setCommentText}
@@ -190,7 +194,7 @@ function PostDetailModal({ post, visible, onClose, currentUserId, onLike, onComm
             onPress={handleComment}
             disabled={!commentText.trim()}
             style={[styles.sendBtn, { backgroundColor: commentText.trim() ? colors['action.primary'] : colors['bg.surface'] }]}
-            accessibilityLabel="Enviar comentario"
+            accessibilityLabel={t('post.sendComment')}
           >
             <Ionicons name="send" size={18} color={commentText.trim() ? colors['text.onAction'] : colors['text.tertiary']} />
           </Pressable>

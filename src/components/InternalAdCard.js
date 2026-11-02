@@ -12,6 +12,7 @@ import Button from './ui/Button';
 import Text from './ui/Text';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const CTA_ICONS = {
   'Ver más': 'arrow-forward',
@@ -22,6 +23,7 @@ const CTA_ICONS = {
 
 function InternalAdCard({ ad, onEventPress }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (ad.id !== 'preview') recordImpression(ad.id);
@@ -51,7 +53,7 @@ function InternalAdCard({ ad, onEventPress }) {
         <View style={styles.sponsoredRow}>
           <Ionicons name="megaphone" size={13} color={colors['nav.selected']} />
           <Text variant="caption" style={{ color: colors['nav.selected'], fontFamily: 'PlusJakartaSans_600SemiBold' }}>
-            Publicidad
+            {t('ads.advertising')}
           </Text>
           <View style={[styles.dot, { backgroundColor: colors['text.tertiary'] }]} />
           <Text variant="caption" color="text.tertiary" numberOfLines={1} style={{ flex: 1 }}>
@@ -69,7 +71,7 @@ function InternalAdCard({ ad, onEventPress }) {
         <Button
           variant="primary"
           size="md"
-          label={ad.ctaLabel || 'Ver más'}
+          label={t(`ads.cta.${ad.ctaLabel || 'Ver más'}`, { defaultValue: ad.ctaLabel })}
           trailingIcon={<Ionicons name={CTA_ICONS[ad.ctaLabel] || 'arrow-forward'} size={16} color={colors['text.onAction']} />}
           onPress={handleCTA}
           style={styles.ctaButton}

@@ -6,7 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Dimensions, FlatList, KeyboardAvoidingView, Platform, Pressable,
+  Alert, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable,
   ScrollView, Share, StyleSheet, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,9 +29,11 @@ import { createNotification, NOTIFICATION_TYPES } from '../services/notification
 import { recordSignal } from '../services/signalService';
 import { safeOpenURL } from '../utils/security';
 import { formatDateLong, formatTimeShort, getImages } from '../lib/format';
+import { getCategoryName } from '../constants/categories';
 import { requireAccount } from '../lib/requireAccount';
 import { useTheme } from '../theme/ThemeProvider';
 import { elev, radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 // El hero medía 260px de alto a ancho completo — MediaCarousel trabaja con
 // aspectRatio, no con alto fijo, así que se deriva uno equivalente.
@@ -67,8 +69,36 @@ function DataMetaRow({ icon, tint, title, subtitle, actionLabel, onAction, last 
 
 export default function EventDetailScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { event } = route.params;
+
+  // Teclado y barra fija: la barra de acción (like / ¡Voy! / compartir) está
+  // en position absolute fuera del KeyboardAvoidingView. Con el teclado
+  // abierto subía con él y tapaba la caja de comentarios, así que mientras
+  // el teclado está visible se oculta, y al enfocar la caja se baja el
+  // scroll hasta ella para que se vea lo que se escribe.
+  const scrollRef = useRef(null);
+  const commentFocusedRef = useRef(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvt, () => {
+      setKeyboardOpen(true);
+      if (commentFocusedRef.current) {
+        // Después de que el KeyboardAvoidingView reacomoda el alto.
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+      }
+    });
+    const onHide = Keyboard.addListener(hideEvt, () => {
+      setKeyboardOpen(false);
+      commentFocusedRef.current = false;
+    });
+    return () => { onShow.remove(); onHide.remove(); };
+  }, []);
 
   const [likes,          setLikes]          = useState(event.likes || []);
   const [attendees,      setAttendees]      = useState(event.attendees || []);
@@ -147,7 +177,7 @@ export default function EventDetailScreen({ route, navigation }) {
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleLike = async () => {
-    if (!requireAccount(navigation, 'Creá una cuenta para dar like a este evento.')) return;
+    if (!requireAccount(navigation, t('event.needAccountLike'))) return;
     try {
       const newLikes = await toggleLike(event.id, userId);
       setLikes(newLikes);
@@ -165,7 +195,7 @@ export default function EventDetailScreen({ route, navigation }) {
   };
 
   const handleAttend = async () => {
-    if (!requireAccount(navigation, 'Creá una cuenta para confirmar tu asistencia.')) return;
+    if (!requireAccount(navigation, t('event.needAccountAttend'))) return;
     try {
       const newAttendees = await toggleAttendance(event.id, userId);
       setAttendees(newAttendees);
@@ -184,7 +214,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
   // Guardar/quitar de "Mis planes" — optimista, revierte con snackbar si falla
   const handleSave = async () => {
-    if (!requireAccount(navigation, 'Creá una cuenta para guardar este evento en Mis planes.')) return;
+    if (!requireAccount(navigation, t('event.needAccountSave'))) return;
     const wasSaved = isSaved;
     setSavedBy(prev => wasSaved ? prev.filter(id => id !== userId) : [...prev, userId]);
     try {
@@ -192,23 +222,23 @@ export default function EventDetailScreen({ route, navigation }) {
       setSavedBy(newSavedBy);
       showSnackbar(
         wasSaved
-          ? { message: 'Se quitó de Mis planes' }
-          : { message: 'Guardado en Mis planes', actionLabel: 'Ver', action: () => navigation.navigate('MainApp', { screen: 'MyPlans' }) }
+          ? { message: t('event.removedFromPlans') }
+          : { message: t('event.savedToPlans'), actionLabel: t('event.view'), action: () => navigation.navigate('MainApp', { screen: 'MyPlans' }) }
       );
     } catch {
       setSavedBy(prev => wasSaved ? [...prev, userId] : prev.filter(id => id !== userId));
-      showSnackbar({ message: 'No se pudo guardar. Intentá de nuevo.' });
+      showSnackbar({ message: t('event.saveError') });
     }
   };
 
   const handleDelete = () => Alert.alert(
-    '¿Eliminar evento?',
-    `Esta acción no se puede deshacer. Los ${attendees.length} asistentes recibirán una notificación.`,
+    t('event.confirmDelete.title'),
+    t('event.deleteMsgCount', { count: attendees.length }),
     [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: async () => {
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: async () => {
         try { await deleteEvent(event.id, userId); navigation.goBack(); }
-        catch { Alert.alert('Error', 'No se pudo eliminar'); }
+        catch { Alert.alert(t('common.error'), t('event.deleteError')); }
       }},
     ]
   );
@@ -242,19 +272,19 @@ export default function EventDetailScreen({ route, navigation }) {
   const copyLink = async () => {
     await Clipboard.setStringAsync(eventLink);
     setShowShare(false);
-    Alert.alert('', 'Link copiado');
+    Alert.alert('', t('event.linkCopied'));
   };
 
   const shareToChat = async (chat) => {
     try {
       const chatData = await getOrCreateChat(userId, chat.uid);
-      await sendMessage(chatData.id, userId, `Te comparto este evento: ${event.title}\n${event.date} - ${event.time}\n${eventLink}`);
+      await sendMessage(chatData.id, userId, t('event.shareMessage', { title: event.title, date: event.date, time: event.time, link: eventLink }));
       setShowShare(false);
     } catch {
       // Antes el catch se tragaba el error Y dejaba la hoja abierta: el
       // usuario no veía nada y volvía a tocar, sin saber si se había enviado.
       setShowShare(false);
-      Alert.alert('No se pudo compartir', 'Revisá tu conexión e intentá de nuevo.');
+      Alert.alert(t('event.shareError'), t('event.shareErrorMsg'));
     }
   };
 
@@ -262,9 +292,17 @@ export default function EventDetailScreen({ route, navigation }) {
     <View style={[styles.screen, { backgroundColor: colors['bg.base'] }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
+          // Justo lo que mide la barra fija + un respiro, para que la caja de
+          // comentarios quede pegada encima de la barra y no tapada por ella.
+          // Antes del primer onLayout se estima con el alto de la barra.
+          contentContainerStyle={{
+            paddingBottom: keyboardOpen
+              ? space[4]
+              : (actionBarHeight || 56 + space[3] + Math.max(space[4], insets.bottom)) + space[4],
+          }}
         >
 
           {/* ── HERO ─────────────────────────────────────────────────────── */}
@@ -274,7 +312,7 @@ export default function EventDetailScreen({ route, navigation }) {
               aspectRatio={HERO_ASPECT}
               onPress={() => images.length > 0 && setShowImgViewer(true)}
               onIndexChange={setHeroIndex}
-              labelPrefix={event.title ? `del evento ${event.title}` : ''}
+              labelPrefix={event.title ? t('event.ofEvent', { title: event.title }) : ''}
             />
             {/* Gradiente superior para que la barra de estado sea legible (§ 1.3) */}
             <View style={[styles.heroTopGradient, { height: insets.top + 60 }]} pointerEvents="none" />
@@ -284,7 +322,7 @@ export default function EventDetailScreen({ route, navigation }) {
               style={[styles.heroBtn, { top: space[3] + insets.top, left: space[4] }]}
               onPress={() => navigation.goBack()}
               hitSlop={2}
-              accessibilityLabel="Volver"
+              accessibilityLabel={t('common.back')}
             >
               <Ionicons name="arrow-back" size={22} color="#fff" />
             </Pressable>
@@ -294,7 +332,7 @@ export default function EventDetailScreen({ route, navigation }) {
               style={[styles.heroBtn, { top: space[3] + insets.top, right: space[4] + 40 + space[2] }]}
               onPress={handleSave}
               hitSlop={2}
-              accessibilityLabel={isSaved ? 'Quitar de Mis planes' : 'Guardar en Mis planes'}
+              accessibilityLabel={isSaved ? t('event.removeFromPlans') : t('event.saveToPlans')}
               accessibilityRole="button"
             >
               <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={20} color={isSaved ? colors['action.primary'] : '#fff'} />
@@ -305,7 +343,7 @@ export default function EventDetailScreen({ route, navigation }) {
               style={[styles.heroBtn, { top: space[3] + insets.top, right: space[4] }]}
               onPress={() => setShowOptions(v => !v)}
               hitSlop={2}
-              accessibilityLabel="Opciones"
+              accessibilityLabel={t('event.options')}
             >
               <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
             </Pressable>
@@ -317,18 +355,18 @@ export default function EventDetailScreen({ route, navigation }) {
                   <>
                     <Pressable style={styles.optionItem} onPress={handleEdit}>
                       <Ionicons name="create-outline" size={18} color={colors['text.primary']} />
-                      <Text variant="body">Editar evento</Text>
+                      <Text variant="body">{t('event.editEvent')}</Text>
                     </Pressable>
                     <View style={[styles.optionDivider, { backgroundColor: colors['border.subtle'] }]} />
                     <Pressable style={styles.optionItem} onPress={handleDelete}>
                       <Ionicons name="trash-outline" size={18} color={colors['status.urgent']} />
-                      <Text variant="body" style={{ color: colors['status.urgent'] }}>Eliminar</Text>
+                      <Text variant="body" style={{ color: colors['status.urgent'] }}>{t('common.delete')}</Text>
                     </Pressable>
                   </>
                 ) : (
                   <Pressable style={styles.optionItem} onPress={() => { setShowOptions(false); setShowReport(true); }}>
                     <Ionicons name="flag-outline" size={18} color={colors['status.urgent']} />
-                    <Text variant="body" style={{ color: colors['status.urgent'] }}>Reportar</Text>
+                    <Text variant="body" style={{ color: colors['status.urgent'] }}>{t('common.report')}</Text>
                   </Pressable>
                 )}
               </View>
@@ -338,7 +376,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <View style={[styles.typeBadge, { backgroundColor: event.isVirtual ? colors['status.info'] : colors['status.free'] }]}>
               <Ionicons name={event.isVirtual ? 'videocam' : 'location'} size={13} color="#fff" />
               <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold', color: '#fff' }}>
-                {event.isVirtual ? 'Virtual' : 'Presencial'}
+                {event.isVirtual ? t('createEvent.virtual') : t('createEvent.inPerson')}
               </Text>
             </View>
           </View>
@@ -346,9 +384,9 @@ export default function EventDetailScreen({ route, navigation }) {
           {/* ── IDENTIDAD ─────────────────────────────────────────────────── */}
           <View style={[styles.section, { paddingTop: 18 }]}>
             <View style={styles.badges}>
-              {event.category && <StatusBadge label={event.category.toUpperCase()} variant="neutral" />}
+              {event.category && <StatusBadge label={getCategoryName(event.category).toUpperCase()} variant="neutral" />}
               {event.isFree === true || event.price === 0
-                ? <StatusBadge label="Gratis" variant="free" />
+                ? <StatusBadge label={t('common.free')} variant="free" />
                 : typeof event.price === 'number' && event.price > 0
                   ? <StatusBadge label={`₡${event.price.toLocaleString('es-CR')}`} variant="neutral" />
                   : null}
@@ -366,7 +404,7 @@ export default function EventDetailScreen({ route, navigation }) {
             >
               <Avatar uri={organizerAvatar} name={organizerName} size={40} />
               <View style={{ flex: 1, marginLeft: space[3] }}>
-                <Text variant="caption" color="text.tertiary">Organizado por</Text>
+                <Text variant="caption" color="text.tertiary">{t('event.organizedBy')}</Text>
                 <Text variant="subtitle">{organizerName || event.organizerName}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors['text.tertiary']} />
@@ -390,8 +428,8 @@ export default function EventDetailScreen({ route, navigation }) {
               {hasLocation || event.location?.name ? (
                 <DataMetaRow
                   icon="location-outline" tint="violet"
-                  title={event.location?.name || 'Ubicación confirmada'}
-                  actionLabel={hasLocation ? 'Mapa' : undefined}
+                  title={event.location?.name || t('event.locationConfirmed')}
+                  actionLabel={hasLocation ? t('event.map') : undefined}
                   onAction={hasLocation ? openMaps : undefined}
                   colors={colors}
                 />
@@ -401,9 +439,9 @@ export default function EventDetailScreen({ route, navigation }) {
               {event.isVirtual && event.virtualLink ? (
                 <DataMetaRow
                   icon="link-outline" tint="green"
-                  title="Enlace de la transmisión"
+                  title={t('event.streamLink')}
                   subtitle={event.virtualLink}
-                  actionLabel="Abrir"
+                  actionLabel={t('event.open')}
                   onAction={() => safeOpenURL(event.virtualLink)}
                   last
                   colors={colors}
@@ -434,7 +472,7 @@ export default function EventDetailScreen({ route, navigation }) {
                   accessibilityRole="button"
                 >
                   <Ionicons name="navigate-outline" size={16} color={colors['nav.selected']} />
-                  <Text variant="label" color="nav.selected">Cómo llegar</Text>
+                  <Text variant="label" color="nav.selected">{t('event.directions')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -455,7 +493,7 @@ export default function EventDetailScreen({ route, navigation }) {
               </Text>
               {descNeedsMore && !descExpanded && (
                 <Pressable onPress={() => setDescExpanded(true)} style={{ marginTop: space[2] }}>
-                  <Text variant="label" color="link">Ver más</Text>
+                  <Text variant="label" color="link">{t('event.seeMore')}</Text>
                 </Pressable>
               )}
             </View>
@@ -469,7 +507,7 @@ export default function EventDetailScreen({ route, navigation }) {
                   {/* Corazón relleno solo si YO di like; outline si no (§ 5.4) */}
                   <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={18} color={colors['text.secondary']} />
                   <Text variant="caption" color="text.secondary">
-                    {likes.length} {likes.length === 1 ? 'me gusta' : 'me gusta'}
+                    {t('event.likesCount', { count: likes.length })}
                   </Text>
                 </View>
               )}
@@ -477,7 +515,7 @@ export default function EventDetailScreen({ route, navigation }) {
                 <View style={styles.statItem}>
                   <Ionicons name="people-outline" size={18} color={colors['text.secondary']} />
                   <Text variant="caption" color="text.secondary">
-                    {attendees.length} {attendees.length === 1 ? 'persona va' : 'personas van'}
+                    {t(attendees.length === 1 ? 'event.goingOne' : 'event.goingMany', { count: attendees.length })}
                   </Text>
                 </View>
               )}
@@ -490,15 +528,15 @@ export default function EventDetailScreen({ route, navigation }) {
               <View style={[styles.attendingBanner, { backgroundColor: colors['status.free.bg'], borderColor: colors['status.free'] }]}>
                 <Ionicons name="checkmark-circle" size={20} color={colors['status.free']} />
                 <View style={{ flex: 1 }}>
-                  <Text variant="subtitle" style={{ color: colors['status.free'] }}>Vas a ir</Text>
+                  <Text variant="subtitle" style={{ color: colors['status.free'] }}>{t('event.attending')}</Text>
                   {event.date && (
                     <Text variant="caption" style={{ color: colors['status.free'], opacity: 0.8 }}>
-                      Te recordamos el día anterior
+                      {t('event.remindDayBefore')}
                     </Text>
                   )}
                 </View>
                 <Pressable onPress={handleAttend} accessibilityRole="button">
-                  <Text variant="label" style={{ color: colors['status.free'] }}>Cancelar</Text>
+                  <Text variant="label" style={{ color: colors['status.free'] }}>{t('common.cancel')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -512,13 +550,21 @@ export default function EventDetailScreen({ route, navigation }) {
               organizerId={event.organizerId}
               event={event}
               onUserPress={uid => navigation.navigate('UserProfile', { userId: uid })}
+              onInputFocus={() => {
+                commentFocusedRef.current = true;
+                // Si el teclado ya estaba abierto no llega otro keyboardDidShow.
+                if (keyboardOpen) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+              }}
             />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
       {/* ── BARRA DE ACCIÓN FIJA ─────────────────────────────────────────── */}
-      <View style={[
+      {!keyboardOpen && (
+      <View
+        onLayout={e => setActionBarHeight(e.nativeEvent.layout.height)}
+        style={[
         styles.actionBar,
         {
           backgroundColor: colors['bg.base'],
@@ -531,7 +577,7 @@ export default function EventDetailScreen({ route, navigation }) {
         <Pressable
           onPress={handleLike}
           style={[styles.iconAction, { backgroundColor: isLiked ? `${colors['status.urgent']}22` : colors['bg.surface'] }]}
-          accessibilityLabel={isLiked ? 'Quitar like' : 'Dar like'}
+          accessibilityLabel={isLiked ? t('event.removeLike') : t('event.giveLike')}
         >
           <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={22} color={isLiked ? colors['status.urgent'] : colors['text.primary']} />
         </Pressable>
@@ -546,7 +592,7 @@ export default function EventDetailScreen({ route, navigation }) {
               : { backgroundColor: colors['action.primary'] },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={isAttending ? 'Cancelar asistencia' : 'Confirmar asistencia'}
+          accessibilityLabel={isAttending ? t('event.cancelAttendance') : t('event.confirmAttendance')}
         >
           <Ionicons
             name={isAttending ? 'checkmark-circle-outline' : 'calendar-outline'}
@@ -558,7 +604,7 @@ export default function EventDetailScreen({ route, navigation }) {
             fontSize: 16,
             color: isAttending ? colors['text.primary'] : colors['text.onAction'],
           }}>
-            {isAttending ? 'Vas a ir' : '¡Voy!'}
+            {isAttending ? t('event.attending') : t('event.attend')}
           </Text>
         </Pressable>
 
@@ -566,25 +612,26 @@ export default function EventDetailScreen({ route, navigation }) {
         <Pressable
           onPress={handleShare}
           style={[styles.iconAction, { backgroundColor: colors['bg.surface'] }]}
-          accessibilityLabel="Compartir"
+          accessibilityLabel={t('common.share')}
         >
           <Ionicons name="share-outline" size={22} color={colors['text.primary']} />
         </Pressable>
       </View>
+      )}
 
       {/* ── SHEET COMPARTIR ──────────────────────────────────────────────── */}
-      <Sheet visible={showShare} onClose={() => setShowShare(false)} height="half" title="Compartir">
+      <Sheet visible={showShare} onClose={() => setShowShare(false)} height="half" title={t('common.share')}>
         <View style={{ paddingHorizontal: space[5], paddingTop: space[3] }}>
           <View style={styles.shareRow}>
             {/* Compartir en — cuadrado 52px radius.md */}
-            <Pressable onPress={shareExternal} style={[styles.shareBtn, { backgroundColor: colors['status.free.bg'] }]} accessibilityLabel="Compartir en...">
+            <Pressable onPress={shareExternal} style={[styles.shareBtn, { backgroundColor: colors['status.free.bg'] }]} accessibilityLabel={t('event.shareIn')}>
               <Ionicons name="share-social-outline" size={24} color={colors['status.free']} />
-              <Text variant="caption" color="text.secondary" align="center">Compartir en…</Text>
+              <Text variant="caption" color="text.secondary" align="center">{t('event.shareIn')}</Text>
             </Pressable>
             {/* Copiar enlace */}
-            <Pressable onPress={copyLink} style={[styles.shareBtn, { backgroundColor: colors['bg.surface'] }]} accessibilityLabel="Copiar enlace">
+            <Pressable onPress={copyLink} style={[styles.shareBtn, { backgroundColor: colors['bg.surface'] }]} accessibilityLabel={t('event.copyLink')}>
               <Ionicons name="link-outline" size={24} color={colors['text.primary']} />
-              <Text variant="caption" color="text.secondary" align="center">Copiar enlace</Text>
+              <Text variant="caption" color="text.secondary" align="center">{t('event.copyLink')}</Text>
             </Pressable>
           </View>
 
@@ -592,7 +639,7 @@ export default function EventDetailScreen({ route, navigation }) {
           {chats.length > 0 && (
             <>
               <Text variant="caption" color="text.tertiary" style={{ marginTop: space[4], marginBottom: space[3] }}>
-                Enviar a un amigo
+                {t('event.sendToFriend')}
               </Text>
               <FlatList
                 data={chats}

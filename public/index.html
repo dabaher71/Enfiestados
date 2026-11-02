@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Enfiestados — Los eventos empiezan en tu teléfono</title>
+<title>Enfiestados — Los eventos empiezan en tu celular</title>
 <meta name="description" content="Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar. Descubrí, guardá y coordiná tus planes con amigos.">
 <meta name="theme-color" content="#FBFAF7">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Enfiestados — Los eventos empiezan en tu teléfono">
+<meta property="og:title" content="Enfiestados — Los eventos empiezan en tu celular">
 <meta property="og:description" content="Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar.">
 <meta property="og:image" content="https://enfiestados.net/assets/logo.png">
 <meta property="og:url" content="https://enfiestados.net/">
@@ -140,6 +140,31 @@ h1,h2,h3{font-family:var(--display);margin:0;}
 .descargar p{margin:0;font-size:clamp(17px,2.2vw,19px);line-height:1.55;color:#3D3826;max-width:480px;text-wrap:pretty;}
 .descargar .tiendas{justify-content:center;}
 
+/* ── Acceso anticipado ──────────────────────────────────────────────────── */
+/* Formulario sin JavaScript (la CSP tiene script-src 'none'): POST normal a
+   /api/acceso-anticipado, que Hosting reescribe a la Cloud Function
+   earlyAccessRequest. La validación de acá (required, type, minlength) es
+   para el usuario; la que manda es la de la función. */
+.acceso{padding-top:96px;padding-bottom:24px;}
+.acceso .wrap{max-width:860px;}
+.acceso-card{text-align:left;background:#fff;border:1px solid var(--borde);border-radius:32px;padding:48px;display:flex;flex-direction:column;gap:28px;}
+.acceso-card h2{font-weight:800;font-size:clamp(26px,3.4vw,38px);letter-spacing:-0.025em;line-height:1.1;}
+.acceso-card .intro{margin:10px 0 0;font-size:clamp(16px,2.1vw,18px);line-height:1.6;color:var(--tinta-2);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 20px;}
+.campo{display:flex;flex-direction:column;gap:8px;}
+.campo.ancho{grid-column:1 / -1;}
+.campo label{font-family:var(--display);font-weight:700;font-size:15px;}
+.campo input,.campo textarea{font:inherit;font-size:16px;color:var(--tinta);background:var(--crema);border:1.5px solid var(--borde);border-radius:14px;padding:14px 16px;width:100%;}
+.campo textarea{min-height:130px;resize:vertical;line-height:1.5;}
+.campo input:focus,.campo textarea:focus{outline:none;border-color:var(--tinta);background:#fff;}
+.campo input::placeholder,.campo textarea::placeholder{color:var(--tinta-3);}
+.trampa{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
+.acceso-pie{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;}
+.acceso-pie small{font-size:13.5px;color:var(--tinta-3);max-width:440px;line-height:1.5;}
+.acceso-pie small a{text-decoration:underline;color:var(--tinta-2);}
+.btn-enviar{border:0;cursor:pointer;font:inherit;font-family:var(--display);font-weight:700;font-size:17px;padding:16px 32px;}
+.btn-enviar:hover{background:#F2B738;}
+
 /* ── Pie ────────────────────────────────────────────────────────────────── */
 .pie{background:var(--crema);padding-top:48px;padding-bottom:32px;}
 .pie .wrap{display:flex;flex-direction:column;gap:28px;}
@@ -177,6 +202,9 @@ h1,h2,h3{font-family:var(--display);margin:0;}
   .descargar{padding-top:64px;padding-bottom:64px;}
   .descargar img.logo{width:84px;height:84px;}
   .pie-cols{gap:32px;width:100%;}
+  .acceso{padding-top:64px;}
+  .acceso-card{padding:32px 24px;border-radius:24px;}
+  .form-grid{grid-template-columns:1fr;}
   .pie-col{flex:1 1 140px;}
 }
 @media (max-width:420px){
@@ -187,6 +215,7 @@ h1,h2,h3{font-family:var(--display);margin:0;}
   .btn-tienda{flex:1 1 100%;justify-content:center;}
   .org-card{padding:28px 20px;}
   .btn-org{width:100%;}
+  .btn-enviar{width:100%;}
 }
 </style>
 </head>
@@ -209,7 +238,7 @@ h1,h2,h3{font-family:var(--display);margin:0;}
 <section class="wrap hero">
   <div class="hero-texto">
     <div class="insignia"><i></i><span>Disponible noviembre 2026</span></div>
-    <h1>Los eventos empiezan en tu teléfono</h1>
+    <h1>Los eventos empiezan en tu celular</h1>
     <p>Todos los conciertos, fiestas, ferias y eventos de Costa Rica en un solo lugar. Descubrí, guardá y coordiná tus planes con amigos.</p>
     <div class="tiendas">
       <a class="btn-tienda" href="#descargar" aria-label="Próximamente en App Store">
@@ -327,7 +356,7 @@ h1,h2,h3{font-family:var(--display);margin:0;}
         <h2>¿Organizás eventos?</h2>
         <p>Publicá tus eventos gratis y llegá a miles de personas en todo Costa Rica. Vendé tus entradas desde la app.</p>
       </div>
-      <a class="btn-amarillo btn-org" href="#descargar">
+      <a class="btn-amarillo btn-org" href="#acceso">
         <span>Publicar mi evento</span>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F1C2C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
       </a>
@@ -350,6 +379,46 @@ h1,h2,h3{font-family:var(--display);margin:0;}
         <span class="t"><small>Próximamente en</small><strong>Google Play</strong></span>
       </a>
     </div>
+  </div>
+</section>
+
+<section id="acceso" class="acceso">
+  <div class="wrap">
+    <form class="acceso-card" method="post" action="/api/acceso-anticipado">
+      <div>
+        <h2>¿Querés solicitar el acceso anticipado?</h2>
+        <p class="intro">Dejá acá tus datos y te escribimos para que seás de los primeros en usar Enfiestados.</p>
+      </div>
+
+      <div class="form-grid">
+        <div class="campo ancho">
+          <label for="acc-nombre">Empresa o persona</label>
+          <input id="acc-nombre" name="name" type="text" required minlength="2" maxlength="120" autocomplete="organization" placeholder="Nombre de tu empresa o tu nombre">
+        </div>
+        <div class="campo">
+          <label for="acc-correo">Correo</label>
+          <input id="acc-correo" name="email" type="email" required maxlength="160" autocomplete="email" placeholder="tu@correo.com">
+        </div>
+        <div class="campo">
+          <label for="acc-tel">Teléfono</label>
+          <input id="acc-tel" name="phone" type="tel" required minlength="8" maxlength="30" pattern="[0-9 +\(\)\-]{8,30}" autocomplete="tel" placeholder="8888 8888">
+        </div>
+        <div class="campo ancho">
+          <label for="acc-desc">Descripción de la solicitud</label>
+          <textarea id="acc-desc" name="description" required minlength="10" maxlength="2000" placeholder="Contanos quién sos y para qué querés usar Enfiestados: organizar eventos, vender entradas, anunciarte…"></textarea>
+        </div>
+        <!-- Trampa para bots: oculto para personas y lectores de pantalla. -->
+        <div class="trampa" aria-hidden="true">
+          <label for="acc-web">No llenar</label>
+          <input id="acc-web" name="website" type="text" tabindex="-1" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="acceso-pie">
+        <small>Usamos estos datos solo para responder tu solicitud. Ver la <a href="./privacidad">Política de Privacidad</a>.</small>
+        <button class="btn-amarillo btn-enviar" type="submit">Enviar solicitud</button>
+      </div>
+    </form>
   </div>
 </section>
 
@@ -376,6 +445,10 @@ h1,h2,h3{font-family:var(--display);margin:0;}
         <div class="pie-col">
           <b>Contacto</b>
           <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
+        </div>
+        <div class="pie-col">
+          <b>Cuenta</b>
+          <a href="./cuenta">Eliminar mi cuenta</a>
         </div>
       </div>
     </div>

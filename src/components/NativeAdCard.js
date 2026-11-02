@@ -4,24 +4,28 @@ import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads'
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import Text from './ui/Text';
+import { useTranslation } from 'react-i18next';
 
-const AD_UNIT_ID = Platform.select({
-  android: TestIds.BANNER,
-  ios: TestIds.BANNER,
+// En desarrollo siempre los IDs de prueba: AdMob suspende cuentas que
+// generan impresiones o clics propios con anuncios reales.
+const AD_UNIT_ID = __DEV__ ? TestIds.BANNER : Platform.select({
+  android: 'ca-app-pub-5363568499936245/4664357360',
+  ios: 'ca-app-pub-5363568499936245/9947002073',
 });
 
 // Regla: un slot vacío no ocupa espacio (FIX_ROUND_1 § 1.2).
 // Devuelve null hasta que el anuncio cargue o falle definitivamente.
 function NativeAdCard() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [loaded,  setLoaded]  = useState(false);
   const [failed,  setFailed]  = useState(false);
 
   const handleLoad  = useCallback(() => setLoaded(true),  []);
   const handleError = useCallback(() => setFailed(true),  []);
 
-  // No cargó y falló → sin espacio
-  if (failed) return null;
+  // No cargó y falló, o no hay bloque para esta plataforma → sin espacio
+  if (failed || !AD_UNIT_ID) return null;
 
   return (
     <View style={[
@@ -30,7 +34,7 @@ function NativeAdCard() {
       !loaded && styles.hidden,   // oculto hasta que el SDK confirme carga
     ]}>
       <View style={styles.header}>
-        <Text variant="caption" color="text.tertiary">Publicidad</Text>
+        <Text variant="caption" color="text.tertiary">{t('ads.advertising')}</Text>
       </View>
       <BannerAd
         unitId={AD_UNIT_ID}

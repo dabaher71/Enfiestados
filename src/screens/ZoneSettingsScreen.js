@@ -15,6 +15,7 @@ import {
 } from '../lib/zonePreference';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 // San José como punto de partida si no hay zona guardada ni permiso de GPS.
 const SAN_JOSE = { lat: 9.9281, lng: -84.0907 };
@@ -32,6 +33,7 @@ function regionFor(center, radiusKm) {
 // que se recorta (ver PriceMarker en SearchScreen).
 export default function ZoneSettingsScreen({ navigation }) {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const mapStyle = useMemo(() => buildMapStyle(colors, isDark), [colors, isDark]);
   const { zone, loaded } = useZonePreference();
 
@@ -63,7 +65,7 @@ export default function ZoneSettingsScreen({ navigation }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Sin permiso de ubicación', 'Podés mover el mapa a mano para poner el pin donde quieras.');
+        Alert.alert(t('zone.noPermission'), t('zone.noPermissionMsg'));
         return;
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -71,7 +73,7 @@ export default function ZoneSettingsScreen({ navigation }) {
       setCenter(next);
       mapRef.current?.animateToRegion(regionFor(next, radiusKm), 400);
     } catch {
-      Alert.alert('Error', 'No se pudo obtener tu ubicación. Intentá de nuevo.');
+      Alert.alert(t('common.error'), t('zone.locationError'));
     } finally {
       setLocating(false);
     }
@@ -93,10 +95,10 @@ export default function ZoneSettingsScreen({ navigation }) {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors['bg.base'] }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2">Zona y distancia</Text>
+        <Text variant="h2">{t('settings.zone')}</Text>
       </View>
 
       <View style={styles.mapWrap}>
@@ -133,7 +135,7 @@ export default function ZoneSettingsScreen({ navigation }) {
           disabled={locating}
           style={[styles.locateBtn, { backgroundColor: colors['bg.raised'] }]}
           accessibilityRole="button"
-          accessibilityLabel="Usar mi ubicación"
+          accessibilityLabel={t('zone.useMyLocation')}
         >
           <Ionicons name={locating ? 'hourglass-outline' : 'locate-outline'} size={22} color={colors['nav.selected']} />
         </Pressable>
@@ -141,19 +143,19 @@ export default function ZoneSettingsScreen({ navigation }) {
 
       <View style={[styles.panel, { backgroundColor: colors['bg.raised'] }]}>
         <Text variant="body" color="text.secondary">
-          Mové el mapa para poner el pin donde querés buscar. En el Inicio vas a ver solo los eventos dentro del círculo.
+          {t('zone.help')}
         </Text>
 
-        <Text variant="label" style={styles.radiusLabel}>Distancia</Text>
+        <Text variant="label" style={styles.radiusLabel}>{t('zone.distance')}</Text>
         <View style={styles.chips}>
           {RADIUS_OPTIONS_KM.map(km => (
             <Chip key={km} label={`${km} km`} selected={radiusKm === km} onPress={() => changeRadius(km)} />
           ))}
         </View>
 
-        <Button variant="primary" size="lg" label="Guardar zona" onPress={save} loading={saving} fullWidth style={styles.saveBtn} />
+        <Button variant="primary" size="lg" label={t('zone.save')} onPress={save} loading={saving} fullWidth style={styles.saveBtn} />
         {zone && (
-          <Button variant="ghost" size="sm" label="Ver eventos de todo el país" onPress={clear} fullWidth />
+          <Button variant="ghost" size="sm" label={t('zone.wholeCountry')} onPress={clear} fullWidth />
         )}
       </View>
     </SafeAreaView>

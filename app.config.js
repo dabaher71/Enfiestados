@@ -25,7 +25,7 @@ module.exports = {
   expo: {
     name: 'Enfiestados',
     slug: 'enfiestados-app',
-    version: '1.0.1',
+    version: '1.0.2',
     orientation: 'portrait',
     icon: './assets/images/logo.png',
     userInterfaceStyle: 'dark',
@@ -66,7 +66,7 @@ module.exports = {
         backgroundColor: '#17131F',
       },
       package: 'com.enfiestados.app',
-      versionCode: 2,
+      versionCode: 3,
       // Requerido por @react-native-firebase/app (Crashlytics) — antes no
       // estaba referenciado acá, así que nunca se copiaba al proyecto nativo
       // ni se aplicaba el Google Services Gradle plugin.
@@ -82,10 +82,19 @@ module.exports = {
       // la ficha de Play y es motivo de preguntas en la revisión.
       permissions: [
         'android.permission.CAMERA',
-        'android.permission.READ_EXTERNAL_STORAGE',
-        'android.permission.WRITE_EXTERNAL_STORAGE',
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.ACCESS_COARSE_LOCATION',
+      ],
+      // Permisos que agregan librerías y la app no usa. Play los revisa:
+      // - RECORD_AUDIO: lo declara expo-image-picker/expo-av para video.
+      // - SYSTEM_ALERT_WINDOW: lo mete React Native para el menú de dev.
+      // - READ/WRITE_EXTERNAL_STORAGE: el selector de fotos de Android no
+      //   los necesita, y en Android 13+ ya no existen.
+      blockedPermissions: [
+        'android.permission.RECORD_AUDIO',
+        'android.permission.SYSTEM_ALERT_WINDOW',
+        'android.permission.READ_EXTERNAL_STORAGE',
+        'android.permission.WRITE_EXTERNAL_STORAGE',
       ],
     },
     updates: {
@@ -102,7 +111,7 @@ module.exports = {
         'react-native-google-mobile-ads',
         {
           androidAppId: 'ca-app-pub-5363568499936245~8795174061',
-          iosAppId: 'ca-app-pub-5363568499936245~8795174061',
+          iosAppId: 'ca-app-pub-5363568499936245~1490374662',
         },
       ],
       // Las cuentas gratuitas de Apple (Personal Team) no pueden firmar la
@@ -145,6 +154,8 @@ module.exports = {
         },
       ],
       './plugins/withPodfileStaticFrameworkFix',
+      // iOS 27 no abre apps sin ciclo de vida UIScene (ver el plugin).
+      './plugins/withUIScene',
       // Último en la lista a propósito: borra el entitlement de push que
       // agrega expo-notifications, así que tiene que correr después de él.
       './plugins/withOptionalPushEntitlement',

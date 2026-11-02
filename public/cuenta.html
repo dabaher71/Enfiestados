@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eliminar mi cuenta — Enfiestados</title>
+<meta name="description" content="Cómo eliminar tu cuenta de Enfiestados y todos tus datos.">
+<meta name="theme-color" content="#FBFAF7">
+<link rel="icon" href="./assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Misma estética que index.html (crema, tinta, amarillo; Plus Jakarta Sans
+   para títulos y DM Sans para el texto). Si cambia la paleta allá, cambiarla
+   acá también. */
+:root{
+  --tinta:#1F1C2C;
+  --tinta-2:#5E5A70;
+  --tinta-3:#6E6A7E;
+  --crema:#FBFAF7;
+  --crema-2:#F3EFEA;
+  --borde:#EDE8E1;
+  --amarillo:#FDC74A;
+  --oro:#8A6408;
+  --display:'Plus Jakarta Sans',sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--crema);}
+body{font-family:'DM Sans',sans-serif;color:var(--tinta);line-height:1.6;-webkit-font-smoothing:antialiased;}
+a{color:var(--tinta);}
+a:hover{color:#B8860B;}
+h1,h2,h3{font-family:var(--display);margin:0;}
+:focus-visible{outline:2px solid var(--tinta);outline-offset:3px;border-radius:6px;}
+
+.wrap{max-width:1240px;margin:0 auto;padding-left:32px;padding-right:32px;}
+
+/* ── Encabezado (igual al de la página principal) ───────────────────────── */
+.header{position:sticky;top:0;z-index:20;background:rgba(251,250,247,0.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--borde);}
+.header .wrap{padding-top:14px;padding-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.marca{display:flex;align-items:center;gap:12px;flex:0 0 auto;text-decoration:none;}
+.marca img{width:40px;height:40px;border-radius:10px;display:block;}
+.marca span{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-0.02em;}
+.btn-amarillo{background:var(--amarillo);color:var(--tinta);border-radius:999px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;}
+.btn-amarillo:hover{background:#FFD466;color:var(--tinta);}
+.btn-nav{padding:10px 22px;white-space:nowrap;}
+
+/* ── Contenido ──────────────────────────────────────────────────────────── */
+.contenido{max-width:880px;padding-top:72px;padding-bottom:96px;}
+.eyebrow{font-family:var(--display);font-size:14px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:var(--oro);}
+.titulo{display:flex;flex-direction:column;gap:16px;align-items:flex-start;}
+.titulo h1{font-weight:800;font-size:clamp(34px,6vw,56px);line-height:1.05;letter-spacing:-0.035em;text-wrap:balance;}
+.titulo p{margin:0;font-size:clamp(17px,2.2vw,20px);line-height:1.55;color:var(--tinta-2);max-width:600px;text-wrap:pretty;}
+
+section{margin-top:64px;}
+section h2{font-weight:800;font-size:clamp(24px,3.2vw,32px);letter-spacing:-0.025em;line-height:1.15;margin-bottom:14px;}
+section p{margin:0 0 14px;font-size:17px;color:var(--tinta-2);max-width:68ch;text-wrap:pretty;}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px;}
+.card{background:#fff;border:1px solid var(--borde);border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:10px;}
+.card h3{font-weight:800;font-size:19px;letter-spacing:-0.015em;}
+.card p{font-size:15.5px;margin:0;}
+
+
+.tabla{background:#fff;border:1px solid var(--borde);border-radius:24px;overflow:hidden;margin-top:20px;}
+table{width:100%;border-collapse:collapse;font-size:16px;}
+th,td{text-align:left;padding:16px 24px;border-bottom:1px solid var(--borde);vertical-align:top;}
+tr:last-child th,tr:last-child td{border-bottom:0;}
+th{font-family:var(--display);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--tinta-3);font-weight:800;width:36%;}
+td{overflow-wrap:anywhere;}
+
+/* ── Pie (igual al de la página principal) ──────────────────────────────── */
+.pie{background:var(--crema);border-top:1px solid var(--borde);padding-top:48px;padding-bottom:32px;}
+.pie .wrap{display:flex;flex-direction:column;gap:28px;}
+.pie-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:32px;}
+.pie-marca{display:flex;flex-direction:column;gap:8px;}
+.pie-marca .marca img{width:32px;height:32px;border-radius:8px;}
+.pie-marca .marca span{font-size:18px;}
+.pie-marca > span{font-size:14px;color:var(--tinta-3);}
+.pie-cols{display:flex;flex-wrap:wrap;gap:56px;}
+.pie-col{display:flex;flex-direction:column;gap:8px;font-size:14px;}
+.pie-col b{font-weight:600;color:var(--tinta);}
+.pie-col a{color:var(--tinta-3);text-decoration:none;}
+.pie-col a:hover{color:var(--tinta);}
+.linea{height:1px;background:var(--borde);}
+.copy{font-size:13px;color:var(--tinta-3);}
+
+@media (max-width:720px){
+  .wrap{padding-left:20px;padding-right:20px;}
+  .marca span{font-size:19px;}
+  .marca img{width:34px;height:34px;}
+  .contenido{padding-top:40px;padding-bottom:64px;}
+  section{margin-top:48px;}
+  .two{grid-template-columns:1fr;}
+  .card{padding:24px 22px;border-radius:20px;}
+  /* La tabla pasa a etiqueta arriba, dato abajo: dos columnas no entran. */
+  th,td{display:block;width:100%;padding:0 20px;border-bottom:0;}
+  th{padding-top:16px;}
+  td{padding-bottom:16px;padding-top:4px;border-bottom:1px solid var(--borde);}
+  tr:last-child td{border-bottom:0;}
+  .pie-cols{gap:32px;width:100%;}
+  .pie-col{flex:1 1 140px;}
+}
+
+/* ── Eliminar cuenta (cuenta.html) ──────────────────────────────────────── */
+.lista{margin:0 0 14px;padding-left:22px;font-size:17px;color:var(--tinta-2);max-width:68ch;}
+.lista li{margin-bottom:6px;}
+.form-card{background:#fff;border:1px solid var(--borde);border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:16px;margin-top:24px;max-width:560px;}
+.campo{display:flex;flex-direction:column;gap:8px;}
+.campo label{font-family:var(--display);font-weight:700;font-size:15px;}
+.campo input{font:inherit;font-size:16px;color:var(--tinta);background:var(--crema);border:1.5px solid var(--borde);border-radius:14px;padding:14px 16px;width:100%;}
+.campo input:focus{outline:none;border-color:var(--tinta);background:#fff;}
+.oculto{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
+.btn-enviar{font:inherit;font-family:var(--display);font-weight:700;font-size:16px;border:0;cursor:pointer;padding:14px 28px;align-self:flex-start;}
+.nota{font-size:14.5px !important;color:var(--tinta-3) !important;margin:0 !important;}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="wrap">
+    <a class="marca" href="./">
+      <img src="./assets/logo.png" alt="Enfiestados">
+      <span>Enfiestados</span>
+    </a>
+    <a class="btn-amarillo btn-nav" href="./">Volver al inicio</a>
+  </div>
+</header>
+
+<main class="wrap contenido">
+
+  <div class="titulo">
+    <span class="eyebrow">Cuenta</span>
+    <h1>Eliminar mi cuenta</h1>
+    <p>Podés eliminar tu cuenta de Enfiestados y todos tus datos en cualquier momento, desde la app o desde esta página.</p>
+  </div>
+
+  <section>
+    <h2>Desde la app</h2>
+    <p>Entrá a <strong>Perfil → Configuración → Eliminar cuenta</strong>. Te enviamos un código a tu correo y, al ingresarlo, la cuenta se elimina.</p>
+  </section>
+
+  <section>
+    <h2>Desde esta página</h2>
+    <p>Escribí el correo con el que te registraste. Te enviamos un enlace de confirmación: la cuenta se elimina solamente cuando lo abrís y confirmás. El enlace vence en una hora.</p>
+    <form class="form-card" method="post" action="/api/eliminar-cuenta/solicitar">
+      <div class="campo">
+        <label for="del-correo">Correo de tu cuenta</label>
+        <input id="del-correo" name="email" type="email" required maxlength="160" autocomplete="email" placeholder="tu@correo.com">
+      </div>
+      <div class="oculto" aria-hidden="true">
+        <label for="del-web">No llenar</label>
+        <input id="del-web" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+      <button class="btn-amarillo btn-enviar" type="submit">Enviar enlace de confirmación</button>
+      <p class="nota">Por seguridad, siempre vas a ver el mismo mensaje, exista o no una cuenta con ese correo.</p>
+    </form>
+  </section>
+
+  <section>
+    <h2>Qué se elimina</h2>
+    <ul class="lista">
+      <li>Tu perfil, foto de perfil y portada.</li>
+      <li>Los eventos que creaste y sus fotos.</li>
+      <li>Tus publicaciones, comentarios y "me gusta".</li>
+      <li>Tus chats directos, los grupos que creaste y los mensajes y fotos que enviaste.</li>
+      <li>Tus seguidores, a quién seguís, eventos guardados y asistencias.</li>
+      <li>Tus notificaciones, bloqueos, reportes enviados y preferencias.</li>
+    </ul>
+    <p>El borrado es definitivo y no se puede deshacer. No guardamos copias de tus datos después de eliminarlos, salvo lo que la ley nos obligue a conservar.</p>
+    <p>¿Problemas? Escribinos a <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>.</p>
+  </section>
+
+</main>
+
+<footer class="pie">
+  <div class="wrap">
+    <div class="pie-top">
+      <div class="pie-marca">
+        <a class="marca" href="./">
+          <img src="./assets/logo.png" alt="">
+          <span>Enfiestados</span>
+        </a>
+        <span>3-102-942588 S.R.L.</span>
+        <span>Alajuela, San Carlos, Costa Rica</span>
+      </div>
+      <div class="pie-cols">
+        <div class="pie-col">
+          <b>Legal</b>
+          <a href="./privacidad">Política de Privacidad</a>
+          <a href="./terminos">Términos y Condiciones</a>
+          <a href="./empresa">La empresa</a>
+        </div>
+        <div class="pie-col">
+          <b>Contacto</b>
+          <a href="mailto:info@enfiestados.net">info@enfiestados.net</a>
+        </div>
+        <div class="pie-col">
+          <b>Cuenta</b>
+          <a href="./cuenta">Eliminar mi cuenta</a>
+        </div>
+      </div>
+    </div>
+    <div class="linea"></div>
+    <span class="copy">© 2026 Enfiestados. Todos los derechos reservados.</span>
+  </div>
+</footer>
+
+</body>
+</html>

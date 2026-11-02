@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
+import i18n from '../i18n';
 
 const chatsCollection = collection(db, 'chats');
 const messagesCollection = collection(db, 'messages');
@@ -70,13 +71,13 @@ export const MAX_GROUP_PARTICIPANTS = 100;
 // miembros son grupos distintos y legítimos.
 export const createGroupChat = async (ownerId, name, participantIds, writePolicy = 'all') => {
   const trimmed = (name || '').trim().slice(0, MAX_GROUP_NAME);
-  if (!trimmed) throw new Error('El grupo necesita un nombre');
+  if (!trimmed) throw new Error(i18n.t('errors.groupNeedsName'));
 
   // El dueño siempre adentro, sin repetidos.
   const participants = [...new Set([ownerId, ...participantIds])];
-  if (participants.length < 2) throw new Error('Agregá al menos una persona');
+  if (participants.length < 2) throw new Error(i18n.t('errors.addOnePerson'));
   if (participants.length > MAX_GROUP_PARTICIPANTS) {
-    throw new Error(`Máximo ${MAX_GROUP_PARTICIPANTS} personas por grupo`);
+    throw new Error(i18n.t('errors.maxGroup', { count: MAX_GROUP_PARTICIPANTS }));
   }
 
   // docRef y no `ref`: este módulo ahora importa `ref` de firebase/storage y
@@ -99,7 +100,7 @@ export const updateGroupSettings = async (chatId, { name, writePolicy }) => {
   const patch = {};
   if (name !== undefined) {
     const trimmed = name.trim().slice(0, MAX_GROUP_NAME);
-    if (!trimmed) throw new Error('El grupo necesita un nombre');
+    if (!trimmed) throw new Error(i18n.t('errors.groupNeedsName'));
     patch.name = trimmed;
   }
   if (writePolicy !== undefined) {
@@ -167,17 +168,17 @@ export const uploadChatPhoto = async (uri, uid) => {
   const blob = await new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.onload  = () => resolve(xhr.response);
-    xhr.onerror = () => reject(new Error('No se pudo leer la imagen'));
+    xhr.onerror = () => reject(new Error(i18n.t('errors.readImage')));
     xhr.responseType = 'blob';
     xhr.open('GET', uri, true);
     xhr.send(null);
   });
   try {
     if (!CHAT_PHOTO_MIME.includes(blob.type)) {
-      throw new Error('Solo se aceptan imágenes JPG, PNG, WebP o GIF.');
+      throw new Error(i18n.t('errors.imageTypes'));
     }
     if (blob.size > MAX_CHAT_PHOTO_BYTES) {
-      throw new Error('La imagen supera el límite de 5 MB.');
+      throw new Error(i18n.t('errors.imageTooBig'));
     }
     const id = doc(collection(db, '_')).id;
     const photoRef = ref(storage, `chats/${uid}/${id}`);
@@ -191,7 +192,7 @@ export const uploadChatPhoto = async (uri, uid) => {
 // `imageUrl` es opcional. Un mensaje vale si trae texto, imagen, o ambos.
 export const sendMessage = async (chatId, senderId, text, imageUrl = null) => {
   const trimmed = (text ?? '').trim().slice(0, MAX_MESSAGE_LENGTH);
-  if (!trimmed && !imageUrl) throw new Error('Mensaje vacío');
+  if (!trimmed && !imageUrl) throw new Error(i18n.t('errors.emptyMessage'));
 
   // Obtener participantes para marcar al receptor con mensaje no leído
   const chatSnap = await getDoc(doc(db, 'chats', chatId));

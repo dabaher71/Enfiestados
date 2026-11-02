@@ -6,6 +6,7 @@ import { Component } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { recordError } from '../lib/crashReporting';
+import i18n from '../i18n';
 
 export default class ErrorBoundary extends Component {
   state = { hasError: false, error: null };
@@ -28,12 +29,12 @@ export default class ErrorBoundary extends Component {
       return (
         <View style={styles.container}>
           <Ionicons name="alert-circle-outline" size={64} color="#e74c3c" />
-          <Text style={styles.title}>Algo salió mal</Text>
+          <Text style={styles.title}>{i18n.t('errors.somethingWrong')}</Text>
           <Text style={styles.message}>
-            {this.state.error?.message || 'Error inesperado'}
+            {this.state.error?.message || i18n.t('errors.unexpected')}
           </Text>
           <TouchableOpacity style={styles.button} onPress={this.reset}>
-            <Text style={styles.buttonText}>Reintentar</Text>
+            <Text style={styles.buttonText}>{i18n.t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       );

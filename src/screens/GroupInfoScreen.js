@@ -18,9 +18,11 @@ import { auth, db } from '../config/firebase';
 import { removeParticipant, updateGroupSettings } from '../services/chatService';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function GroupInfoScreen({ route, navigation }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { chatId } = route.params;
   const userId = auth.currentUser?.uid;
 
@@ -63,24 +65,24 @@ export default function GroupInfoScreen({ route, navigation }) {
     if (!name.trim() || name.trim() === chat?.name) return;
     setSaving(true);
     try { await updateGroupSettings(chatId, { name }); }
-    catch (e) { Alert.alert('No se pudo guardar', e?.message ?? 'Intentá de nuevo.'); }
+    catch (e) { Alert.alert(t('group.saveError'), e?.message ?? t('chat.tryAgain')); }
     setSaving(false);
   };
 
   const handlePolicy = async (value) => {
     if (value === (chat?.writePolicy ?? 'all')) return;
     try { await updateGroupSettings(chatId, { writePolicy: value }); }
-    catch { Alert.alert('Error', 'No se pudo cambiar el permiso.'); }
+    catch { Alert.alert(t('common.error'), t('group.policyError')); }
   };
 
   const handleRemove = (id, memberName) => {
-    Alert.alert('Sacar del grupo', `¿Sacar a ${memberName} del grupo?`, [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('group.removeTitle'), t('group.removeMsg', { name: memberName }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sacar', style: 'destructive',
+        text: t('group.remove'), style: 'destructive',
         onPress: async () => {
           try { await removeParticipant(chatId, id); }
-          catch { Alert.alert('Error', 'No se pudo sacar a esta persona.'); }
+          catch { Alert.alert(t('common.error'), t('group.removeError')); }
         },
       },
     ]);
@@ -88,18 +90,18 @@ export default function GroupInfoScreen({ route, navigation }) {
 
   const handleLeave = () => {
     Alert.alert(
-      'Salir del grupo',
-      'Vas a dejar de recibir sus mensajes. Para volver, alguien te tiene que agregar de nuevo.',
+      t('group.leaveTitle'),
+      t('group.leaveMsg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Salir', style: 'destructive',
+          text: t('group.leave'), style: 'destructive',
           onPress: async () => {
             try {
               await removeParticipant(chatId, userId);
               // Los chats viven en la pestaña Mensajes de Alertas.
               navigation.navigate('MainApp', { screen: 'Notifications', params: { tab: 'mensajes' } });
-            } catch { Alert.alert('Error', 'No se pudo salir del grupo.'); }
+            } catch { Alert.alert(t('common.error'), t('group.leaveError')); }
           },
         },
       ]
@@ -116,12 +118,12 @@ export default function GroupInfoScreen({ route, navigation }) {
         </Pressable>
         <View style={styles.rowText}>
           <Text variant="title" numberOfLines={1}>
-            {id === userId ? 'Vos' : (m.name ?? 'Usuario')}
+            {id === userId ? t('group.you') : (m.name ?? t('profile.user'))}
           </Text>
-          {owner && <Text variant="caption" color="text.tertiary">Creó el grupo</Text>}
+          {owner && <Text variant="caption" color="text.tertiary">{t('group.createdGroup')}</Text>}
         </View>
         {isOwner && !owner && (
-          <Pressable onPress={() => handleRemove(id, m.name ?? 'esta persona')} hitSlop={8}>
+          <Pressable onPress={() => handleRemove(id, m.name ?? t('group.thisPerson'))} hitSlop={8}>
             <Ionicons name="remove-circle-outline" size={22} color={colors['status.urgent']} />
           </Pressable>
         )}
@@ -140,10 +142,10 @@ export default function GroupInfoScreen({ route, navigation }) {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors['bg.base'] }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Volver">
+        <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel={t('common.back')}>
           <Ionicons name="arrow-back" size={24} color={colors['text.primary']} />
         </Pressable>
-        <Text variant="h2" style={{ flex: 1 }} numberOfLines={1}>Info del grupo</Text>
+        <Text variant="h2" style={{ flex: 1 }} numberOfLines={1}>{t('group.info')}</Text>
       </View>
 
       <FlatList
@@ -163,7 +165,7 @@ export default function GroupInfoScreen({ route, navigation }) {
             {isOwner && (
               <>
                 <Input
-                  label="Nombre del grupo"
+                  label={t('group.name')}
                   value={name}
                   onChangeText={setName}
                   maxLength={60}
@@ -171,40 +173,40 @@ export default function GroupInfoScreen({ route, navigation }) {
                 />
                 {name.trim() !== chat.name && name.trim() !== '' && (
                   <Button
-                    variant="secondary" size="sm" label="Guardar nombre"
+                    variant="secondary" size="sm" label={t('group.saveName')}
                     loading={saving} onPress={handleRename}
                     style={{ marginTop: space[2], alignSelf: 'flex-start' }}
                   />
                 )}
 
                 <Text variant="overline" color="text.tertiary" style={{ marginTop: space[5], marginBottom: space[2] }}>
-                  QUIÉN PUEDE ESCRIBIR
+                  {t('group.whoCanWrite')}
                 </Text>
                 <SegmentedControl
                   options={[
-                    { label: 'Todos',   value: 'all' },
-                    { label: 'Solo yo', value: 'owner' },
+                    { label: t('group.everyone'), value: 'all' },
+                    { label: t('group.onlyMe'),   value: 'owner' },
                   ]}
                   selected={chat.writePolicy ?? 'all'}
                   onSelect={handlePolicy}
                 />
                 <Text variant="caption" color="text.tertiary" style={{ marginTop: space[2] }}>
                   {(chat.writePolicy ?? 'all') === 'all'
-                    ? 'Cualquier miembro puede mandar mensajes.'
-                    : 'Solo vos podés escribir — el resto solo lee.'}
+                    ? t('group.everyoneDesc')
+                    : t('group.onlyMeDesc')}
                 </Text>
               </>
             )}
 
             <Text variant="overline" color="text.tertiary" style={{ marginTop: space[6], marginBottom: space[1] }}>
-              MIEMBROS · {chat.participants?.length ?? 0}
+              {t('group.membersCount', { count: chat.participants?.length ?? 0 })}
             </Text>
           </View>
         }
         ListFooterComponent={
           !isOwner ? (
             <View style={{ paddingHorizontal: space[5], paddingTop: space[6] }}>
-              <Button variant="destructive" size="md" label="Salir del grupo" onPress={handleLeave} fullWidth />
+              <Button variant="destructive" size="md" label={t('group.leaveTitle')} onPress={handleLeave} fullWidth />
             </View>
           ) : (
             // El dueño no puede salirse: las reglas exigen que siga en
@@ -212,7 +214,7 @@ export default function GroupInfoScreen({ route, navigation }) {
             // todavía no existe.
             <View style={{ paddingHorizontal: space[5], paddingTop: space[6] }}>
               <Text variant="caption" color="text.tertiary" align="center">
-                Creaste este grupo, así que no podés salirte.
+                {t('group.ownerCantLeave')}
               </Text>
             </View>
           )
