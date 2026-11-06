@@ -129,6 +129,9 @@ const FILTERS = [
 // Alto natural de la fila de chips (paddingVertical space[3]*2 + Chip 44px) —
 // § 3.2: la Animated.View que la envuelve necesita un alto de arranque fijo.
 const CHIPS_ROW_HEIGHT = 68;
+// Compactar/expandir el header al scrollear (ver handleFeedScroll).
+const CHROME_ANIM_MS = 180;
+const CHROME_TOGGLE_PX = 24;
 
 // Fallback de HomeHeader cuando no hay scroll que compactarlo (loading/error).
 const STATIC_ZERO = new Animated.Value(0);
@@ -193,27 +196,46 @@ export default function HomeScreen({ navigation }) {
   const [chromeCollapsed, setChromeCollapsed] = useState(false);
   const chromeCollapsedRef = useRef(false);
   const collapseAnim = useRef(new Animated.Value(0)).current;
-  const lastScrollYRef = useRef(0);
+  // Punto de giro: lo más arriba (expandido) o lo más abajo (compactado) que
+  // llegó el scroll desde el último cambio. Se compara contra él, no contra
+  // el evento anterior, para exigir un recorrido real en la otra dirección.
+  const scrollAnchorRef = useRef(0);
+  const ignoreScrollUntilRef = useRef(0);
 
   useEffect(() => {
     Animated.timing(collapseAnim, {
       toValue: chromeCollapsed ? 1 : 0,
-      duration: 180,
+      duration: CHROME_ANIM_MS,
       useNativeDriver: false, // anima height/padding, no soporta el driver nativo
     }).start();
   }, [chromeCollapsed, collapseAnim]);
 
+  // Compactar el header le cambia el alto a la lista (~70px). Con el dedo
+  // apoyado, iOS/Android lo compensan moviendo el contentOffset esos mismos
+  // px en sentido contrario, y eso se leía como "scroll hacia arriba" →
+  // volvía a expandir → la lista bajaba → "scroll hacia abajo" → compactaba…
+  // El header parpadeaba varias veces por segundo (VIDEO BUG, nov 2026).
+  // Por eso: se ignora el scroll mientras dura la animación, y para cambiar
+  // de estado hace falta recorrer CHROME_TOGGLE_PX en la nueva dirección.
   const handleFeedScroll = useCallback((e) => {
     const y = e.nativeEvent.contentOffset.y;
-    const dy = y - lastScrollYRef.current;
-    if (y > 80 && dy > 2 && !chromeCollapsedRef.current) {
-      chromeCollapsedRef.current = true;
-      setChromeCollapsed(true);
-    } else if (dy < -2 && chromeCollapsedRef.current) {
-      chromeCollapsedRef.current = false;
-      setChromeCollapsed(false);
+    if (Date.now() < ignoreScrollUntilRef.current) {
+      scrollAnchorRef.current = y;
+      return;
     }
-    lastScrollYRef.current = y;
+    const setCollapsed = (value) => {
+      chromeCollapsedRef.current = value;
+      setChromeCollapsed(value);
+      ignoreScrollUntilRef.current = Date.now() + CHROME_ANIM_MS + 120;
+      scrollAnchorRef.current = y;
+    };
+    if (!chromeCollapsedRef.current) {
+      scrollAnchorRef.current = Math.min(scrollAnchorRef.current, y);
+      if (y > 80 && y - scrollAnchorRef.current > CHROME_TOGGLE_PX) setCollapsed(true);
+    } else {
+      scrollAnchorRef.current = Math.max(scrollAnchorRef.current, y);
+      if (y <= 0 || scrollAnchorRef.current - y > CHROME_TOGGLE_PX) setCollapsed(false);
+    }
   }, []);
 
   useEffect(() => {

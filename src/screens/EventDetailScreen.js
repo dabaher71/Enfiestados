@@ -485,15 +485,28 @@ export default function EventDetailScreen({ route, navigation }) {
                 variant="body"
                 color="text.secondary"
                 numberOfLines={descExpanded ? undefined : 3}
-                onTextLayout={e => {
-                  if (!descExpanded && e.nativeEvent.lines.length > 3) setDescNeedsMore(true);
-                }}
               >
                 {event.description}
               </Text>
-              {descNeedsMore && !descExpanded && (
-                <Pressable onPress={() => setDescExpanded(true)} style={{ marginTop: space[2] }}>
-                  <Text variant="label" color="link">{t('event.seeMore')}</Text>
+              {/* Copia invisible sin límite de líneas para medir el texto completo:
+                  con numberOfLines={3}, Android solo reporta las 3 líneas visibles
+                  en onTextLayout y el "Ver más" nunca aparecía. */}
+              {!descNeedsMore && (
+                <Text
+                  variant="body"
+                  style={styles.descMeasure}
+                  importantForAccessibility="no-hide-descendants"
+                  accessibilityElementsHidden
+                  onTextLayout={e => {
+                    if (e.nativeEvent.lines.length > 3) setDescNeedsMore(true);
+                  }}
+                >
+                  {event.description}
+                </Text>
+              )}
+              {descNeedsMore && (
+                <Pressable onPress={() => setDescExpanded(v => !v)} style={{ marginTop: space[2] }} hitSlop={8}>
+                  <Text variant="label" color="link">{t(descExpanded ? 'event.seeLess' : 'event.seeMore')}</Text>
                 </Pressable>
               )}
             </View>
@@ -711,6 +724,7 @@ const styles = StyleSheet.create({
 
   // Secciones
   section: { paddingHorizontal: space[5], paddingBottom: space[4] },
+  descMeasure: { position: 'absolute', left: space[5], right: space[5], top: 0, opacity: 0 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] },
   title: { fontSize: 24, lineHeight: 30, marginBottom: space[4] },
 

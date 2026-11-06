@@ -244,6 +244,7 @@
     "open": "Ouvrir",
     "directions": "Itinéraire",
     "seeMore": "Voir plus",
+    "seeLess": "Voir moins",
     "likesCount": "{{count}} j'aime",
     "goingOne": "{{count}} personne y va",
     "goingMany": "{{count}} personnes y vont",

@@ -244,6 +244,7 @@
     "open": "Open",
     "directions": "Directions",
     "seeMore": "See more",
+    "seeLess": "See less",
     "likesCount": "{{count}} likes",
     "goingOne": "{{count}} person going",
     "goingMany": "{{count}} people going",

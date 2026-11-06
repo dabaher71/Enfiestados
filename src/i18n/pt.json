@@ -244,6 +244,7 @@
     "open": "Abrir",
     "directions": "Como chegar",
     "seeMore": "Ver mais",
+    "seeLess": "Ver menos",
     "likesCount": "{{count}} curtidas",
     "goingOne": "{{count}} pessoa vai",
     "goingMany": "{{count}} pessoas vão",
