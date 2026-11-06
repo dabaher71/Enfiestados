@@ -1,0 +1,11 @@
+{
+  "name": "enfiestados-web-src",
+  "private": true,
+  "description": "Fuente de los scripts de enfiestados.net (public/assets/landing.js).",
+  "scripts": {
+    "build": "esbuild landing.jsx --bundle --minify --format=iife --target=es2019 --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --define:process.env.NODE_ENV='\"production\"' --legal-comments=none --outfile=../public/assets/landing.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}
