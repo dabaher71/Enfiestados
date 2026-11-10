@@ -16,6 +16,8 @@ import { auth, db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 
+import VerifyEmailSheet from '../components/VerifyEmailSheet';
+import { needsEmailVerification } from '../lib/emailVerification';
 import Avatar from '../components/ui/Avatar';
 import Text from '../components/ui/Text';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
@@ -37,6 +39,7 @@ export default function CreatePostScreen({ navigation }) {
   const [media,      setMedia]      = useState([]);   // hasta 3 URIs locales
   const [visibility, setVisibility] = useState('public');
   const [loading,    setLoading]    = useState(false);
+  const [showVerify, setShowVerify] = useState(false);
 
   const user = auth.currentUser;
   const libres = MAX_POST_MEDIA - media.length;
@@ -94,6 +97,12 @@ export default function CreatePostScreen({ navigation }) {
     if (!canPost) return;
     setLoading(true);
     try {
+      // Las reglas solo dejan publicar con el correo verificado (isVerified).
+      if (await needsEmailVerification()) {
+        setLoading(false);
+        setShowVerify(true);
+        return;
+      }
       await createPost({ text: text.trim(), media, visibility });
       navigation.goBack();
       const u = auth.currentUser;
@@ -109,8 +118,9 @@ export default function CreatePostScreen({ navigation }) {
           });
         }).catch(() => {});
       }
-    } catch {
-      Alert.alert(t('common.error'), t('post.createError'));
+    } catch (e) {
+      if (e?.code === 'permission-denied' && await needsEmailVerification()) setShowVerify(true);
+      else Alert.alert(t('common.error'), t('post.createError'));
     }
     setLoading(false);
   };
@@ -238,6 +248,13 @@ export default function CreatePostScreen({ navigation }) {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <VerifyEmailSheet
+        visible={showVerify}
+        reason="publish"
+        onClose={() => setShowVerify(false)}
+        onVerified={() => handlePost()}
+      />
     </SafeAreaView>
   );
 }

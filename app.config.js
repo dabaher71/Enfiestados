@@ -25,7 +25,7 @@ module.exports = {
   expo: {
     name: 'Enfiestados',
     slug: 'enfiestados-app',
-    version: '1.0.3',
+    version: '1.0.4',
     orientation: 'portrait',
     icon: './assets/images/logo.png',
     userInterfaceStyle: 'dark',
@@ -66,7 +66,7 @@ module.exports = {
         backgroundColor: '#17131F',
       },
       package: 'com.enfiestados.app',
-      versionCode: 4,
+      versionCode: 5,
       // Requerido por @react-native-firebase/app (Crashlytics) — antes no
       // estaba referenciado acá, así que nunca se copiaba al proyecto nativo
       // ni se aplicaba el Google Services Gradle plugin.

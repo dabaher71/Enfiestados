@@ -4,7 +4,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,9 +15,11 @@ import Input from '../components/ui/Input';
 import Sheet from '../components/ui/Sheet';
 import Text from '../components/ui/Text';
 import LanguagePicker from '../components/LanguagePicker';
+import VerifyEmailSheet from '../components/VerifyEmailSheet';
 import { LANGUAGES } from '../i18n';
 
 import { auth, functions } from '../config/firebase';
+import { needsEmailVerification } from '../lib/emailVerification';
 import { useZonePreference } from '../lib/zonePreference';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
@@ -43,6 +45,18 @@ export default function SettingsScreen({ navigation }) {
   const [deleteCode,    setDeleteCode]    = useState('');
   const [deleteError,   setDeleteError]   = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Verificar correo: solo cuentas con correo y contraseña sin confirmar
+  // (Google ya viene verificado). Ver VerifyEmailSheet.
+  const [emailVerified, setEmailVerified] = useState(auth.currentUser?.emailVerified ?? true);
+  const [showVerify,    setShowVerify]    = useState(false);
+  const verifyEmail = auth.currentUser?.isAnonymous ? null : auth.currentUser?.email;
+
+  // Si confirmó con el enlace del correo, el token local sigue diciendo que
+  // no: needsEmailVerification() recarga el usuario y refresca el token.
+  useEffect(() => {
+    needsEmailVerification().then(needs => setEmailVerified(!needs)).catch(() => {});
+  }, []);
 
   // Leer preferencias para mostrar el valor actual en la fila
   useState(() => {
@@ -164,6 +178,9 @@ export default function SettingsScreen({ navigation }) {
         {/* Cuenta */}
         <SectionTitle label={t('settings.sections.account')} />
         <View style={[styles.section, { backgroundColor: colors['bg.surface'] }]}>
+          {!!verifyEmail && !emailVerified && (
+            <Row icon="mail-unread-outline" label={t('settings.verifyEmail')} subtitle={t('settings.verifyEmailSub')} onPress={() => setShowVerify(true)} />
+          )}
           <Row icon="person-outline"    label={t('settings.editProfile')} subtitle={t('settings.editProfileSub')}        onPress={() => navigation.navigate('EditProfile', { user: null })} />
           <Row icon="sparkles-outline"  label={t('settings.interests')} subtitle={t('settings.interestsSub')}  value="4"          onPress={() => navigation.navigate('Interests', { onboarding: false })} />
           {/* El valor sale de la zona guardada de verdad (zonePreference);
@@ -306,6 +323,15 @@ export default function SettingsScreen({ navigation }) {
           )}
         </View>
       </Sheet>
+
+      <VerifyEmailSheet
+        visible={showVerify}
+        onClose={() => setShowVerify(false)}
+        onVerified={(showAlert) => {
+          setEmailVerified(true);
+          if (showAlert) Alert.alert(t('settings.verifiedTitle'), t('settings.verifiedMsg'));
+        }}
+      />
 
       <Sheet visible={showLanguage} onClose={() => setShowLanguage(false)} height="peek" title={t('settings.language')}>
         <LanguagePicker style={styles.languageSheet} onChange={() => setShowLanguage(false)} />

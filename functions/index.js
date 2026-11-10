@@ -8,6 +8,8 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const fs = require("fs");
+const path = require("path");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -1374,6 +1376,156 @@ exports.webAccountDeletion = onRequest(
     res.redirect(303, "/cuenta");
   }
 );
+
+// ─── Verificación de correo ──────────────────────────────────────────────────
+// Reemplaza el sendEmailVerification de Firebase Auth: aquel sale desde
+// noreply@enfiestados-alpha.firebaseapp.com y suele caer en spam. Este sale
+// desde noreply@enfiestados.net (Hostinger, con SPF y DKIM del dominio) con la
+// plantilla functions/templates/email-verificacion.html.
+//
+// El correo trae dos formas de confirmar:
+//   GET /verificar?token=TOKEN  (verifyEmailLink, rewrite en firebase.json)
+//   código de 6 dígitos que se escribe en la app (verifyEmailCode)
+// Token y código se guardan hasheados en emailVerifications/{uid}, sin regla
+// en firestore.rules: solo el Admin SDK. Vencen a las 24 h.
+//
+// Acá sí se verifica con un GET: que un filtro de correo abra el enlace solo
+// confirma que el correo llegó a esa casilla, que es justo lo que se mide.
+// Sale de su propio buzón noreply@ (Hostinger solo deja mandar como la casilla
+// con la que se inicia sesión), con su contraseña en NOREPLY_SMTP_PASSWORD.
+// Las respuestas van a info@.
+const NOREPLY_SMTP_PASSWORD = defineSecret("NOREPLY_SMTP_PASSWORD");
+const NOREPLY_SENDER_EMAIL = "noreply@enfiestados.net";
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+const VERIFY_COOLDOWN_MS = 60 * 1000;
+const VERIFY_MAX_ATTEMPTS = 5;
+const VERIFY_TEMPLATE = fs.readFileSync(path.join(__dirname, "templates", "email-verificacion.html"), "utf8");
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]
+));
+
+// Número de "entrada" que muestra el boleto del correo (N.º 000123). Se
+// asigna una vez por cuenta: los reenvíos conservan el mismo.
+async function nextMemberNumber() {
+  const ref = db.collection("counters").doc("members");
+  return db.runTransaction(async (tx) => {
+    const n = ((await tx.get(ref)).data()?.value || 0) + 1;
+    tx.set(ref, { value: n }, { merge: true });
+    return n;
+  });
+}
+
+async function markEmailVerified(ref, data, uid) {
+  const user = await admin.auth().getUser(uid);
+  // Si cambió el correo de la cuenta después de mandar este, no sirve.
+  if ((user.email || "").toLowerCase() !== (data.email || "").toLowerCase()) return false;
+  if (!user.emailVerified) await admin.auth().updateUser(uid, { emailVerified: true });
+  await ref.delete();
+  return true;
+}
+
+exports.sendVerificationEmail = onCall(
+  { secrets: [NOREPLY_SMTP_PASSWORD], timeoutSeconds: 30 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Debés estar autenticado");
+
+    const user = await admin.auth().getUser(uid);
+    if (!user.email) throw new HttpsError("failed-precondition", "Tu cuenta no tiene un correo asociado");
+    if (user.emailVerified) return { alreadyVerified: true };
+
+    const ref = db.collection("emailVerifications").doc(uid);
+    const prev = (await ref.get()).data();
+    if (prev && Date.now() - prev.createdAt.toMillis() < VERIFY_COOLDOWN_MS) {
+      throw new HttpsError("resource-exhausted", "Esperá un momento antes de pedir otro correo");
+    }
+
+    const token = crypto.randomBytes(32).toString("base64url");
+    const code = String(crypto.randomInt(100000, 1000000));
+    const number = prev?.memberNumber ?? await nextMemberNumber();
+    await ref.set({
+      email: user.email,
+      tokenHash: hashToken(token),
+      codeHash: hashToken(code),
+      attempts: 0,
+      memberNumber: number,
+      createdAt: admin.firestore.Timestamp.now(),
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + VERIFY_TTL_MS),
+    });
+
+    const link = `${SITE_URL}/verificar?token=${token}`;
+    const firstName = (user.displayName || "").trim().split(/\s+/)[0].slice(0, 40);
+    const saludo = firstName ? `Hola ${firstName}` : "Hola";
+    const html = VERIFY_TEMPLATE
+      .replaceAll("{{SALUDO}}", escapeHtml(saludo))
+      .replaceAll("{{LINK}}", link)
+      .replaceAll("{{CODIGO}}", code)
+      .replaceAll("{{NUMERO}}", String(number).padStart(6, "0"));
+
+    const transporter = nodemailer.createTransport({
+      host: "smtp.hostinger.com",
+      port: 465,
+      secure: true,
+      auth: { user: NOREPLY_SENDER_EMAIL, pass: NOREPLY_SMTP_PASSWORD.value() },
+    });
+    await transporter.sendMail({
+      from: `Enfiestados <${NOREPLY_SENDER_EMAIL}>`,
+      replyTo: DELETION_SENDER_EMAIL,
+      to: user.email,
+      subject: "Confirma tu correo de Enfiestados",
+      html,
+      // Versión en texto plano: los filtros desconfían de correos solo-HTML.
+      text:
+        `${saludo}, gracias por unirte a Enfiestados.\n\n` +
+        `Confirma tu correo abriendo este enlace:\n${link}\n\n` +
+        `O usa este código en la app: ${code}\n\n` +
+        "El enlace y el código vencen en 24 horas. Si no creaste una cuenta en Enfiestados, puedes ignorar este correo.\n\n" +
+        "— Enfiestados",
+    });
+
+    return { sent: true };
+  }
+);
+
+exports.verifyEmailCode = onCall({ timeoutSeconds: 30 }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Debés estar autenticado");
+  const code = String(request.data?.code || "");
+  if (!/^\d{6}$/.test(code)) throw new HttpsError("invalid-argument", "El código tiene 6 dígitos");
+
+  const ref = db.collection("emailVerifications").doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Pedí un correo nuevo");
+  const data = snap.data();
+  if (data.expiresAt.toMillis() < Date.now()) throw new HttpsError("deadline-exceeded", "El código venció");
+  if (data.attempts >= VERIFY_MAX_ATTEMPTS) throw new HttpsError("resource-exhausted", "Demasiados intentos");
+
+  if (hashToken(code) !== data.codeHash) {
+    await ref.update({ attempts: admin.firestore.FieldValue.increment(1) });
+    throw new HttpsError("permission-denied", "Código incorrecto");
+  }
+  if (!await markEmailVerified(ref, data, uid)) throw new HttpsError("not-found", "Pedí un correo nuevo");
+  return { verified: true };
+});
+
+exports.verifyEmailLink = onRequest({ cors: false, timeoutSeconds: 30 }, async (req, res) => {
+  const fail = () => res.redirect(303, "/correo-error");
+  try {
+    const token = cleanField(req.query.token, 64);
+    if (!validToken(token)) return fail();
+    const snap = await db.collection("emailVerifications")
+      .where("tokenHash", "==", hashToken(token)).limit(1).get();
+    if (snap.empty) return fail();
+    const doc = snap.docs[0];
+    if (doc.data().expiresAt.toMillis() < Date.now()) return fail();
+    if (!await markEmailVerified(doc.ref, doc.data(), doc.id)) return fail();
+    return res.redirect(303, "/correo-verificado");
+  } catch (e) {
+    console.error("verifyEmailLink", e);
+    return fail();
+  }
+});
 
 // ─── Privacidad de eventos (perfiles privados) ───────────────────────────────
 // Un evento de un perfil privado solo lo ven el organizador y sus seguidores

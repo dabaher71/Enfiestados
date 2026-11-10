@@ -39,6 +39,13 @@
           "functionId": "webAccountDeletion",
           "region": "us-central1"
         }
+      },
+      {
+        "source": "/verificar",
+        "function": {
+          "functionId": "verifyEmailLink",
+          "region": "us-central1"
+        }
       }
     ],
     "ignore": [

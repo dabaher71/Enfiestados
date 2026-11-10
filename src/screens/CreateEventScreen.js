@@ -20,6 +20,8 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import Text from '../components/ui/Text';
 
 import { auth, db } from '../config/firebase';
+import VerifyEmailSheet from '../components/VerifyEmailSheet';
+import { needsEmailVerification } from '../lib/emailVerification';
 import { clearEventDraft, loadEventDraft, saveEventDraft } from '../lib/eventDraft';
 import { notifyFollowers, NOTIFICATION_TYPES } from '../services/notificationService';
 import { createEvent } from '../services/eventService';
@@ -137,6 +139,10 @@ export default function CreateEventScreen({ navigation }) {
   const [leaving,         setLeaving]        = useState(false);
   const pendingExitRef = useRef(null);
   const uid = auth.currentUser?.uid;
+  // Las reglas solo dejan publicar con el correo verificado (isVerified).
+  const [showVerify,      setShowVerify]     = useState(false);
+  // Ya se publicó: el autoguardado pendiente no debe revivir el borrador.
+  const publishedRef = useRef(false);
 
   // Al abrir: si hay un borrador guardado, ofrecer retomarlo.
   useEffect(() => {
@@ -177,6 +183,18 @@ export default function CreateEventScreen({ navigation }) {
     title.trim() || description.trim() || category || images.length ||
     virtualLink.trim() || locationName.trim() || locationCoords || price.trim?.()
   );
+
+  // Autoguardado: un segundo después del último cambio. Así, si la app se
+  // cierra (o el sistema la mata) a mitad del formulario o después de un
+  // error al publicar, el borrador se ofrece al volver a abrir Crear.
+  useEffect(() => {
+    if (!isDirty || leaving) return;
+    const id = setTimeout(() => {
+      if (!publishedRef.current) saveEventDraft(uid, currentDraft());
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [step, title, description, category, images, date, time, isVirtual, virtualLink,
+      locationName, locationCoords, isFree, price, leaving]);
 
   // Sale de la pantalla sin volver a preguntar. La navegación espera al
   // render con leaving=true, porque usePreventRemove lee el valor del render.
@@ -246,6 +264,11 @@ export default function CreateEventScreen({ navigation }) {
 
     setLoading(true);
     try {
+      if (await needsEmailVerification()) {
+        setLoading(false);
+        setShowVerify(true);
+        return;
+      }
       const user = auth.currentUser;
       const eventData = {
         title: title.trim(),
@@ -272,6 +295,7 @@ export default function CreateEventScreen({ navigation }) {
       };
 
       const newEventId = await createEvent(eventData);
+      publishedRef.current = true;
       clearEventDraft(uid);
 
       Alert.alert(t('createEvent.published'), t('createEvent.publishedMsg'), [
@@ -291,8 +315,15 @@ export default function CreateEventScreen({ navigation }) {
           eventData: { ...eventData, id: newEventId },
         });
       }).catch(() => {});
-    } catch {
-      Alert.alert(t('common.error'), t('createEvent.createError'));
+    } catch (e) {
+      saveEventDraft(uid, currentDraft());
+      // Por si el correo se des-verificó o el token quedó viejo: lo normal es
+      // que needsEmailVerification ya lo haya atajado antes de intentar.
+      if (e?.code === 'permission-denied' && await needsEmailVerification()) {
+        setShowVerify(true);
+      } else {
+        Alert.alert(t('common.error'), t('createEvent.createError'));
+      }
     }
     setLoading(false);
   };
@@ -685,6 +716,12 @@ export default function CreateEventScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+      <VerifyEmailSheet
+        visible={showVerify}
+        reason="publish"
+        onClose={() => setShowVerify(false)}
+        onVerified={() => handlePublish()}
+      />
     </View>
   );
 }

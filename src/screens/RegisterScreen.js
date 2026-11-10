@@ -7,6 +7,7 @@ import {
   sendEmailVerification, signInWithEmailAndPassword, updateProfile,
 } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +17,7 @@ import Input from '../components/ui/Input';
 import Text from '../components/ui/Text';
 import LanguagePicker from '../components/LanguagePicker';
 
-import { auth, db } from '../config/firebase';
+import { auth, db, functions } from '../config/firebase';
 import { signInWithGoogle } from '../services/googleAuthService';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
@@ -117,7 +118,14 @@ export default function RegisterScreen({ navigation }) {
       } else {
         await updateProfile(user, { displayName: trimName });
         await setDoc(doc(db, 'users', user.uid), newProfileDoc(user, trimName));
-        await sendEmailVerification(user);
+        // Correo propio desde info@enfiestados.net (sendVerificationEmail):
+        // el de Firebase sale de firebaseapp.com y suele caer en spam. Si la
+        // función falla, al menos que llegue ese.
+        try {
+          await httpsCallable(functions, 'sendVerificationEmail')();
+        } catch {
+          await sendEmailVerification(user).catch(() => {});
+        }
         Alert.alert(t('auth.accountCreated'), t('auth.accountCreatedMsg', { name: trimName }));
       }
     } catch (e) {
