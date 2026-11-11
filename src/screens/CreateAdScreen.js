@@ -76,7 +76,7 @@ export default function CreateAdScreen({ navigation }) {
       const res  = await fetch(uri);
       const blob = await res.blob();
       const storageRef = ref(storage, `ads/${userId}/${Date.now()}.jpg`);
-      await uploadBytes(storageRef, blob);
+      await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
       setImage(await getDownloadURL(storageRef));
     } catch { Alert.alert('Error', 'No se pudo subir la imagen.'); }
     setUploading(false);

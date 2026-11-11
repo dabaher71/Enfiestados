@@ -25,7 +25,7 @@ module.exports = {
   expo: {
     name: 'Enfiestados',
     slug: 'enfiestados-app',
-    version: '1.0.4',
+    version: '1.0.4.1',
     orientation: 'portrait',
     icon: './assets/images/logo.png',
     userInterfaceStyle: 'dark',
@@ -44,7 +44,7 @@ module.exports = {
       // todavía atado al valor viejo, así que se corrige acá en vez de volver
       // a registrar todo en Firebase/Google Cloud con el ID equivocado.
       bundleIdentifier: 'com.enfiestados.app',
-      buildNumber: '7',
+      buildNumber: '8',
       googleServicesFile: './GoogleService-Info.plist',
       config: {
         googleMapsApiKey: googleMapsApiKeyIOS,
@@ -66,7 +66,7 @@ module.exports = {
         backgroundColor: '#17131F',
       },
       package: 'com.enfiestados.app',
-      versionCode: 5,
+      versionCode: 6,
       // Requerido por @react-native-firebase/app (Crashlytics) — antes no
       // estaba referenciado acá, así que nunca se copiaba al proyecto nativo
       // ni se aplicaba el Google Services Gradle plugin.

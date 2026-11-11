@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -38,6 +38,7 @@ export default function EditProfileScreen({ route, navigation }) {
   const [isPrivate, setIsPrivate] = useState(paramUser?.perfilPublico === false);
   const [saving,    setSaving]    = useState(false);
   const [fetching,  setFetching]  = useState(!paramUser);
+  const original = useRef({ avatar: paramUser?.avatar || '', coverImage: paramUser?.coverImage || '' });
 
   useEffect(() => {
     if (!paramUser) {
@@ -49,6 +50,7 @@ export default function EditProfileScreen({ route, navigation }) {
             setName(u.name || ''); setBio(u.bio || ''); setLocation(u.location || '');
             setAvatar(u.avatar || ''); setCover(u.coverImage || '');
             setIsPrivate(u.perfilPublico === false);
+            original.current = { avatar: u.avatar || '', coverImage: u.coverImage || '' };
           }
         } catch {}
         setFetching(false);
@@ -96,7 +98,10 @@ export default function EditProfileScreen({ route, navigation }) {
     if (!uid) throw new Error('No autenticado');
     const filename = `${path}/${uid}/${Date.now()}_${Math.random().toString(36).slice(7)}.jpg`;
     const storageRef = ref(storage, filename);
-    await uploadBytes(storageRef, blob);
+    // contentType explícito: en Android el blob de un file:// llega con
+    // type vacío, Storage lo guarda como application/octet-stream y la regla
+    // isImage() lo rechaza. compressForUpload siempre deja un JPEG.
+    await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
     const url = await getDownloadURL(storageRef);
     blob.close();
     return url;
@@ -106,10 +111,10 @@ export default function EditProfileScreen({ route, navigation }) {
     if (!name.trim()) { Alert.alert(t('common.error'), t('auth.nameRequired')); return; }
     setSaving(true);
     try {
-      let avatarURL = paramUser?.avatar    || '';
-      let coverURL  = paramUser?.coverImage || '';
-      if (avatar && avatar !== paramUser?.avatar)      avatarURL = await uploadImage(avatar, 'avatars');
-      if (cover  && cover  !== paramUser?.coverImage)  coverURL  = await uploadImage(cover,  'covers');
+      let avatarURL = original.current.avatar;
+      let coverURL  = original.current.coverImage;
+      if (avatar && avatar !== avatarURL) avatarURL = await uploadImage(avatar, 'avatars');
+      if (cover  && cover  !== coverURL)  coverURL  = await uploadImage(cover,  'covers');
       await updateDoc(doc(db, 'users', auth.currentUser.uid), {
         name: name.trim(), bio: bio.trim(), location: location.trim(),
         avatar: avatarURL, coverImage: coverURL,
@@ -125,7 +130,8 @@ export default function EditProfileScreen({ route, navigation }) {
         photoURL: avatarURL || null,
       }).catch(() => {});
       Alert.alert(t('editEvent.doneTitle'), t('editProfile.updated'), [{ text: t('common.ok'), onPress: () => navigation.goBack() }]);
-    } catch {
+    } catch (e) {
+      console.warn('[EditProfile] save', e?.code || e?.message);
       Alert.alert(t('common.error'), t('editProfile.updateError'));
     }
     setSaving(false);

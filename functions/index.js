@@ -1527,6 +1527,136 @@ exports.verifyEmailLink = onRequest({ cors: false, timeoutSeconds: 30 }, async (
   }
 });
 
+// ─── Restablecer contraseña con PIN ──────────────────────────────────────────
+// Reemplaza el sendPasswordResetEmail de Firebase Auth (correo desde
+// firebaseapp.com, a spam, y cambio de contraseña en una página web). Todo
+// pasa en la app (ForgotPasswordScreen):
+//   requestPasswordReset    { email }              → manda un PIN de 6 dígitos (15 min)
+//   verifyPasswordResetCode { email, code }        → devuelve un resetToken
+//   confirmPasswordReset    { email, resetToken, newPassword }
+// Nada de esto revela si un correo tiene cuenta: el doc de passwordResets
+// (id = sha256 del correo) se crea igual, los límites aplican igual y un PIN
+// de un correo sin cuenta simplemente nunca es correcto. Sin regla en
+// firestore.rules: solo el Admin SDK.
+const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+const RESET_SESSION_TTL_MS = 10 * 60 * 1000;
+const RESET_COOLDOWN_MS = 60 * 1000;
+const RESET_MAX_PER_HOUR = 5;
+const RESET_MAX_ATTEMPTS = 5;
+const RESET_TEMPLATE = fs.readFileSync(path.join(__dirname, "templates", "email-restablecer.html"), "utf8");
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function resetRefFor(rawEmail) {
+  const email = cleanField(rawEmail, 160).toLowerCase();
+  if (!EMAIL_RE.test(email)) throw new HttpsError("invalid-argument", "Correo no válido");
+  return { email, ref: db.collection("passwordResets").doc(hashToken(`reset:${email}`)) };
+}
+
+exports.requestPasswordReset = onCall(
+  { secrets: [NOREPLY_SMTP_PASSWORD], timeoutSeconds: 30 },
+  async (request) => {
+    const { email, ref } = resetRefFor(request.data?.email);
+    const now = Date.now();
+    const prev = (await ref.get()).data();
+    const recentSends = (prev?.sends || []).filter((t) => now - t < 60 * 60 * 1000);
+    if (prev && now - prev.createdAt.toMillis() < RESET_COOLDOWN_MS) {
+      throw new HttpsError("resource-exhausted", "Esperá un momento antes de pedir otro código");
+    }
+    if (recentSends.length >= RESET_MAX_PER_HOUR) {
+      throw new HttpsError("resource-exhausted", "Pediste demasiados códigos. Intentá en una hora");
+    }
+
+    let user = null;
+    try {
+      user = await admin.auth().getUserByEmail(email);
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") throw e;
+    }
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    await ref.set({
+      uid: user && !user.disabled ? user.uid : null,
+      codeHash: hashToken(code),
+      attempts: 0,
+      sends: [...recentSends, now],
+      createdAt: admin.firestore.Timestamp.fromMillis(now),
+      expiresAt: admin.firestore.Timestamp.fromMillis(now + RESET_CODE_TTL_MS),
+    });
+    if (!user || user.disabled) return { sent: true };
+
+    const firstName = (user.displayName || "").trim().split(/\s+/)[0].slice(0, 40);
+    const saludo = firstName ? `Hola ${firstName}` : "Hola";
+    const transporter = nodemailer.createTransport({
+      host: "smtp.hostinger.com",
+      port: 465,
+      secure: true,
+      auth: { user: NOREPLY_SENDER_EMAIL, pass: NOREPLY_SMTP_PASSWORD.value() },
+    });
+    await transporter.sendMail({
+      from: `Enfiestados <${NOREPLY_SENDER_EMAIL}>`,
+      replyTo: DELETION_SENDER_EMAIL,
+      to: email,
+      subject: `${code} es tu PIN para cambiar la contraseña de Enfiestados`,
+      html: RESET_TEMPLATE.replaceAll("{{SALUDO}}", escapeHtml(saludo)).replaceAll("{{PIN}}", code),
+      text:
+        `${saludo}, recibimos una solicitud para cambiar la contraseña de tu cuenta de Enfiestados.\n\n` +
+        `Tu PIN: ${code}\n\nEscríbelo en la app, en ¿Olvidaste tu contraseña?, para elegir una nueva. Vence en 15 minutos y solo se puede usar una vez.\n\n` +
+        "¿No fuiste tú? Ignora este correo: tu contraseña actual sigue funcionando.\n\n— Enfiestados",
+    });
+    return { sent: true };
+  }
+);
+
+exports.verifyPasswordResetCode = onCall({ timeoutSeconds: 30 }, async (request) => {
+  const { ref } = resetRefFor(request.data?.email);
+  const code = String(request.data?.code || "");
+  if (!/^\d{6}$/.test(code)) throw new HttpsError("invalid-argument", "El código tiene 6 dígitos");
+
+  const snap = await ref.get();
+  if (!snap.exists || !snap.data().codeHash) throw new HttpsError("not-found", "Pedí un código nuevo");
+  const data = snap.data();
+  if (data.expiresAt.toMillis() < Date.now()) throw new HttpsError("deadline-exceeded", "El código venció");
+  if (data.attempts >= RESET_MAX_ATTEMPTS) throw new HttpsError("resource-exhausted", "Demasiados intentos");
+  if (!data.uid || hashToken(code) !== data.codeHash) {
+    await ref.update({ attempts: admin.firestore.FieldValue.increment(1) });
+    throw new HttpsError("permission-denied", "Código incorrecto");
+  }
+
+  // El PIN se usa una sola vez: se cambia por un token para el paso de la
+  // contraseña nueva.
+  const resetToken = crypto.randomBytes(32).toString("base64url");
+  await ref.update({
+    codeHash: admin.firestore.FieldValue.delete(),
+    sessionHash: hashToken(resetToken),
+    sessionExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + RESET_SESSION_TTL_MS),
+  });
+  return { resetToken };
+});
+
+exports.confirmPasswordReset = onCall({ timeoutSeconds: 30 }, async (request) => {
+  const { ref } = resetRefFor(request.data?.email);
+  const resetToken = String(request.data?.resetToken || "");
+  const newPassword = request.data?.newPassword;
+  if (typeof newPassword !== "string" || newPassword.length < 6 || newPassword.length > 128) {
+    throw new HttpsError("invalid-argument", "La contraseña debe tener al menos 6 caracteres");
+  }
+
+  const snap = await ref.get();
+  const data = snap.data();
+  if (!data?.uid || !data.sessionHash || !validToken(resetToken) || hashToken(resetToken) !== data.sessionHash ||
+      data.sessionExpiresAt.toMillis() < Date.now()) {
+    throw new HttpsError("deadline-exceeded", "Volvé a pedir un código");
+  }
+
+  // Escribir el PIN que llegó al correo prueba que el correo es suyo: se
+  // aprovecha para dejarlo verificado. Las sesiones abiertas en otros
+  // teléfonos se cierran.
+  await admin.auth().updateUser(data.uid, { password: newPassword, emailVerified: true });
+  await admin.auth().revokeRefreshTokens(data.uid);
+  await ref.delete();
+  return { ok: true };
+});
+
 // ─── Privacidad de eventos (perfiles privados) ───────────────────────────────
 // Un evento de un perfil privado solo lo ven el organizador y sus seguidores
 // aprobados. firestore.rules lo hace cumplir con dos campos del evento:

@@ -28,7 +28,10 @@ const uploadOne = async (uri, uid) => {
   });
 
   try {
-    if (!ALLOWED_MIME_TYPES.includes(blob.type)) {
+    // En Android el blob de un file:// llega con type vacío; las fotos pasan
+    // antes por compressForUpload, que siempre deja un JPEG.
+    const contentType = blob.type || 'image/jpeg';
+    if (!ALLOWED_MIME_TYPES.includes(contentType)) {
       throw new Error(i18n.t('errors.imageTypes'));
     }
     if (blob.size > MAX_IMAGE_BYTES) {
@@ -37,7 +40,7 @@ const uploadOne = async (uri, uid) => {
     // ID criptográfico usando Firestore auto-ref
     const mediaId = doc(collection(db, '_')).id;
     const mediaRef = ref(storage, `posts/${uid}/${mediaId}`);
-    await uploadBytes(mediaRef, blob, { contentType: blob.type });
+    await uploadBytes(mediaRef, blob, { contentType });
     return { type: 'image', url: await getDownloadURL(mediaRef) };
   } finally {
     blob.close?.();

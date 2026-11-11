@@ -174,7 +174,10 @@ export const uploadChatPhoto = async (uri, uid) => {
     xhr.send(null);
   });
   try {
-    if (!CHAT_PHOTO_MIME.includes(blob.type)) {
+    // En Android el blob de un file:// llega con type vacío; las fotos pasan
+    // antes por compressForUpload, que siempre deja un JPEG.
+    const contentType = blob.type || 'image/jpeg';
+    if (!CHAT_PHOTO_MIME.includes(contentType)) {
       throw new Error(i18n.t('errors.imageTypes'));
     }
     if (blob.size > MAX_CHAT_PHOTO_BYTES) {
@@ -182,7 +185,7 @@ export const uploadChatPhoto = async (uri, uid) => {
     }
     const id = doc(collection(db, '_')).id;
     const photoRef = ref(storage, `chats/${uid}/${id}`);
-    await uploadBytes(photoRef, blob, { contentType: blob.type });
+    await uploadBytes(photoRef, blob, { contentType });
     return await getDownloadURL(photoRef);
   } finally {
     blob.close?.();

@@ -21,6 +21,7 @@ export default function Input({
   leadingIcon,
   trailingIcon,
   editable = true,
+  autoFocus,
   style,
 }) {
   const { colors } = useTheme();
@@ -77,6 +78,7 @@ export default function Input({
           autoCapitalize={autoCapitalize}
           maxLength={maxLength}
           editable={editable}
+          autoFocus={autoFocus}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           style={[styles.input, { color: colors['text.primary'] }]}
